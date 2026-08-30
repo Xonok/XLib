@@ -1,6 +1,8 @@
-**Shared library development repo**
-Shared libraries are in xlib.
-Use install.sh to make them available.
+**Where am I?**
+This is the repository for shared libraries in the mallesne project.
+Our main project is Traveller, but there are also numerous smaller projects that will eventually find their way into the Playground repository.
+The shared libraries from this repo are in the xlib folder.
+Run install.sh to make them available, then in python do 'from xlib import blah' to import whichever one.
 
 **Versioning**
 Shared libraries should be versioned. Example:
@@ -19,16 +21,14 @@ Maybe the packager should be written in python, since it's easier to work with.
 
 **Maintenance**
 How to know if something is using old code?
-Probably make a library that keeps track of projects and appends their paths to a list if they're in this this repo. If you import this library, the folder your project is running from gets added, unless its parent folder already is.
+Probably make a library that keeps track of projects and appends their paths to a list if they're in this this repo. If you import this library, the folder your project is running from gets added, unless its parent folder is already included.
 Could then just run a script on the list to go through all their files and look for the filenames in xlib, just without the .py
-That way it would be possible to definitively know whether deprecated code can be removed from xlib to xlib_legacy.
-For archiving purposes, xlib_legacy should be a good enough solution.
-If any mistakes are made with the process, this should keep the legacy stuff available without cluttering xlib.
+That way it would be possible to definitively know whether deprecated code can be removed.
 
 **Not done**
 Versioning script - as described above.
 Bundling script - it's convenient to develop libraries as multiple files, but use as one.
-Export script - same as bundler, but also folds in xlib dependencies, for use outside the walled garden.
+Export script - same as bundler, but also folds in any xlib libraries used, for use outside the walled garden.
 
 **Legacy**
 Due to the large number of legacy projects, it's not reasonable to migrate them all at once.
