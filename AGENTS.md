@@ -2,6 +2,19 @@
 
 These rules apply to all code written in this repository. AI assistants must follow them.
 
+`agent-notes.md` in this repo is a per-user, git-ignored file that holds current state and gotchas that don't belong in the standing rules. It doesn't exist on a fresh clone; create your own near the start of a session, seeded from the reasonable initial rules below, and read it before starting work on later sessions.
+
+Multiple opencode agents may work in this repo at once (generally two). They coordinate through `tools/agent-coord.py`:
+
+- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Your session notes live in `agent-notes-<id>.md`, not a shared file.
+- Claim a file before editing it, release it when done:
+  - `python3 tools/agent-coord.py claim <paths...>` before the first edit to a file.
+  - `python3 tools/agent-coord.py release <paths...>` once an edit is finished and saved.
+  - `python3 tools/agent-coord.py release-all` to drop all your claims (also on session end).
+  - `python3 tools/agent-coord.py status` to see who holds what.
+  A claim fails with exit 1 if the other agent holds the same path, so a conflicting file is simply not yours to touch right now. Use `claim --force` only to clear a stale claim from a dead session.
+- Read anything freely; only writes need claims. Don't edit files another agent holds.
+
 ## Code style
 
 - Code is always indented with tabs.
@@ -15,7 +28,7 @@ These rules apply to all code written in this repository. AI assistants must fol
 - No double newlines. A single blank line separates functions; keep related globals together as one block.
 - Comments don't explain what code does (the code should make that clear). They explain the "why" when intent isn't obvious from the implementation.
 - Splitting parts of a function into descriptively-named helpers helps readability, but weigh that against the extra clutter it adds.
-- Imports go on one line, one import per line. `from X import Y` naturally stays alone and can't share a line with a plain `import Z`; multiple things from the same `X` go on one line (`from X import Y, Z`). Imports from meaningfully different categories (standard python vs. repo-local) are separated, but without empty lines between them. Avoid wildcard imports, since they're unpredictable.
+- Imports go on one line: plain imports are comma-joined (`import argparse,ctypes,os`), `from X import Y` can't share a line with a plain `import Z`, so it naturally stays alone, but multiple things from the same `X` go on one line (`from X import Y,Z`). No space after a comma in an import line; a name containing a dot would need that separation, but dotted names get their own line anyway, so the space never helps. Imports from meaningfully different categories (standard python vs. repo-local) are separated, but without empty lines between them. Avoid wildcard imports, since they're unpredictable.
 
 ## Versioning
 
@@ -48,4 +61,4 @@ There is currently no versioning script; the bundler needs to exist first. Neith
 Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
 
 - `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
-- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location.
+- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
