@@ -35,6 +35,7 @@ Each project needs a script it can run to publish its dependencies for xlib to u
 
 - **Export** function: folds in any xlib libraries used, for use outside the walled garden (readme's "Export script"). Offered by the script but not implemented yet.
 - **Publish-dependencies** script (see above).
+- **Bundler code reuse**: some of the bundler's pieces (import-walking, inlining, path resolution) could be split out into a library for other things to use. Not valid until the release script exists — the release script is the first consumer that forces an API surface out of the bundler. After it lands, this becomes a real option.
 - Reorganize folders if the number of libraries makes the per-tool folders clutter.
 
 ## Order
