@@ -12,6 +12,9 @@ These rules apply to all code written in this repository. AI assistants must fol
 - Do use spaces to break math into simpler parts.
 - Use guard clauses instead of nested `if`s, unless the `if` has branches.
 - Code that deals with untrusted input starts with sanity checks. It returns or raises an error when those checks fail.
+- No double newlines. A single blank line separates functions; keep related globals together as one block.
+- Comments don't explain what code does (the code should make that clear). They explain the "why" when intent isn't obvious from the implementation.
+- Splitting parts of a function into descriptively-named helpers helps readability, but weigh that against the extra clutter it adds.
 
 ## Versioning
 
