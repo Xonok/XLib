@@ -1,6 +1,4 @@
-import importlib
-import re
-import sys
+import importlib,re,sys
 from pathlib import Path
 
 _VERSION_RE = re.compile(r"^(.+?)_(\d+)_(\d+)_(\d+)\.py$")

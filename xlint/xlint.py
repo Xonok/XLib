@@ -1,11 +1,4 @@
-import argparse
-import ctypes
-import os
-import re
-import select
-import struct
-import sys
-import time
+import argparse,ctypes,os,re,select,struct,sys,time
 from pathlib import Path
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
@@ -94,6 +87,7 @@ def check_imports(lines):
 	report = []
 	in_block = False
 	prev_module = None
+	prev_plain = False
 	pending_blank = None
 	for index, line in enumerate(lines, start=1):
 		stripped = line.strip()
@@ -102,6 +96,7 @@ def check_imports(lines):
 		in_block = True
 		if not stripped:
 			pending_blank = index
+			prev_plain = False
 			continue
 		if stripped.startswith("#"):
 			continue
@@ -118,13 +113,25 @@ def check_imports(lines):
 			if module == prev_module:
 				report.append((index, "same module imported on separate lines"))
 			prev_module = module
-			if "*" in line[from_match.end():]:
+			prev_plain = False
+			names = line[from_match.end():]
+			if "*" in names:
 				report.append((index, "wildcard import"))
+			if re.search(r",\s", names):
+				report.append((index, "space after comma in import"))
 		else:
 			prev_module = None
 			import_match = re.match(r"^\s*import\s+", line)
-			if import_match and "," in line[import_match.end():]:
-				report.append((index, "multiple modules on one line"))
+			if import_match:
+				names = line[import_match.end():]
+				if re.search(r",\s", names):
+					report.append((index, "space after comma in import"))
+				if "." not in names:
+					if prev_plain:
+						report.append((index, "consecutive plain imports not merged"))
+					prev_plain = True
+				else:
+					prev_plain = False
 	return report
 
 def check_file(path, args):
