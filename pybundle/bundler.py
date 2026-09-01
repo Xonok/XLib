@@ -38,10 +38,9 @@ def target_names(node):
 	return res
 
 class Mod:
-	def __init__(self, modpath, file, is_entry=False):
+	def __init__(self, modpath, file):
 		self.modpath = modpath
 		self.flat = modpath.replace(".", "_")
-		self.is_entry = is_entry
 		self.file = file
 		self.is_pkg = os.path.basename(file) == "__init__.py"
 		self.rel = ""
@@ -249,19 +248,10 @@ class Bundler:
 			if child is not None and kind != "value":
 				m.bindmap[bindname] = ("mod", child)
 				m.depmods[child.modpath] = child
-				local_hit = True
-			elif child is not None:
-				m.bindmap[bindname] = ("name", bmod.flat + "_" + a.name)
-				m.depmods[bmod.modpath] = bmod
-				local_hit = True
-			elif kind is not None:
-				m.bindmap[bindname] = ("name", bmod.flat + "_" + a.name)
-				m.depmods[bmod.modpath] = bmod
-				local_hit = True
 			else:
 				m.bindmap[bindname] = ("name", bmod.flat + "_" + a.name)
 				m.depmods[bmod.modpath] = bmod
-				local_hit = True
+			local_hit = True
 		self.put_statement(m, node, local_hit, ext)
 
 	def base_of(self, m, node):
@@ -744,7 +734,7 @@ class Bundler:
 
 	def bundle(self, entry):
 		self.root = os.path.dirname(os.path.abspath(entry)) or "."
-		m = Mod("", entry, is_entry=True)
+		m = Mod("", entry)
 		m.rel = os.path.basename(entry)
 		m.text = read_text(entry)
 		m.lines = line_lengths(m.text)
