@@ -22,15 +22,22 @@ def _pinned_versions():
 	except ImportError:
 		return {}
 
-def _resolve(base, files):
+def _resolve(name, files):
+	vm = _VERSION_RE.match(f"{name}.py")
+	if vm is not None:
+		version = (int(vm.group(2)), int(vm.group(3)), int(vm.group(4)))
+		for v, _ in files.get(vm.group(1), []):
+			if v == version:
+				return name
+		return None
 	pins = _pinned_versions()
-	if base in pins:
-		return f"{base}_{pins[base]}"
-	versions = files.get(base)
+	if name in pins:
+		return f"{name}_{pins[name]}"
+	versions = files.get(name)
 	if not versions:
 		return None
 	version = max(versions, key=lambda pair: pair[0])[0]
-	return f"{base}_{version[0]}_{version[1]}_{version[2]}"
+	return f"{name}_{version[0]}_{version[1]}_{version[2]}"
 
 def __getattr__(name):
 	if name.startswith("_"):

@@ -1,6 +1,6 @@
 # Release script
 
-Creates versioned bundles in `xlib/` from per-folder dev sources, using the bundler in development (`pybundle/bundler.py`).
+Creates versioned bundles in `xlib/` from per-folder dev sources, using the bundler in development (`pybundle/bundler.py`). Implemented as `release/release.py`; the notes below describe the current design.
 
 ## Goal
 
@@ -25,7 +25,7 @@ Major is friction, deliberately rare, and is primarily an opportunity to drop de
 1. Enough breaking changes — specifically, dropping deprecated code. Deprecations are marked in version terms so they can be dropped after exactly 2 major versions.
 2. Enough time having passed since the previous major version.
 
-(Exact mechanics for marking deprecations in version terms, and the specific time gate, are open below.)
+Mechanics: a `--major` is refused if the previous major release is younger than a minimum age (`_MAJOR_MIN_AGE_MONTHS`). Use `--force` to override the age gate. The exact age threshold is a policy knob set in the script.
 
 ## Publish-dependencies script
 
