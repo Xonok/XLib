@@ -2,11 +2,11 @@
 
 These rules apply to all code written in this repository. AI assistants must follow them.
 
-`agent-notes.md` in this repo is a per-user, git-ignored file that holds current state and gotchas that don't belong in the standing rules. It doesn't exist on a fresh clone; create your own near the start of a session, seeded from the reasonable initial rules below, and read it before starting work on later sessions.
+`.agents/agent-notes-<id>.md` in this repo is a per-agent, git-ignored file that holds current state and gotchas that don't belong in the standing rules. It doesn't exist on a fresh clone; create your own near the start of a session, seeded from the reasonable initial rules below, and read it before starting work on later sessions.
 
 Multiple opencode agents may work in this repo at once (generally two). They coordinate through `tools/agent-coord.py`:
 
-- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Your session notes live in `agent-notes-<id>.md`, not a shared file.
+- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Your session notes live in `.agents/agent-notes-<id>.md`, not a shared file.
 - Claim a file before editing it, release it when done:
   - `python3 tools/agent-coord.py claim <paths...>` before the first edit to a file.
   - `python3 tools/agent-coord.py release <paths...>` once an edit is finished and saved.
@@ -14,6 +14,16 @@ Multiple opencode agents may work in this repo at once (generally two). They coo
   - `python3 tools/agent-coord.py status` to see who holds what.
   A claim fails with exit 1 if the other agent holds the same path, so a conflicting file is simply not yours to touch right now. Use `claim --force` only to clear a stale claim from a dead session.
 - Read anything freely; only writes need claims. Don't edit files another agent holds.
+
+## Session lifecycle
+
+Context is re-sent on every turn, so a long session grows steadily more expensive and increases the chance of hitting model rate limits. Reset it whenever the old context stops paying for itself.
+
+- When a task finishes, check whether the next task still needs any of this session's context:
+  - If not, the cheapest state is a fresh one: say so explicitly so the user can start a new session (`/new` or `/clear`), which reloads base rules and the agent file from scratch.
+  - If some carryover matters (decisions, half-done files, open questions), `/compact` instead.
+- Anything the next session will need belongs in `.agents/agent-notes-<id>.md`, not in the conversation. The notes file survives `/new`; the conversation does not. Write it down before recommending a reset.
+- Sessions whose only remaining value is "I remember what happened earlier, but it's no longer needed" are dead weight. Suggest a reset rather than dragging the history along.
 
 ## Code style
 

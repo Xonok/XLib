@@ -70,7 +70,7 @@ def sys_stderr(msg):
 	print(msg, file=sys.stderr)
 
 def note_path(agent):
-	return os.path.join(ROOT, "agent-notes-%s.md" % agent)
+	return os.path.join(DIR, "agent-notes-%s.md" % agent)
 
 def claim_paths(paths):
 	return [os.path.abspath(p) for p in paths]
