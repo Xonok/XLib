@@ -41,3 +41,9 @@ There is currently no versioning script; the bundler needs to exist first. Neith
 
 - Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
 - For convenience, code may be split out into separate files beyond that, but the intent is that the bundler will eventually pack the entire library into a single versioned file on release.
+
+## Tooling
+
+Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
+
+- `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files; run it with `--no-<check>` to disable an individual check. `tmux-work-xlint.sh` in `/storage/Scripts` runs it continuously via `entr`.
