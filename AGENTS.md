@@ -15,6 +15,7 @@ These rules apply to all code written in this repository. AI assistants must fol
 - No double newlines. A single blank line separates functions; keep related globals together as one block.
 - Comments don't explain what code does (the code should make that clear). They explain the "why" when intent isn't obvious from the implementation.
 - Splitting parts of a function into descriptively-named helpers helps readability, but weigh that against the extra clutter it adds.
+- Imports go on one line, one import per line. `from X import Y` naturally stays alone and can't share a line with a plain `import Z`; multiple things from the same `X` go on one line (`from X import Y, Z`). Imports from meaningfully different categories (standard python vs. repo-local) are separated, but without empty lines between them. Avoid wildcard imports, since they're unpredictable.
 
 ## Versioning
 
@@ -46,4 +47,5 @@ There is currently no versioning script; the bundler needs to exist first. Neith
 
 Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
 
-- `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files; run it with `--no-<check>` to disable an individual check. `tmux-work-xlint.sh` in `/storage/Scripts` runs it continuously via `entr`.
+- `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
+- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location.
