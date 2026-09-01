@@ -44,22 +44,21 @@ Context is re-sent on every turn, so a long session grows steadily more expensiv
 
 Libraries are versioned. A versioned file is named `libraryname_major_minor_revision.py` (e.g. `net5_27_105.py`).
 
-- Major: breaking changes. When bumped, remove deprecated stuff.
+- Major: primarily an opportunity to drop deprecated code. Gated behind enough breaking changes (dropping deprecated code) AND enough time since the previous major. Rare, by design.
 - Minor: can add things, but must not break anything for previous users.
 - Revision: bugfixes (or attempts at such). Fix bugs only; don't add features or change the API.
-
-There is currently no versioning script; the bundler needs to exist first. Neither exists yet.
+- Default release bump is revision. `--minor` and `--major` bump theirs, resetting the trailing numbers to 0 (minor resets revision; major resets minor and revision).
+- A library's first release is always `1_0_0`; later versions are read from the latest existing release in `xlib/`.
+- Deprecations are marked in version terms, so that deprecated code can be dropped after exactly 2 major versions.
 
 ## Development approach
 
-- Each library is developed in its own folder. That folder can be imported with `from libraryname import libraryname` to get the development version.
+- Each library is developed in its own folder and has exactly one entry point. That folder can be imported with `from libraryname import libraryname` to get the development version.
 - Users should generally not use development versions, but instead versioned releases in the `xlib` folder.
 - Versioned releases can be imported either unversioned (`from xlib import libraryname`) or explicitly (`from xlib import libraryname_5_9_27`). `xlib/__init__.py` resolves an unversioned import to a version at runtime:
   - If the project has an `xlib_pins.py` in its working directory declaring `PIN = {"libraryname": "5_9_27"}`, that version is used.
   - Otherwise the latest version on disk is used, and updates to it are immediate (main projects should pin to avoid surprise breakage).
-- To avoid holding off on major work before a major release, put new functionality behind feature flags or in separate functions. Existing users can then migrate gradually, and a major release is simply the point where old code is omitted from the library.
-- Libraries must never use development versions of other libraries, except when that other library has no releases yet.
-- When making releases, a library must never depend on an unreleased version of another library.
+- Each library pins specific public versions of whatever it requires. A library is never released unless all its requirements are already released, so a release of one library never forces changes to other libraries; consumers update their pins at their own pace. Libraries use public versions of other libraries during development too, never development versions, since dev versions would make stable releases unnecessarily difficult.
 
 ## Code structure
 
@@ -71,4 +70,5 @@ There is currently no versioning script; the bundler needs to exist first. Neith
 Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
 
 - `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
+- `release/release.py` is the release script (bundles a dev folder into a versioned file in `xlib/`). Developed like a library but never released; owned by `release/`, not `tools/`.
 - `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.

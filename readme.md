@@ -26,9 +26,8 @@ Could then just run a script on the list to go through all their files and look 
 That way it would be possible to definitively know whether deprecated code can be removed.  
 
 **Not done**  
-Versioning script - as described above.  
-Bundling script - it's convenient to develop libraries as multiple files, but use as one.  
-Export script - same as bundler, but also folds in any xlib libraries used, for use outside the walled garden.  
+Release script - bundles a dev folder into a versioned file in `xlib/` (`release/release.py`, planned in `plans/release-script.md`).  
+Export script - same as the release script, but also folds in any xlib libraries used, for use outside the walled garden. Future work.  
 
 **Legacy**  
 Due to the large number of legacy projects, it's not reasonable to migrate them all at once.  

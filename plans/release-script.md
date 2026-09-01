@@ -1,26 +1,42 @@
 # Release script
 
-Creates versioned bundles in `xlib/` from per-folder dev sources, using the bundler in development (`pybundle/`).
+Creates versioned bundles in `xlib/` from per-folder dev sources, using the bundler in development (`pybundle/bundler.py`).
 
 ## Goal
 
-`python3 releaser/release.py <library> [--minor|--major]` produces `xlib/<library>_<major>_<minor>_<revision>.py` and nothing else the user has to think about.
+`python3 release/release.py <library> [--minor|--major]` produces `xlib/<library>_<major>_<minor>_<revision>.py` and nothing else the user has to think about.
+
+## Form
+
+- `release/release.py` — folder name equals the python file name. It is developed like a library (own folder, same code style) but is never itself released, like `xlint/`. Avoids "doer" names.
+- The release script does **not** test behavior of its output. The bundler is required to never change behavior; any case where it does is a bundler bug. So the script's own verification is minimal.
 
 ## Requirements
 
-- Consume the bundler (whichever of `inliner.py` / `inliner2.py` wins) to pack the library folder into a single file.
-- Default bump is revision (bugfix). `--minor` bumps minor, `--major` bumps major and triggers cleanup of deprecated code.
-- `--minor` and `--major` are mutually exclusive.
-- Read current version from the latest existing release in `xlib/`, or start at 1_0_0.
-- Respect library release rules: libraries never depend on unreleased versions of other libraries (AGENTS.md). Should refuse to release if a dependency's pinned/released requirement isn't met.
-- xlib_pins compatibility: the release must be importable both unversioned and pinned (`xlib.__init__` already resolves).
+- One entry point per library (the `release/<library>/<library>.py` dev entry).
+- Default bump is revision (bugfix). `--minor` bumps minor (and resets revision to 0); `--major` bumps major (and resets minor+revision to 0). `--minor` and `--major` are mutually exclusive.
+- Read current version from the latest existing release in `xlib/`, or start at `1_0_0` for the first release (no special tracking needed — the first is always 1_0_0).
+- Dependency pinning: each library pins specific public versions of whatever it requires. A library **cannot be released unless all its requirements are already released** — the script refuses otherwise. This means updating one library never forces changes to others; consumers update their pins at their own pace. Libraries never use dev versions of other libraries during development either.
+
+## Major releases
+
+Major is friction, deliberately rare, and is primarily an opportunity to drop deprecated code (feature work generally doesn't need a major). A `--major` release is gated behind **both**:
+
+1. Enough breaking changes — specifically, dropping deprecated code. Deprecations are marked in version terms so they can be dropped after exactly 2 major versions.
+2. Enough time having passed since the previous major version.
+
+(Exact mechanics for marking deprecations in version terms, and the specific time gate, are open below.)
+
+## Publish-dependencies script
+
+Each project needs a script it can run to publish its dependencies for xlib to use. This makes it knowable when it is safe to drop an old release out of the `xlib/` folder and move it elsewhere (for legacy reasons, releases are generally not fully deleted). In scope eventually; see Future work.
+
+## Future work
+
+- **Export** function: folds in any xlib libraries used, for use outside the walled garden (readme's "Export script"). Offered by the script but not implemented yet.
+- **Publish-dependencies** script (see above).
+- Reorganize folders if the number of libraries makes the per-tool folders clutter.
 
 ## Order
 
 After the bundler is finished. Phase 0 item 2.
-
-## Open questions
-
-- Where does the script live? (like `xlint/` follows the tooling pattern; `xlib` folder itself is for libraries)
-- Release metadata: read version "already released" vs storing an explicit version file next to dev sources.
-- Does --major confirm interactively?
