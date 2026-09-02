@@ -12,6 +12,9 @@ tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 xlint/xlint.py --watch xlib
 tmux split-window -h
 tmux send-keys -t "$SESSION" "cd $XLIB_DIR" Enter
 
+tmux split-window -h
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; while true ; do clear ; python3 tools/refusals.py ; sleep 30 ; done" Enter
+
 tmux set-option -g mouse on
 tmux select-layout tiled
 
