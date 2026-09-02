@@ -287,7 +287,7 @@ class Bundler:
 	def base_of(self, m, node):
 		if node.level == 0:
 			return node.module or ""
-		pkg = m.modpath if m.is_pkg else m.modpath.rsplit(".", 1)[0] if m.modpath else ""
+		pkg = m.modpath if m.is_pkg else (m.modpath.rsplit(".", 1)[0] if "." in m.modpath else "")
 		base = pkg
 		for _ in range(node.level - 1):
 			base = base.rsplit(".", 1)[0] if "." in base else ""
