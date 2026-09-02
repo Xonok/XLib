@@ -62,7 +62,7 @@ def check_space_indent(lines):
 def check_trailing_whitespace(lines):
 	report = []
 	for index, line in enumerate(lines, start=1):
-		if line != line.rstrip():
+		if line != line.rstrip() and line.strip():
 			report.append((index, "trailing whitespace"))
 	return report
 
