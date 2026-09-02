@@ -13,7 +13,7 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [websocket.md](websocket.md) — websocket protocol handling, server-pluggable.
 - [typechecking.md](typechecking.md) — type system with custom type support, usable standalone.
 - [command-runner.md](command-runner.md) — command dispatch for server + websocket, sessions, typechecking integration.
-- [testing.md](testing.md) — easier test authoring for projects.
+- [testing.md](testing.md) — easier test authoring for projects (`xtest`).
 - [logdb.md](logdb.md) — log-based database, project details via schema configuration.
 - [csv.md](csv.md) — CSV with comment support, usable standalone and over HTTP.
 - [dnd-math.md](dnd-math.md) — dice and similar math.
