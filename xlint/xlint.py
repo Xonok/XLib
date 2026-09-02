@@ -4,6 +4,7 @@ from pathlib import Path
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
 _CLEAR_SCREEN = "\033[2J\033[H"
+NAME = "xlint"
 _EVENT_HEADER = struct.Struct("=iIII")
 _IN_CLOSE_WRITE = 0x00000008
 _IN_MOVED_FROM = 0x00000040
@@ -251,6 +252,7 @@ def make_watcher(paths):
 
 def draw(snapshot):
 	print(_CLEAR_SCREEN, end="")
+	print(f"=== {NAME} ===")
 	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
 	print(f"{len(found)} problem(s)" if found else "clean", end="\n\n", flush=True)
 	for path, line, msg in sorted(found):
