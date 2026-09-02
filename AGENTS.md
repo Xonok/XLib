@@ -72,3 +72,17 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 - `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
 - `release/release.py` is the release script (bundles a dev folder into a versioned file in `xlib/`). Developed like a library but never released; owned by `release/`, not `tools/`.
 - `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
+
+## Subagent dispatch
+
+Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
+
+**Rotation order**: `worker-mimo` → `worker-nemotron-lightning` → `worker-nemotron-ultra` → `worker-ling` → repeat. Use the next model in rotation for each new dispatch. This spreads load evenly across all models, maximizing total daily capacity.
+
+**Override rotation when quality matters**: For complex coding tasks (multi-file edits, architectural changes), use `worker-mimo` even if it's not its rotation turn. For complex reasoning (design decisions, long-context analysis), use `worker-nemotron-ultra`. A failed attempt from the wrong model costs more than skipping a rotation.
+
+**Never dispatch if not needed**: Simple, single-step tasks (quick edits, simple questions) are faster done directly by the main model than via subagent dispatch overhead.
+
+**Concurrent dispatch**: When dispatching multiple workers simultaneously, assign different models to each.
+
+**Meta exclusion**: `worker-muse-spark` was removed — Meta's Contributor tier trains on user prompts. Do not re-add it.
