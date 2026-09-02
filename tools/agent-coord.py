@@ -1,7 +1,7 @@
 import argparse,fcntl,json,os,sys
 from contextlib import contextmanager
 
-SLOTS = ["a1", "a2"]
+SLOTS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, ".agents")
 LOCK = os.path.join(DIR, "lock")
