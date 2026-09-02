@@ -39,6 +39,7 @@ Context is re-sent on every turn, so a long session grows steadily more expensiv
 - Comments don't explain what code does (the code should make that clear). They explain the "why" when intent isn't obvious from the implementation.
 - Splitting parts of a function into descriptively-named helpers helps readability, but weigh that against the extra clutter it adds.
 - Imports go on one line: plain imports are comma-joined (`import argparse,ctypes,os`), `from X import Y` can't share a line with a plain `import Z`, so it naturally stays alone, but multiple things from the same `X` go on one line (`from X import Y,Z`). No space after a comma in an import line; a name containing a dot would need that separation, but dotted names get their own line anyway, so the space never helps. Imports from meaningfully different categories (standard python vs. repo-local) are separated, but without empty lines between them. Avoid wildcard imports, since they're unpredictable.
+- Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`, `<libraryname>_ser.py`). This keeps the public surface minimal and makes internal refactoring safer.
 
 ## Versioning
 
@@ -47,6 +48,7 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 - Major: primarily an opportunity to drop deprecated code. Gated behind enough breaking changes (dropping deprecated code) AND enough time since the previous major. Rare, by design.
 - Minor: can add things, but must not break anything for previous users.
 - Revision: bugfixes (or attempts at such). Fix bugs only; don't add features or change the API.
+- Cosmetic issues that don't change behavior — e.g. a linter flag on the bundled output — are not bugs and do not warrant a release on their own. Fix them without bumping the version when reasonable.
 - Default release bump is revision. `--minor` and `--major` bump theirs, resetting the trailing numbers to 0 (minor resets revision; major resets minor and revision).
 - A library's first release is always `1_0_0`; later versions are read from the latest existing release in `xlib/`.
 - Deprecations are marked in version terms, so that deprecated code can be dropped after exactly 2 major versions.
@@ -58,19 +60,41 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 - Versioned releases can be imported either unversioned (`from xlib import libraryname`) or explicitly (`from xlib import libraryname_5_9_27`). `xlib/__init__.py` resolves an unversioned import to a version at runtime:
   - If the project has an `xlib_pins.py` in its working directory declaring `PIN = {"libraryname": "5_9_27"}`, that version is used.
   - Otherwise the latest version on disk is used, and updates to it are immediate (main projects should pin to avoid surprise breakage).
-- Each library pins specific public versions of whatever it requires. A library is never released unless all its requirements are already released, so a release of one library never forces changes to other libraries; consumers update their pins at their own pace. Libraries use public versions of other libraries during development too, never development versions, since dev versions would make stable releases unnecessarily difficult.
+- **Libraries never use the versionless import option, not even in development.** A library always imports other libraries' explicit released versions (`from xlib import libraryname_5_9_27 as ...`), both in development and in its released code. Versionless imports are only for throwaway scripts, where "whatever is on disk" is acceptable.
+- Each library pins specific public versions of whatever it requires, **manually written as versioned imports in the dev folder**. The release script does not resolve imports for you. A library is never released unless all its requirements are already released, so a release of one library never forces changes to other libraries; consumers update their pins at their own pace. Libraries use public versions of other libraries during development too, never development or unspecified versions.
+
+## Version history
+
+- Every versioned library must keep a version history (`VERSIONS.md`) in its dev folder. One entry per release, newest first, noting what changed in each version. Prepend new entries to it rather than removing older ones.
+- This applies to everything in the repository that gets a version. Anything that does not get a version (tools, scripts) does not need a version history either — no versions, no version history.
 
 ## Code structure
 
 - Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
-- For convenience, code may be split out into separate files beyond that, but the intent is that the bundler will eventually pack the entire library into a single versioned file on release.
+- Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`). This keeps the public surface minimal and makes internal refactoring safer.
+
+### Bundler and the public API
+
+The bundler (`pybundle/bundler.py`) packs a library into one file and renames internal functions with a module prefix (e.g. `tokenize` in `csv_tok.py` becomes `csv_tok_tokenize`). Because of this:
+
+- **Public API functions must be defined in the entry file** (`<libraryname>.py`), not imported-and-re-exported from an internal module. The bundler does not keep a clean re-exported name; it rewrites the import to the prefixed internal name.
+- To give an internal function a clean public name with room for documentation, define a thin wrapper in the entry file that calls the internal one:
+  ```python
+  from .csv_tok import tokenize as _tokenize
+
+  def tokenize(line):
+      """Split a CSV line (with // comments and quoting) into cells."""
+      return _tokenize(line)
+  ```
+  The wrapper keeps the clean public name, carries the docstring, and correctly delegates to the bundled internal function.
+- Relative imports between a library's own modules are handled entirely by the bundler; the release script does not need to touch them.
 
 ## Tooling
 
 Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
 
 - `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
-- `release/release.py` is the release script (bundles a dev folder into a versioned file in `xlib/`). Developed like a library but never released; owned by `release/`, not `tools/`.
+- `release/release.py` is the release script: it assigns a version and saves a versioned file in `xlib/`, produced by calling the bundler on the dev folder. It is a thin wrapper around the bundler — it provides versioning, not code fixes, and it makes no edits to the bundler's output. Cross-library dependencies must already be written as versioned imports in the dev library. See `release/README.md`. Developed like a library but never released; owned by `release/`, not `tools/`.
 - `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
 
 ## Subagent dispatch
