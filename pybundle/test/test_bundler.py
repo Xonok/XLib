@@ -39,8 +39,8 @@ asserts = {
 		[r"from db import (model|core)"],
 	),
 	"stdlib": (
-		[r"from urllib\.parse import urlparse", r"import json",
-		 r"import collections", r"from collections import defaultdict",
+		[r"from urllib\.parse import urlparse", r"import json,collections",
+		 r"from collections import defaultdict",
 		 r"import math as m"],
 		[],
 	),

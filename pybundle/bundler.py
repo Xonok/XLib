@@ -1,4 +1,4 @@
-import argparse,ast,io,os,sys,token,tokenize
+import argparse,ast,io,os,re,sys,token,tokenize
 
 SPECIAL = {"True","False","None","__name__","__doc__","__package__","__file__"}
 
@@ -19,6 +19,36 @@ def line_lengths(text):
 		if ch == "\n":
 			res.append(i + 1)
 	return res
+
+_PLAIN_IMPORT = re.compile(r"^import ([A-Za-z_][A-Za-z0-9_]*)$")
+_PLAIN_FROM = re.compile(r"^from ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*) import ([A-Za-z_][A-Za-z0-9_]*)$")
+
+def merge_imports(lines):
+	merged = []
+	plain = []
+	froms = {}
+	def emit_buf():
+		if plain:
+			merged.append("import " + ",".join(plain))
+			plain.clear()
+		for mod, names in froms.items():
+			merged.append(f"from {mod} import {','.join(names)}")
+		froms.clear()
+	def emit(line):
+		emit_buf()
+		merged.append(line)
+	for line in lines:
+		m = _PLAIN_IMPORT.match(line)
+		if m is not None:
+			plain.append(m.group(1))
+			continue
+		f = _PLAIN_FROM.match(line)
+		if f is not None:
+			froms.setdefault(f.group(1), []).append(f.group(2))
+			continue
+		emit(line)
+	emit_buf()
+	return merged
 
 def token_index_at(toks, pos):
 	for i, t in enumerate(toks):
@@ -755,15 +785,21 @@ class Bundler:
 							premerged.append(line)
 		parts = []
 		if premerged:
-			parts.append("\n".join(premerged))
+			parts.append("\n".join(merge_imports(premerged)))
+		first_body = True
 		for mm in order:
 			body = self.rewrite(mm)
 			if body.strip() == "":
 				continue
+			if first_body and premerged:
+				body = body.lstrip("\n")
+				first_body = False
 			parts.append("############   from file: %s   ############\n\n%s" % (mm.rel, body.rstrip("\n")))
 		entry_body = self.rewrite(m)
 		if entry_body.strip() == "":
 			entry_body = m.text
+		if first_body and premerged:
+			entry_body = entry_body.lstrip("\n")
 		parts.append(entry_body.rstrip("\n"))
 		if self.warnings:
 			print("pybundle warnings:", file=sys.stderr)

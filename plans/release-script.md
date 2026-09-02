@@ -10,6 +10,7 @@ Creates versioned bundles in `xlib/` from per-folder dev sources, using the bund
 
 - `release/release.py` — folder name equals the python file name. It is developed like a library (own folder, same code style) but is never itself released, like `xlint/`. Avoids "doer" names.
 - The release script does **not** test behavior of its output. The bundler is required to never change behavior; any case where it does is a bundler bug. So the script's own verification is minimal.
+- The bundler emits xlint-clean output: external imports are comma-joined per repo style (`import a,b,c`; dotted/aliased names stand alone) and exactly one blank line follows the import block. `pybundle/bundler.py::merge_imports` handles the import formatting.
 
 ## Requirements
 
