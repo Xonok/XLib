@@ -95,7 +95,10 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 
 - `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
 - `release/release.py` is the release script: it assigns a version and saves a versioned file in `xlib/`, produced by calling the bundler on the dev folder. It is a thin wrapper around the bundler — it provides versioning, not code fixes, and it makes no edits to the bundler's output. Cross-library dependencies must already be written as versioned imports in the dev library. See `release/README.md`. Developed like a library but never released; owned by `release/`, not `tools/`.
-- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane and a shell in another. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
+- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane, a shell in another, and the `skynet` agent monitor in a third. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
+- `tools/skynet.py` is the agent monitor. It reads opencode's message log read-only and shows how work is spread between models (message and token counts per model) plus refusal counts.
+- Watcher scripts that stay open in the tmux panes should identify themselves: print `=== <Name> ===` at the top of their output (as `skynet` and `xlint --watch` do), so it's obvious which pane is which.
+- A script that monitors AI usage must never itself add to it: it must not call model APIs, only read local state (e.g. opencode's SQLite log).
 
 ## Subagent dispatch
 
