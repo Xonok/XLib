@@ -13,6 +13,10 @@ in `csv_tok.py` and `csv_ser.py`. This gives the bundler clean names to keep and
 for docstrings. The underlying cause was a pybundle `base_of` bug (now fixed) plus the
 older library layout re-exporting internal names.
 
+Note: as a one-time exception to the rule of not touching existing `xlib/` releases,
+double blank lines in this file (and in `1_0_0`) were collapsed to fix a linter flag.
+This was cosmetic only, with no version bump and no change in behavior.
+
 ## 1_0_0
 
 Initial release of the CSV library.

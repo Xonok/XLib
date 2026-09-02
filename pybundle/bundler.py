@@ -805,7 +805,7 @@ class Bundler:
 			print("pybundle warnings:", file=sys.stderr)
 			for w in self.warnings:
 				print("  " + w, file=sys.stderr)
-		return "\n\n".join(parts) + "\n"
+		return "\n".join(parts) + "\n"
 
 def bundle(entry):
 	return Bundler().bundle(entry)

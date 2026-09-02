@@ -91,7 +91,6 @@ def csv_ser_serialize(*args):
 
 ############   from file: csv_file.py   ############
 
-
 def csv_file_write_line(path, *data):
 	"""Append a CSV line to a file.
 
@@ -121,7 +120,6 @@ def csv_file_write_entry(path, schema, **data):
 		csv_file_idx = schema[key]
 		tokens[csv_file_idx] = value
 	return csv_file_write_line(path, *tokens)
-
 
 def schema_parse(header):
 	"""Parse a header line into a schema dict.

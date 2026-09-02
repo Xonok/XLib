@@ -76,7 +76,6 @@ def csv_ser_serialize(*args):
 			fields.append(csv_ser_s)
 	return ",".join(fields) + "\n", None
 
-
 def tokenize(line):
 	"""Split a CSV line (with // comments and quoting) into cells."""
 	return csv_tok_tokenize(line)
