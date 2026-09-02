@@ -1,42 +1,53 @@
-from .csv_tok import tokenize
-from .csv_ser import serialize
-from .csv_file import write_line,write_entry
+from .csv_tok import tokenize as _tokenize
+from .csv_ser import serialize as _serialize
+
+def tokenize(line):
+	"""Split a CSV line (with // comments and quoting) into cells."""
+	return _tokenize(line)
+
+def serialize(*args):
+	"""Join values into one CSV line with standard quoting."""
+	return _serialize(*args)
 
 def schema_parse(header):
-	"""Parse a header line into a schema dict.
-
-	Returns (schema, error) where:
-	- schema is a dict mapping column names to indices, or None on error
-	- error is None on success, or a string describing the error
-	"""
 	tokens, error = tokenize(header)
 	if error:
-		return (None, error)
+		return None, error
 	if tokens is None:
-		return (None, "empty header")
+		return None, "expected header row"
 	schema = {}
 	for i, key in enumerate(tokens):
 		if key is None:
-			return (None, "empty column name at index %d" % i)
+			return None, "empty column name at index %d" % i
 		schema[key] = i
-	return (schema, None)
+	return schema, None
 
 def parse_line(line, schema):
-	"""Parse a data line using a schema.
-
-	Returns (data, error) where:
-	- data is a dict mapping column names to values, or None on error
-	- error is None on success, or a string describing the error
-	"""
 	tokens, error = tokenize(line)
 	if error:
-		return (None, error)
+		return None, error
 	if tokens is None:
-		return (None, "empty line")
+		return None, "expected a data row"
 	data = {}
 	for key, idx in schema.items():
-		if idx < len(tokens):
-			data[key] = tokens[idx]
-		else:
-			data[key] = None
-	return (data, None)
+		data[key] = tokens[idx] if idx < len(tokens) else None
+	return data, None
+
+def write_line(path, *data):
+	line, error = serialize(*data)
+	if error:
+		return None, error
+	try:
+		with open(path, "a") as f:
+			f.write(line)
+	except IOError as e:
+		return None, str(e)
+	return None, None
+
+def write_entry(path, schema, **data):
+	tokens = [None] * len(schema)
+	for key, value in data.items():
+		if key not in schema:
+			return None, "unknown key: %s" % key
+		tokens[schema[key]] = value
+	return write_line(path, *tokens)
