@@ -53,6 +53,7 @@ def my_id():
 	if not key.startswith("pid-"):
 		return key
 	with locked():
+		recycle_dead_slots()
 		ids = load(IDS, {})
 		if key in ids:
 			return ids[key]
@@ -68,6 +69,31 @@ def my_id():
 
 def sys_stderr(msg):
 	print(msg, file=sys.stderr)
+
+def is_process_alive(pid):
+	"""Check if a process with the given PID is still running."""
+	return os.path.exists("/proc/%s" % pid)
+
+def recycle_dead_slots():
+	"""Remove ids.json entries for processes that no longer exist, freeing their slots."""
+	ids = load(IDS, {})
+	claims = load(CLAIMS, {})
+	dead_keys = []
+	for key in ids:
+		if key.startswith("pid-"):
+			try:
+				pid = int(key.split("-")[1])
+				if not is_process_alive(pid):
+					dead_keys.append(key)
+			except (ValueError, IndexError):
+				pass
+	for key in dead_keys:
+		slot = ids[key]
+		ids.pop(key, None)
+		claims.pop(slot, None)
+	if dead_keys:
+		save(IDS, ids)
+		save(CLAIMS, claims)
 
 def note_path(agent):
 	return os.path.join(DIR, "agent-notes-%s.md" % agent)
