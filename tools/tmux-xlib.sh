@@ -7,7 +7,7 @@ XLIB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 tmux kill-session -t "$SESSION"
 
 tmux new-session -d -s "$SESSION"
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 xlint/xlint.py --watch xlib xlint pybundle" Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 xlint/xlint.py --watch ." Enter
 
 tmux split-window -h
 tmux send-keys -t "$SESSION" "cd $XLIB_DIR" Enter

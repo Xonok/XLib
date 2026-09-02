@@ -26,7 +26,8 @@ except AttributeError:
 
 def is_ignored(path):
 	parts = set(path.parts)
-	return "__pycache__" in parts or ".git" in parts
+	excluded = {"__pycache__", ".git", "node_modules", "xlib_legacy", "test"}
+	return bool(parts & excluded)
 
 def python_files(paths):
 	found = []
