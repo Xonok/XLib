@@ -1,4 +1,4 @@
-import argparse,fcntl,json,os,sys
+import argparse,fcntl,glob,hashlib,json,os,sys
 from contextlib import contextmanager
 
 SLOTS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"]
@@ -7,6 +7,21 @@ DIR = os.path.join(ROOT, ".agents")
 LOCK = os.path.join(DIR, "lock")
 IDS = os.path.join(DIR, "ids.json")
 CLAIMS = os.path.join(DIR, "claims.json")
+ROTATION_CURSOR = os.path.join(DIR, "rotation.json")
+ROTATION = ["worker-mimo", "worker-nemotron-lightning", "worker-nemotron-ultra", "worker-ling"]
+RULE_CURSOR = os.path.join(DIR, "rule-cursor.json")
+
+def rule_files():
+	paths = [os.path.join(ROOT, "AGENTS.md")]
+	paths += sorted(glob.glob(os.path.join(ROOT, ".opencode", "agent", "*.md")))
+	return paths
+
+def file_hash(path):
+	try:
+		with open(path, "rb") as f:
+			return hashlib.sha256(f.read()).hexdigest()
+	except OSError:
+		return None
 
 def load(path, default):
 	try:
@@ -78,6 +93,7 @@ def recycle_dead_slots():
 	"""Remove ids.json entries for processes that no longer exist, freeing their slots."""
 	ids = load(IDS, {})
 	claims = load(CLAIMS, {})
+	cursors = load(RULE_CURSOR, {})
 	dead_keys = []
 	for key in ids:
 		if key.startswith("pid-"):
@@ -91,9 +107,11 @@ def recycle_dead_slots():
 		slot = ids[key]
 		ids.pop(key, None)
 		claims.pop(slot, None)
+		cursors.pop(slot, None)
 	if dead_keys:
 		save(IDS, ids)
 		save(CLAIMS, claims)
+		save(RULE_CURSOR, cursors)
 
 def note_path(agent):
 	return os.path.join(DIR, "agent-notes-%s.md" % agent)
@@ -162,6 +180,41 @@ def cmd_status(args):
 			if owned:
 				print("%s: %s" % (slot, ", ".join(owned)))
 
+def cmd_rotation(args):
+	with locked():
+		cursor = load(ROTATION_CURSOR, 0)
+		if args.position:
+			print(cursor % len(ROTATION))
+		elif args.next:
+			model = ROTATION[cursor % len(ROTATION)]
+			save(ROTATION_CURSOR, cursor + 1)
+			print(model)
+		else:
+			print(ROTATION[cursor % len(ROTATION)])
+
+def cmd_news(args):
+	agent = my_id()
+	with locked():
+		seen = load(RULE_CURSOR, {}).get(agent, {})
+		files = [p for p in rule_files() if file_hash(p) is not None]
+		changed = [p for p in files if file_hash(p) != seen.get(p)]
+		if args.status:
+			print("not caught up" if changed else "caught up")
+		else:
+			if args.peek:
+				if changed:
+					print("changed since last looked:\n" + "\n".join(changed))
+				else:
+					print("no new guideline changes")
+			else:
+				cursors = load(RULE_CURSOR, {})
+				cursors[agent] = {p: file_hash(p) for p in files}
+				save(RULE_CURSOR, cursors)
+				if changed:
+					print("new guideline changes (now seen):\n" + "\n".join(changed))
+				else:
+					print("no new guideline changes")
+
 def main():
 	parser = argparse.ArgumentParser(prog="agent-coord")
 	sub = parser.add_subparsers(dest="command", required=True)
@@ -174,9 +227,16 @@ def main():
 	p.add_argument("paths", nargs="+")
 	sub.add_parser("release-all", help="release everything this agent claimed")
 	sub.add_parser("status", help="show who holds what")
+	p = sub.add_parser("rotation", help="show or advance the shared subagent rotation cursor")
+	p.add_argument("--next", action="store_true", help="advance the cursor and print the model to dispatch now")
+	p.add_argument("--position", action="store_true", help="print the current cursor position without a model name")
+	p = sub.add_parser("news", help="report rule-file changes since this agent last looked (and mark them seen)")
+	p.add_argument("--peek", action="store_true", help="report changes without marking them seen")
+	p.add_argument("--status", action="store_true", help="print caught-up status without changing anything")
 	args = parser.parse_args()
 	{"id": cmd_id, "note": cmd_note, "claim": cmd_claim, "release": cmd_release,
-	 "release-all": cmd_release_all, "status": cmd_status}[args.command](args)
+	 "release-all": cmd_release_all, "status": cmd_status, "rotation": cmd_rotation,
+	 "news": cmd_news}[args.command](args)
 
 if __name__ == "__main__":
 	main()

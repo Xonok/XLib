@@ -104,12 +104,28 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 
 Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
 
-**Rotation order**: `worker-mimo` → `worker-nemotron-lightning` → `worker-nemotron-ultra` → `worker-ling` → repeat. Use the next model in rotation for each new dispatch. This spreads load evenly across all models, maximizing total daily capacity.
+**Rotation is authoritative and stateful.** Run `python3 tools/agent-coord.py rotation --next` to get the model to dispatch now; it atomically returns and advances the shared cursor (`mimo` → `lightning` → `ultra` → `ling` → repeat) so agents don't guess or drift. Always consult it before dispatching a worker.
 
-**Override rotation when quality matters**: For complex coding tasks (multi-file edits, architectural changes), use `worker-mimo` even if it's not its rotation turn. For complex reasoning (design decisions, long-context analysis), use `worker-nemotron-ultra`. A failed attempt from the wrong model costs more than skipping a rotation.
+**Pick the model by the job, not by rote rotation.** Rotation only balances *planning* load; the fit of the model to the work always wins over which turn it is:
+
+- **Coding** → `worker-mimo`. It is the strongest coder of the four; use it for coding by default, not just when rotation points at it.
+- **Deep reasoning / long-context analysis** → `worker-nemotron-ultra`.
+- **Bulk, speed-critical, or repetitive grunt work** → `worker-nemotron-lightning`.
+- **General text / agentic tasks in between** → `worker-ling`.
+
+A failed attempt from the wrong model costs more than skipping a rotation turn, but don't force a model onto a job it fits poorly just because it's the nominal default. Match the worker to the task.
 
 **Never dispatch if not needed**: Simple, single-step tasks (quick edits, simple questions) are faster done directly by the main model than via subagent dispatch overhead.
 
 **Concurrent dispatch**: When dispatching multiple workers simultaneously, assign different models to each.
 
 **Meta exclusion**: `worker-muse-spark` was removed — Meta's Contributor tier trains on user prompts. Do not re-add it.
+
+## Rule-change news
+
+Guidelines change, and this file (and `.opencode/agent/*.md`) is only a snapshot at your session start — it can go stale mid-session. `tools/agent-coord.py news` reports which rule files changed since you last looked, keyed to a per-agent read cursor, so you catch up on updates without re-reading everything.
+
+- Run `python3 tools/agent-coord.py news` at the start of a session and again before your first subagent dispatch. It prints the changed files (or `no new guideline changes`) and marks them seen.
+- `news --peek` reports changes without marking them seen (use it to look without committing to having absorbed them). `news --status` just prints `caught up` / `not caught up`.
+- When you make a new rule or guideline yourself, tell the other agent to run `news` — do not assume it will read this file unprompted.
+- A news notice only *informs*; it does not replace a mechanism. Prefer to mechanize a rule (a `tools/agent-coord.py` command, a bundle-time check) wherever you can, and use news to announce the changes you can't mechanize.
