@@ -12,6 +12,8 @@ from collections import defaultdict
 
 NAME = "Skynet"
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+_CLEAR_SCREEN = "\033[2J\033[H"
+_POLL_SECONDS = 1.0
 
 def load_stats(limit_seconds):
 	conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
@@ -106,17 +108,51 @@ def render(rows, now):
 		f"\n\nToday:\n{render_table(today_stats, now)}"
 	)
 
+def db_stamp():
+	values = []
+	for path in (DB_PATH, DB_PATH + "-wal"):
+		try:
+			values.append(os.stat(path).st_mtime_ns)
+		except OSError:
+			values.append(0)
+	return tuple(values)
+
+def build_report(window_hours, now):
+	rows = load_stats(window_hours * 3600)
+	return render(rows, now)
+
+def draw(text):
+	print(_CLEAR_SCREEN, end="")
+	print(f"=== {NAME} ===")
+	print(text, end="", flush=True)
+
+def watch(window_hours):
+	draw(build_report(window_hours, time.time()))
+	stamp = db_stamp()
+	while True:
+		time.sleep(_POLL_SECONDS)
+		next_stamp = db_stamp()
+		if next_stamp == stamp:
+			continue
+		stamp = next_stamp
+		draw(build_report(window_hours, time.time()))
+
 def main():
 	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage and refusal counts")
 	parser.add_argument("--window-hours", type=int, default=7 * 24, help="how far back to look (default 168)")
+	parser.add_argument("--watch", action="store_true", help="stay running, redraw when usage changes")
 	args = parser.parse_args()
 	if not os.path.exists(DB_PATH):
 		print(f"{NAME}: opencode db not found: {DB_PATH}")
 		return 1
-	now = time.time()
-	rows = load_stats(args.window_hours * 3600)
+	if args.watch:
+		try:
+			watch(args.window_hours)
+		except KeyboardInterrupt:
+			pass
+		return 0
 	print(f"=== {NAME} ===")
-	print(render(rows, now))
+	print(build_report(args.window_hours, time.time()))
 	return 0
 
 if __name__ == "__main__":
