@@ -7,7 +7,7 @@ last window, plus how many times it was refused (HTTP 429) and how long ago the
 last refusal was. Message and token counts show how work is spread between
 models; refusals are a rough proxy for how close a model is to refusing again.
 """
-import argparse,os,sqlite3,sys,time
+import argparse,datetime,os,sqlite3,sys,time
 from collections import defaultdict
 
 NAME = "Skynet"
@@ -18,14 +18,14 @@ def load_stats(limit_seconds):
 	cutoff = (time.time() - limit_seconds) * 1000
 	rows = conn.execute(
 		"""
-		SELECT modelID,
+		SELECT json_extract(data, '$.modelID'),
 			time_created/1000.0,
 			json_extract(data, '$.tokens.input'),
 			json_extract(data, '$.tokens.output'),
 			json_extract(data, '$.tokens.total'),
 			json_extract(data, '$.error.data.statusCode')
 		FROM message
-		WHERE role = 'assistant' AND json_extract(data, '$.time.created') >= ?
+		WHERE json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.time.created') >= ?
 		""",
 		(cutoff,),
 	).fetchall()
@@ -54,7 +54,7 @@ def human_tokens(n):
 		return f"{n / 1000:.0f}k"
 	return str(n)
 
-def render(rows, now):
+def aggregate(rows, now):
 	by_model = defaultdict(lambda: {"msgs": 0, "input": 0, "output": 0, "total": 0, "refusals": 0, "last_refusal": 0})
 	for model, created, token_in, token_out, token_total, status in rows:
 		stats = by_model[model]
@@ -68,19 +68,43 @@ def render(rows, now):
 		if status == 429:
 			stats["refusals"] += 1
 			stats["last_refusal"] = max(stats["last_refusal"], created)
+	return by_model
+
+def render_table(by_model, now):
 	if not by_model:
-		return "no agents active in window"
-	lines = []
-	for model in sorted(by_model, key=lambda m: -by_model[m]["total"]):
+		return "no agents active"
+	models = sorted(by_model, key=lambda m: -by_model[m]["total"])
+	col_w = max(len(m) for m in models)
+	hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'Input':>7}  {'Output':>7}  {'Total':>7}  {'Refusals'}"
+	sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * 8}"
+	lines = [hdr, sep]
+	for model in models:
 		s = by_model[model]
-		ref = f", {s['refusals']} refusal(s)" if s["refusals"] else ""
-		last = f", last {human_age(now - s['last_refusal'])} ago" if s["last_refusal"] else ""
+		ref = str(s["refusals"])
+		if s["last_refusal"]:
+			ref += f" ({human_age(now - s['last_refusal'])} ago)"
 		lines.append(
-			f"{model}: {s['msgs']} msgs"
-			f" {human_tokens(s['input'])} in / {human_tokens(s['output'])} out / {human_tokens(s['total'])} total"
-			f"{ref}{last}"
+			f"{model:<{col_w}}"
+			f"  {s['msgs']:>5}"
+			f"  {human_tokens(s['input']):>7}"
+			f"  {human_tokens(s['output']):>7}"
+			f"  {human_tokens(s['total']):>7}"
+			f"  {ref}"
 		)
 	return "\n".join(lines)
+
+def render(rows, now):
+	all_stats = aggregate(rows, now)
+	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	today_cutoff = local_midnight.timestamp()
+	today_rows = [(m, c, ti, to, tt, s) for m, c, ti, to, tt, s in rows if c >= today_cutoff]
+	today_stats = aggregate(today_rows, now)
+	if not all_stats:
+		return "no agents active in window"
+	return (
+		f"Window:\n{render_table(all_stats, now)}"
+		f"\n\nToday:\n{render_table(today_stats, now)}"
+	)
 
 def main():
 	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage and refusal counts")
