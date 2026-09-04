@@ -3,7 +3,9 @@ def tokenize(line):
 		return None, None
 	if line.strip().startswith("//"):
 		return None, None
-	if line.endswith("\n"):
+	if line.endswith("\r\n"):
+		line = line[:-2]
+	elif line.endswith("\n") or line.endswith("\r"):
 		line = line[:-1]
 	in_quotes = False
 	comment_pos = -1
