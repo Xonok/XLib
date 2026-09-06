@@ -11,9 +11,10 @@ ROTATION_CURSOR = os.path.join(DIR, "rotation.json")
 ROTATION = ["worker-mimo", "worker-nemotron-lightning", "worker-nemotron-ultra", "worker-ling"]
 RULE_CURSOR = os.path.join(DIR, "rule-cursor.json")
 
-def rule_files():
-	paths = [os.path.join(ROOT, "AGENTS.md")]
-	paths += sorted(glob.glob(os.path.join(ROOT, ".opencode", "agent", "*.md")))
+def rule_files(ws_root):
+	paths = [os.path.join(ws_root, "AGENTS.md")]
+	paths += sorted(glob.glob(os.path.join(ws_root, ".opencode", "agent", "*.md")))
+	paths += sorted(glob.glob(os.path.join(ws_root, "style", "*.md")))
 	return paths
 
 def file_hash(path):
@@ -47,10 +48,7 @@ def locked():
 		finally:
 			fcntl.flock(f, fcntl.LOCK_UN)
 
-def session_key():
-	name = os.environ.get("OPENCODE_AGENT_ID")
-	if name:
-		return name
+def opencode_pid():
 	pid = os.getpid()
 	while True:
 		with open("/proc/%s/stat" % pid) as f:
@@ -58,29 +56,102 @@ def session_key():
 		comm = parts[1].strip("()")
 		ppid = int(parts[3])
 		if comm == "opencode":
-			return "pid-%s" % pid
+			return pid
 		if pid in (1, ppid):
-			return "pid-%s" % os.getpid()
+			return None
 		pid = ppid
+
+def session_key():
+	name = os.environ.get("OPENCODE_AGENT_ID")
+	if name:
+		return name
+	pid = opencode_pid()
+	return "pid-%s" % (pid or os.getpid())
+
+def workspace_root():
+	"""Workspace folder of this session: nearest ancestor of the opencode
+	process's cwd that has a .agents dir, else this process's cwd ancestry,
+	else ROOT."""
+	start = ROOT
+	pid = opencode_pid()
+	if pid:
+		try:
+			start = os.path.realpath(os.readlink("/proc/%s/cwd" % pid))
+		except OSError:
+			pass
+	for base in [start, os.getcwd()]:
+		while True:
+			if os.path.isdir(os.path.join(base, ".agents")):
+				return base
+			parent = os.path.dirname(base)
+			if parent == base:
+				break
+			base = parent
+	return ROOT
+
+def ws_tag():
+	return os.path.basename(os.path.abspath(workspace_root()))
+
+def candidate_roots():
+	roots = []
+	for base in [ROOT, os.getcwd()]:
+		while True:
+			if base not in roots:
+				roots.append(base)
+			parent = os.path.dirname(base)
+			if parent == base:
+				break
+			base = parent
+	return roots
+
+def root_for_tag(tag):
+	for root in candidate_roots():
+		if os.path.basename(root) == tag:
+			return root
+	return None
+
+def qualify(agent):
+	if "/" in agent:
+		return agent
+	return "%s/%s" % (ws_tag(), agent)
+
+def migrate_ids():
+	"""Upgrade unqualified ids, claims, and cursors to workspace-qualified."""
+	tag = ws_tag()
+	ids = load(IDS, {})
+	new = {k: ("%s/%s" % (tag, v) if "/" not in v else v) for k, v in ids.items()}
+	if new != ids:
+		save(IDS, new)
+	claims = load(CLAIMS, {})
+	new = {("%s/%s" % (tag, k) if "/" not in k else k): v for k, v in claims.items()}
+	if new != claims:
+		save(CLAIMS, new)
+	cursors = load(RULE_CURSOR, {})
+	new = {("%s/%s" % (tag, k) if "/" not in k else k): v for k, v in cursors.items()}
+	if new != cursors:
+		save(RULE_CURSOR, new)
 
 def my_id():
 	key = session_key()
 	if not key.startswith("pid-"):
-		return key
+		return qualify(key)
 	with locked():
 		recycle_dead_slots()
+		migrate_ids()
 		ids = load(IDS, {})
 		if key in ids:
-			return ids[key]
-		taken = set(ids.values())
+			return qualify(ids[key])
+		tag = ws_tag()
+		prefix = tag + "/"
+		taken = set(v.split("/", 1)[1] for v in ids.values() if v.startswith(prefix))
 		free = [s for s in SLOTS if s not in taken]
 		if not free:
-			sys_stderr("no free agent slot (limit %s, %s in use); set OPENCODE_AGENT_ID to pick one" % (len(SLOTS), len(taken)))
+			sys_stderr("no free agent slot in %s (limit %s, %s in use); set OPENCODE_AGENT_ID to pick one" % (tag, len(SLOTS), len(taken)))
 			raise SystemExit(1)
 		slot = free[0]
-		ids[key] = slot
+		ids[key] = "%s/%s" % (tag, slot)
 		save(IDS, ids)
-		return slot
+		return ids[key]
 
 def sys_stderr(msg):
 	print(msg, file=sys.stderr)
@@ -114,13 +185,20 @@ def recycle_dead_slots():
 		save(RULE_CURSOR, cursors)
 
 def note_path(agent):
-	return os.path.join(DIR, "agent-notes-%s.md" % agent)
+	parts = agent.split("/", 1)
+	root = root_for_tag(parts[0]) if len(parts) == 2 else None
+	root = root or workspace_root()
+	return os.path.join(root, ".agents", "agent-notes-%s.md" % parts[-1])
 
 def claim_paths(paths):
 	return [os.path.abspath(p) for p in paths]
 
 def cmd_id(args):
 	print(my_id())
+
+def cmd_workspace(args):
+	root = workspace_root()
+	print("%s (%s)" % (root, ws_tag()))
 
 def cmd_note(args):
 	print(note_path(my_id()))
@@ -196,7 +274,7 @@ def cmd_news(args):
 	agent = my_id()
 	with locked():
 		seen = load(RULE_CURSOR, {}).get(agent, {})
-		files = [p for p in rule_files() if file_hash(p) is not None]
+		files = [p for p in rule_files(workspace_root()) if file_hash(p) is not None]
 		changed = [p for p in files if file_hash(p) != seen.get(p)]
 		if args.status:
 			print("not caught up" if changed else "caught up")
@@ -218,8 +296,9 @@ def cmd_news(args):
 def main():
 	parser = argparse.ArgumentParser(prog="agent-coord")
 	sub = parser.add_subparsers(dest="command", required=True)
-	sub.add_parser("id", help="print this agent's id")
+	sub.add_parser("id", help="print this agent's workspace-qualified id")
 	sub.add_parser("note", help="print this agent's notes file path")
+	sub.add_parser("workspace", help="print this session's workspace root and tag")
 	p = sub.add_parser("claim", help="claim files before editing")
 	p.add_argument("paths", nargs="+")
 	p.add_argument("--force", action="store_true", help="steal files held by the other agent")
@@ -234,9 +313,9 @@ def main():
 	p.add_argument("--peek", action="store_true", help="report changes without marking them seen")
 	p.add_argument("--status", action="store_true", help="print caught-up status without changing anything")
 	args = parser.parse_args()
-	{"id": cmd_id, "note": cmd_note, "claim": cmd_claim, "release": cmd_release,
-	 "release-all": cmd_release_all, "status": cmd_status, "rotation": cmd_rotation,
-	 "news": cmd_news}[args.command](args)
+	{"id": cmd_id, "note": cmd_note, "workspace": cmd_workspace, "claim": cmd_claim,
+	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
+	 "rotation": cmd_rotation, "news": cmd_news}[args.command](args)
 
 if __name__ == "__main__":
 	main()
