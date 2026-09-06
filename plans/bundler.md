@@ -1,12 +1,14 @@
 # Bundler review notes (pybundle/bundler.py)
 
 Living notes for the review + redesign discussion of the pybundle bundler
-(`pybundle/bundler.py`, AI-generated, ~870 lines). The human reviewed roughly
-the first third, annotating with `#X:` and `%category` markers. This file is
-the shared brain for that discussion. It gets adjusted as the discussion
-progresses; the actual fix is a separate agent task once the design is agreed.
+(`pybundle/bundler.py`, AI-generated). The human reviewed roughly the first
+third, annotating with `#X:` and `%category` markers; those annotations were
+moved here and stripped from the source (2026-09-06). This file is the shared
+brain for that discussion.
 
-Status: review ~1/3 done (user), design discussion ongoing, fix not started.
+Status: annotation cleanup done; agreed issues fixed (drop refdeps, fold
+disk-child bail, class→free-function, API/internal file split) with
+byte-identical output; the single-pass redesign remains open for discussion.
 
 ## What the bundler does (one sentence)
 
@@ -17,22 +19,25 @@ imported modules in dependency order before the entry file.
 
 ## Pipeline map (high-level; "the map")
 
-The whole thing is five phases, run from `Bundler.bundle(entry)`:
+The whole thing is five phases, orchestrated by `bundle(entry)` (entry file)
+→ `_bundle(ctx, entry)`. Shared state (`root`, `mods`, `entry`, `warnings`)
+lives on a `Context` passed as the first argument to every phase helper
+(no module-scope or class state).
 
-1. **Locate** (`locate`, `ensure`).
+1. **Locate** (`_locate`, `_ensure`).
    `bundle` sets `root` to the entry's directory and registers the entry as
-   module `""`. `ensure(dotted)` turns a dotted name into a real file under
-   `root` (`pkg.mod` → `pkg/mod.py` or a package's `__init__.py`), creating a
-   `Mod` per module and caching it in `self.mods`. Packages get the special
-   treatment (`is_pkg`, dotted path = package path).
+   module `""`. `_ensure(ctx, dotted)` turns a dotted name into a real file
+   under `root` (`pkg.mod` → `pkg/mod.py` or a package's `__init__.py`),
+   creating a `Mod` per module and caching it in `ctx.mods`. Packages get the
+   special treatment (`is_pkg`, dotted path = package path).
 
-2. **Analyze** (`analyze`).
+2. **Analyze** (`_analyze`).
    For each `Mod`: read the text, build three parallel views (raw text, line
-   start-offsets from `line_lengths`, tokens from `tokenize`, AST from `ast`),
+   start-offsets from `line_offsets`, tokens from `tokenize`, AST from `ast`),
    then:
-   - `scope_frame`: which names are locals / globals / nonlocals / imports at
+   - `_scope_frame`: which names are locals / globals / nonlocals / imports at
      each scope (imports tracked as their own category).
-   - `resolve_imports` → `import_stmt` / `from_stmt`: walk ALL imports
+   - `_resolve_imports` → `_import_stmt` / `_from_stmt`: walk ALL imports
      anywhere in the tree (nested ones included), resolve them locally where
      possible, record bindings (`bindmap`: name → `("mod", Module)` or
      `("name", "<flat>_<name>")`), record `depmods` (each module this one
@@ -41,36 +46,34 @@ The whole thing is five phases, run from `Bundler.bundle(entry)`:
    - Build `namespace`: classify every module-level binding as `"mod"` or
      `"value"`, using both the imports and the top-level assignments.
 
-3. **Classify** (`classify` / `walk`).
+3. **Classify** (`_classify` / `_walk`).
    One AST walk with an explicit scope stack (functions, lambdas,
    comprehensions, classes; `global`/`nonlocal` handled). For every name
    reference:
-   - `resolve` walks the scope stack to find whether the name is shadowed,
+   - `_resolve` walks the scope stack to find whether the name is shadowed,
      then which binding it hits.
-   - `name_ref` records the final mangled replacement for each reference
+   - `_name_ref` records the final mangled replacement for each reference
      position (`ownrefs`), plus the mangled assignment at top-level
      definitions (`x = ...` becomes `<flat>_x = ...`).
-   - `strip_selfalias` kills `x = modulename` aliases (the value becomes the
+   - `_strip_selfalias` kills `x = modulename` aliases (the value becomes the
      module's own mangled name).
-   - `global_stmt` rewrites `global x` to the mangled name where `x` is a
+   - `_global_stmt` rewrites `global x` to the mangled name where `x` is a
      module-level value.
-   - `defkw_of` maps `def`/`class` keyword positions to their mangled names.
-   - `toplvl_deps` (per module, run later from `bundle`): top-level
-     references that *reach a module* (e.g. `a.b` at top level) add a
-     `refdep` so the referenced module gets bundled even if it wasn't
-     imported by name.
+   - `_defkw_of` maps `def`/`class` keyword positions to their mangled names.
+   - (top-level references that reach a module were handled by `refdeps`;
+     that mechanism is now dropped — see agreed issues.)
 
-4. **Rewrite** (`rewrite`).
+4. **Rewrite** (`_rewrite`).
    Reconstruct the source text by walking the token stream and applying
    replacement spans (`(start, end, newtext)`): strip imports that are local
    or top-level (they'll be hoisted), strip self-aliases, replace `def`/`class`
    names, `global` names, and every `ownrefs` position, and fold attribute
    chains (`a.b.c` on a module → mangled flat name via `fold`/`gather_chain`).
 
-5. **Order & assemble** (`topo`, `bundle`).
+5. **Order & assemble** (`_topo`, `_bundle`).
    Collect every module's stripped external imports into a merged preamble
-   (`merge_imports`), then print each dependency module (body = `rewrite`
-   output) in `topo()` order, then the entry last.
+   (`_merge_imports`), then print each dependency module (body = `_rewrite`
+   output) in `_topo()` order, then the entry last.
 
 Key mechanism: **name mangling is the whole trick.** Every top-level name in
 module `a.b` is renamed to `a_b_<name>` at its definition site (`name_ref`
@@ -93,7 +96,10 @@ Grouped by category. These are observations, not yet all agreed as problems.
 
 ### %naming
 - `line_lengths` — misnamed: it returns line *start offsets*, not lengths.
-- `_PLAIN_FROM` / `_PLAIN_IMPORT` — "plain" is unclear.
+  (APPLIED: renamed to `line_offsets` in both dev + released code, and in this
+  map.)
+- `_PLAIN_FROM` / `_PLAIN_IMPORT` — "plain" is unclear. (APPLIED: renamed to
+  `_MERGE_FROM` / `_MERGE_IMPORT`, matching their only use in `merge_imports`.)
 - `target_names` — unclear that it means "collect store-target names".
 - `Frame` — sounds like a frame, behaves like a scope.
 
@@ -120,14 +126,17 @@ Grouped by category. These are observations, not yet all agreed as problems.
 ### %informative
 - `setdefault` both sets and gets; the add-to-list pattern.
 - The tuple-comparison in `token_index_at`.
+- (The per-function "what this does" walk-through items that used to live
+  here were removed: the user asked not to keep those in the plan.)
 
 ### %guard / %dont-pass-nulls
-- `ensure`'s non-null guard might belong in the caller.
+- `ensure`'s non-null guard might belong in the caller. (APPLIED: the guard
+  moved into `_import_stmt`, its only caller.)
 - Reverse the `if m is None` structure for an early return.
 
 ## Agreed issues (fixer checklist)
 
-- [ ] **Drop `refdeps` entirely** (analysis: redundant — see discussion log
+- [x] **Drop `refdeps` entirely** (analysis: redundant — see discussion log
   entry dated 2026-09-06). Empirically: disabling `toplvl_deps` produces
   byte-identical output on all 7 fixtures. Mechanically, every module that
   could become a `refdep` owner must already be in `self.mods`, and every
@@ -137,7 +146,10 @@ Grouped by category. These are observations, not yet all agreed as problems.
   (visiting a module earlier pulls its subtree earlier; still a valid topo
   order, never a correctness issue). Single-pass design: pure import-driven
   DFS is sufficient.
-- [ ] **`fold`/`gather_chain` disk-child descent is half-broken.** `fold`
+  DONE: `refdeps`/`toplvl_deps`/`owner_of`/`disk_child` removed;
+  `_topo` walks `depmods` only (per module).
+
+- [x] **`fold`/`gather_chain` disk-child descent is half-broken.** `fold`
   (bundler.py:780-786) will descend *textually* into a disk child that was
   never `ensure`d (`child is None`, `disk_child` True), appending the mangled
   prefix without updating `cur` — then classifies the next segment against
@@ -145,6 +157,19 @@ Grouped by category. These are observations, not yet all agreed as problems.
   in place. Confirmed empirically (`import a` + top-level `print(a.b.x)`
   with a sibling `b.py`: warns "unresolved chain", bundles no `b`). Either
   ensure the child or bail; the half-descent is dead intent.
+  DONE: `fold` now bails (`None`) on an un-`ensure`d disk child instead of
+  textually descending; re-tested the counter-example → `unresolved chain`
+  warning, reference left unchanged.
+
+- [x] **`Bundler` class antipattern** (see %structure). State (root/mods,
+  entry/warnings) loaded via attributes. APPLIED: class removed → free
+  functions; shared state rides on a `Context` passed as the first argument.
+
+- [x] **API/internal split** (AGENTS.md). APPLIED: `bundler.py` holds only the
+  public `bundle()` + `main()`; internals (`Context`, `Mod`, `Scope`, all
+  `_`-prefixed phases) moved to `bundler_impl.py`. `bundle()` dual-mode
+  imports (`from .bundler_impl` / `from bundler_impl`), `pybundle/__init__.py`
+  re-exports `bundler`.
 
 Discussion log items waiting on resolution:
 

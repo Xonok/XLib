@@ -1,10 +1,10 @@
 import os,re,subprocess,sys,tempfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
-from bundler import bundle
+from pybundle import bundler
 
-FIX = os.path.join(ROOT, "test", "fixtures")
+FIX = os.path.join(ROOT, "pybundle", "test", "fixtures")
 
 asserts = {
 	"single": (
@@ -81,7 +81,7 @@ def main():
 			continue
 		orig = run_file(entry, d)
 		try:
-			text = bundle(entry)
+			text = bundler.bundle(entry)
 		except Exception as e:
 			print("CRASH %s: %r" % (name, e))
 			failed += 1
