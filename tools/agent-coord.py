@@ -1,4 +1,4 @@
-import argparse,fcntl,glob,hashlib,json,os,sys
+import argparse,fcntl,glob,hashlib,json,os,subprocess,sys
 from contextlib import contextmanager
 
 SLOTS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"]
@@ -293,6 +293,76 @@ def cmd_news(args):
 				else:
 					print("no new guideline changes")
 
+def git_status(repo):
+	"""Return a list of dirty path strings for a git repo (read-only)."""
+	try:
+		out = subprocess.check_output(["git", "-C", repo, "status", "--porcelain", "-z"],
+			stderr=subprocess.DEVNULL).decode("utf-8", "replace")
+	except (subprocess.CalledProcessError, OSError):
+		return None
+	dirty = []
+	i = 0
+	parts = out.split("\0")
+	while i < len(parts):
+		entry = parts[i]
+		if not entry:
+			break
+		head = entry[:2]
+		path = entry[3:]
+		if head.startswith("R"):
+			i += 1
+			dirty.append(path)
+			if i < len(parts):
+				dirty.append(parts[i])
+		else:
+			dirty.append(path)
+		i += 1
+	return dirty
+
+def under(base, path):
+	"""True if path is base or is inside base (prefix at a component boundary)."""
+	if base in (".", ""):
+		return True
+	if base == path:
+		return True
+	return path.startswith(base.rstrip("/") + "/")
+
+def nearest_git(path):
+	base = os.path.dirname(os.path.abspath(path))
+	while True:
+		if os.path.isdir(os.path.join(base, ".git")):
+			return base
+		parent = os.path.dirname(base)
+		if parent == base:
+			return None
+		base = parent
+
+def cmd_check_clean(args):
+	abspaths = [os.path.abspath(p) for p in args.paths]
+	if args.repo:
+		repos = {os.path.realpath(args.repo): abspaths}
+	else:
+		repos = {}
+		for p in abspaths:
+			repos.setdefault(nearest_git(p) or p, []).append(p)
+	blocked_all = []
+	if len(repos) > 1:
+		sys_stderr("paths span multiple repos: %s" % ", ".join(sorted(repos)))
+		raise SystemExit(2)
+	for repo, paths in repos.items():
+		dirty = git_status(repo)
+		if dirty is None:
+			sys_stderr("%s is not a git repo (pass --repo)" % repo)
+			raise SystemExit(2)
+		want = [os.path.relpath(p, repo) for p in paths]
+		blocked_all += sorted({d for d in dirty if any(under(w, d) for w in want)})
+	if not blocked_all:
+		print("clean")
+		return
+	for d in blocked_all:
+		print("dirty %s" % d)
+	raise SystemExit(1)
+
 def main():
 	parser = argparse.ArgumentParser(prog="agent-coord")
 	sub = parser.add_subparsers(dest="command", required=True)
@@ -312,10 +382,13 @@ def main():
 	p = sub.add_parser("news", help="report rule-file changes since this agent last looked (and mark them seen)")
 	p.add_argument("--peek", action="store_true", help="report changes without marking them seen")
 	p.add_argument("--status", action="store_true", help="print caught-up status without changing anything")
+	p = sub.add_parser("check-clean", help="report which of the given paths have uncommitted changes")
+	p.add_argument("paths", nargs="+", help="files or dirs under the repo to check")
+	p.add_argument("--repo", default=None, help="git working tree (default: inferred from the given paths)")
 	args = parser.parse_args()
 	{"id": cmd_id, "note": cmd_note, "workspace": cmd_workspace, "claim": cmd_claim,
 	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
-	 "rotation": cmd_rotation, "news": cmd_news}[args.command](args)
+	 "rotation": cmd_rotation, "news": cmd_news, "check-clean": cmd_check_clean}[args.command](args)
 
 if __name__ == "__main__":
 	main()
