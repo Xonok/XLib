@@ -15,6 +15,10 @@ Multiple opencode agents may work in this repo at once (generally two). They coo
   A claim fails with exit 1 if the other agent holds the same path, so a conflicting file is simply not yours to touch right now. Use `claim --force` only to clear a stale claim from a dead session.
 - Read anything freely; only writes need claims. Don't edit files another agent holds.
 
+## Git access
+
+**Agents are only allowed to use read-only git commands** (`status`, `log`, `show`, `diff`, `ls-files`, `reflog`, ...). Any command that changes the repository in a lasting manner — `commit`, `add`, `mv`, `rm`, `reset`, `checkout`, `restore`, `clean`, `stash`, `switch`, `pull`, `push`, `merge`, `rebase`, `tag`, and the like — is reserved for the human. A `git clean` can destroy untracked work; never run it, not even "just to tidy up". If a lasting git change is needed, say so and ask the human to run it.
+
 ## Session lifecycle
 
 Context is re-sent on every turn, so a long session grows steadily more expensive and increases the chance of hitting model rate limits. Reset it whenever the old context stops paying for itself.
