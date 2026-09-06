@@ -19,6 +19,16 @@ Multiple opencode agents may work in this repo at once (generally two). They coo
 
 **Agents are only allowed to use read-only git commands** (`status`, `log`, `show`, `diff`, `ls-files`, `reflog`, ...). Any command that changes the repository in a lasting manner — `commit`, `add`, `mv`, `rm`, `reset`, `checkout`, `restore`, `clean`, `stash`, `switch`, `pull`, `push`, `merge`, `rebase`, `tag`, and the like — is reserved for the human. A `git clean` can destroy untracked work; never run it, not even "just to tidy up". If a lasting git change is needed, say so and ask the human to run it.
 
+## Working tree
+
+Don't change files that carry uncommitted changes you did not make yourself. That state is someone's work-in-progress — the human's or another agent's — and editing it blurs the commit and risks overwriting it.
+
+- Before your first edit to a file, run `python3 tools/agent-coord.py check-clean <path>`. Exit 0 with `clean` means proceed. `dirty <path>` with exit 1 means the file has uncommitted changes: do not edit it — say you are blocked by that and name the file.
+- Untracked files count as dirty: a file you did not create that the check reports is not yours to edit either.
+- A file you created or modified yourself earlier in this session is your own work-in-progress; you may keep editing it. That is the "you made them" exception.
+- Run the check over the whole repo before starting a task to get the baseline of what is off-limits: `python3 tools/agent-coord.py check-clean .` reports every dirty file.
+- The human can override: if you are explicitly asked to work on a dirty file, the human owns the commit and has decided — proceed as told.
+
 ## Session lifecycle
 
 Context is re-sent on every turn, so a long session grows steadily more expensive and increases the chance of hitting model rate limits. Reset it whenever the old context stops paying for itself.
