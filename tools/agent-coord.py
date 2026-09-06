@@ -8,7 +8,6 @@ LOCK = os.path.join(DIR, "lock")
 IDS = os.path.join(DIR, "ids.json")
 CLAIMS = os.path.join(DIR, "claims.json")
 ROTATION_CURSOR = os.path.join(DIR, "rotation.json")
-ROTATION = ["worker-mimo", "worker-nemotron-lightning", "worker-nemotron-ultra", "worker-ling"]
 RULE_CURSOR = os.path.join(DIR, "rule-cursor.json")
 
 def rule_files(ws_root):
@@ -265,17 +264,7 @@ WORKER_MAP = {
 	"general": "worker-ling",
 }
 
-def cmd_rotation(args):
-	with locked():
-		cursor = load(ROTATION_CURSOR, 0)
-		if args.position:
-			print(cursor % len(ROTATION))
-		elif args.next:
-			model = ROTATION[cursor % len(ROTATION)]
-			save(ROTATION_CURSOR, cursor + 1)
-			print(model)
-		else:
-			print(ROTATION[cursor % len(ROTATION)])
+
 
 def cmd_dispatch(args):
 	cat = args.category.lower()
@@ -390,9 +379,6 @@ def main():
 	p.add_argument("paths", nargs="+")
 	sub.add_parser("release-all", help="release everything this agent claimed")
 	sub.add_parser("status", help="show who holds what")
-	p = sub.add_parser("rotation", help="show or advance the shared subagent rotation cursor")
-	p.add_argument("--next", action="store_true", help="advance the cursor and print the model to dispatch now")
-	p.add_argument("--position", action="store_true", help="print the current cursor position without a model name")
 	p = sub.add_parser("news", help="report rule-file changes since this agent last looked (and mark them seen)")
 	p.add_argument("--peek", action="store_true", help="report changes without marking them seen")
 	p.add_argument("--status", action="store_true", help="print caught-up status without changing anything")
@@ -404,7 +390,7 @@ def main():
 	args = parser.parse_args()
 	{"id": cmd_id, "note": cmd_note, "workspace": cmd_workspace, "claim": cmd_claim,
 	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
-	 "rotation": cmd_rotation, "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch}[args.command](args)
+	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch}[args.command](args)
 
 if __name__ == "__main__":
 	main()
