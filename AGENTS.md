@@ -6,7 +6,7 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 Multiple opencode agents may work in this repo at once (generally two). They coordinate through `tools/agent-coord.py`:
 
-- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Your session notes live in `.agents/agent-notes-<id>.md`, not a shared file.
+- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Ids are workspace-qualified: `XLib/a1` here means slot `a1` in this repo's workspace, distinct from `Agents/a1` in the `/storage/Agents` control-panel workspace. Your session notes live in this workspace's `.agents/agent-notes-<id>.md`, not a shared file. `workspace` prints which workspace the coordinator thinks you are in; `note` prints your notes path.
 - Claim a file before editing it, release it when done:
   - `python3 tools/agent-coord.py claim <paths...>` before the first edit to a file.
   - `python3 tools/agent-coord.py release <paths...>` once an edit is finished and saved.
@@ -25,21 +25,22 @@ Context is re-sent on every turn, so a long session grows steadily more expensiv
 - Anything the next session will need belongs in `.agents/agent-notes-<id>.md`, not in the conversation. The notes file survives `/new`; the conversation does not. Write it down before recommending a reset.
 - Sessions whose only remaining value is "I remember what happened earlier, but it's no longer needed" are dead weight. Suggest a reset rather than dragging the history along.
 
-## Code style
+## Pointers
 
-- Code is always indented with tabs.
-- Function definitions and calls must remain on one line.
-- Use intermediate variables to break up complex logic.
-- Prefer concise code, but do not make it complicated just to be concise.
-- Don't pad things with extra spaces as a blanket rule.
-- Do use spaces to break math into simpler parts.
-- Use guard clauses instead of nested `if`s, unless the `if` has branches.
-- Code that deals with untrusted input starts with sanity checks. It returns or raises an error when those checks fail.
-- No double newlines. A single blank line separates functions; keep related globals together as one block.
-- Comments don't explain what code does (the code should make that clear). They explain the "why" when intent isn't obvious from the implementation.
-- Splitting parts of a function into descriptively-named helpers helps readability, but weigh that against the extra clutter it adds.
-- Imports go on one line: plain imports are comma-joined (`import argparse,ctypes,os`), `from X import Y` can't share a line with a plain `import Z`, so it naturally stays alone, but multiple things from the same `X` go on one line (`from X import Y,Z`). No space after a comma in an import line; a name containing a dot would need that separation, but dotted names get their own line anyway, so the space never helps. Imports from meaningfully different categories (standard python vs. repo-local) are separated, but without empty lines between them. Avoid wildcard imports, since they're unpredictable.
-- Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`, `<libraryname>_ser.py`). This keeps the public surface minimal and makes internal refactoring safer.
+Rules are split across files so this file stays small and only the rules you need are loaded at a time. Read the pointed file before work that hits that topic:
+
+- `style/architecture.md` — how the system is put together: A/B/C/D placement, leaf modules, fork control, handed-in IO.
+- `style/common.md` — language-independent legibility code rules: maps/orchestration, guard-first failures, return documentation, single-pass structure, cross-platform compatibility, the legibility pass.
+- `style/python.md` — Python-specific formatting, imports, naming, type hints, section titles, declarative style.
+- `style/js.md` — JavaScript rules. Empty; only add rules when JS work appears in this repo.
+- `plans/*.md` — cross-cutting and roadmap design docs (multi-library, or
+  redesigns still in progress); `plans/bundler.md` is the exemplar for the map
+  style.
+- `<library>/SPEC.md` — a built library's map: current module structure, data
+  flow, invariants, design decisions, plus a "Planned changes" section only
+  when future work exists. Read a library's spec before working on it.
+
+Module format and project rules (versioning, API/internal split, bundler behavior, tooling) are rule content and live in this file.
 
 ## Versioning
 
@@ -47,6 +48,11 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 
 - Major: primarily an opportunity to drop deprecated code. Gated behind enough breaking changes (dropping deprecated code) AND enough time since the previous major. Rare, by design.
 - Minor: can add things, but must not break anything for previous users.
+  "Breaking" means: any change whatsoever in project code to keep the same
+  behaviour as before. Changing a default is therefore breaking unless it can
+  be shown that no caller relies on the old default — and if none can be
+  shown, consider requiring the argument instead (a default that nothing can
+  be verified to override is a hidden requirement, not a convenience).
 - Revision: bugfixes (or attempts at such). Fix bugs only; don't add features or change the API.
 - Cosmetic issues that don't change behavior — e.g. a linter flag on the bundled output — are not bugs and do not warrant a release on their own. Fix them without bumping the version when reasonable.
 - Default release bump is revision. `--minor` and `--major` bump theirs, resetting the trailing numbers to 0 (minor resets revision; major resets minor and revision).
@@ -123,7 +129,7 @@ A failed attempt from the wrong model costs more than skipping a rotation turn, 
 
 ## Rule-change news
 
-Guidelines change, and this file (and `.opencode/agent/*.md`) is only a snapshot at your session start — it can go stale mid-session. `tools/agent-coord.py news` reports which rule files changed since you last looked, keyed to a per-agent read cursor, so you catch up on updates without re-reading everything.
+Guidelines change, and this file (and the files it points at) is only a snapshot at your session start — it can go stale mid-session. `tools/agent-coord.py news` reports which rule files changed since you last looked, keyed to a per-agent read cursor, so you catch up on updates without re-reading everything. It hashes the rule files — `AGENTS.md`, `.opencode/agent/*.md`, `style/*.md` — plus anything else in the rule set.
 
 - Run `python3 tools/agent-coord.py news` at the start of a session and again before your first subagent dispatch. It prints the changed files (or `no new guideline changes`) and marks them seen.
 - `news --peek` reports changes without marking them seen (use it to look without committing to having absorbed them). `news --status` just prints `caught up` / `not caught up`.
