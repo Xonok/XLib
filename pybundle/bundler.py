@@ -13,15 +13,21 @@ def read_text(path):
 def tokenize_text(text):
 	return list(tokenize.generate_tokens(io.StringIO(text).readline))
 
-def line_lengths(text):
+def line_offsets(text):
+	"""Return the character offset where each line of `text` starts.
+
+	Index by (line_number) with line numbers counting from 1, so
+	`line_offsets(lineno - 1)` is the offset of the line's first column.
+	"""
 	res = [0]
 	for i, ch in enumerate(text):
 		if ch == "\n":
 			res.append(i + 1)
 	return res
 
-_PLAIN_IMPORT = re.compile(r"^import ([A-Za-z_][A-Za-z0-9_]*)$")
-_PLAIN_FROM = re.compile(r"^from ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*) import ([A-Za-z_][A-Za-z0-9_]*)$")
+#: Single-name imports with no alias: the only form merge_imports can unpack.
+_MERGE_IMPORT = re.compile(r"^import ([A-Za-z_][A-Za-z0-9_]*)$")
+_MERGE_FROM = re.compile(r"^from ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*) import ([A-Za-z_][A-Za-z0-9_]*)$")
 
 def merge_imports(lines):
 	merged = []
@@ -38,11 +44,11 @@ def merge_imports(lines):
 		emit_buf()
 		merged.append(line)
 	for line in lines:
-		m = _PLAIN_IMPORT.match(line)
+		m = _MERGE_IMPORT.match(line)
 		if m is not None:
 			plain.append(m.group(1))
 			continue
-		f = _PLAIN_FROM.match(line)
+		f = _MERGE_FROM.match(line)
 		if f is not None:
 			froms.setdefault(f.group(1), []).append(f.group(2))
 			continue
@@ -56,15 +62,16 @@ def token_index_at(toks, pos):
 			return i
 	return None
 
-def target_names(node):
+def store_target_names(node):
+	"""Return the names that are being assigned to in a target node."""
 	res = {}
 	if isinstance(node, ast.Name):
 		res[node.id] = True
 	elif isinstance(node, (ast.Tuple, ast.List)):
 		for e in node.elts:
-			res.update(target_names(e))
+			res.update(store_target_names(e))
 	elif isinstance(node, ast.Starred):
-		res.update(target_names(node.value))
+		res.update(store_target_names(node.value))
 	return res
 
 class Mod:
@@ -76,7 +83,7 @@ class Mod:
 		self.rel = ""
 		self.tokens = []
 		self.tree = None
-		self.lines = []
+		self.line_offsets = []
 		self.topvals = {}
 		self.bindmap = {}
 		self.depmods = {}
@@ -88,7 +95,8 @@ class Mod:
 		self.refdeps = {}
 		self.globals_at = {}
 
-class Frame:
+class Scope:
+	"""One level on the scope stack: locals, globals, nonlocals, and imports."""
 	def __init__(self, kind, locals_, globals_=None, nonlocals_=None, imports_=None):
 		self.kind = kind
 		self.locals = locals_
@@ -131,25 +139,26 @@ class Bundler:
 			return None
 		modpath, file = res
 		m = self.mods.get(modpath)
-		if m is None:
-			m = Mod(modpath, file)
-			self.mods[modpath] = m
-			m.rel = os.path.relpath(file, self.root)
-			m.text = read_text(file)
-			m.lines = line_lengths(m.text)
-			m.tokens = tokenize_text(m.text)
-			try:
-				m.tree = ast.parse(m.text)
-			except SyntaxError:
-				m.tree = None
-			self.analyze(m)
+		if m is not None:
+			return m
+		m = Mod(modpath, file)
+		self.mods[modpath] = m
+		m.rel = os.path.relpath(file, self.root)
+		m.text = read_text(file)
+		m.line_offsets = line_offsets(m.text)
+		m.tokens = tokenize_text(m.text)
+		try:
+			m.tree = ast.parse(m.text)
+		except SyntaxError:
+			m.tree = None
+		self.analyze(m)
 		return m
 
 	def analyze(self, m):
 		if m.tree is None:
 			return
-		st, gl, nl, imp = self.scope_frame(m, m.tree)
-		m.topvals = st.copy()
+		local_defs, gl, nl, imp = self.scope_frame(m, m.tree)
+		m.topvals = local_defs.copy()
 		for name in imp:
 			m.topvals.pop(name, None)
 		self.resolve_imports(m)
@@ -163,14 +172,14 @@ class Bundler:
 		self.defkw_of(m)
 
 	def scope_frame(self, m, node):
-		st = {}
+		local_defs = {}
 		gl = {}
 		nl = {}
 		imp = {}
 		def add(names):
 			for n in names:
 				if n not in gl and n not in nl:
-					st[n] = True
+					local_defs[n] = True
 		stack = [node]
 		while stack:
 			n = stack.pop()
@@ -202,30 +211,30 @@ class Bundler:
 					continue
 				if isinstance(c, ast.Assign):
 					for t in c.targets:
-						add(target_names(t))
+						add(store_target_names(t))
 					continue
 				if isinstance(c, ast.AnnAssign):
-					add(target_names(c.target))
+					add(store_target_names(c.target))
 					continue
 				if isinstance(c, ast.AugAssign):
-					add(target_names(c.target))
+					add(store_target_names(c.target))
 					continue
 				if isinstance(c, ast.NamedExpr):
-					add(target_names(c.target))
+					add(store_target_names(c.target))
 					continue
 				if isinstance(c, (ast.For, ast.AsyncFor)):
-					add(target_names(c.target))
+					add(store_target_names(c.target))
 					continue
 				if isinstance(c, (ast.With, ast.AsyncWith)):
 					for item in c.items:
 						if item.optional_vars is not None:
-							add(target_names(item.optional_vars))
+							add(store_target_names(item.optional_vars))
 					continue
 				if isinstance(c, ast.ExceptHandler) and c.name:
 					add([c.name])
 					continue
 				stack.append(c)
-		return st, gl, nl, imp
+		return local_defs, gl, nl, imp
 
 	def resolve_imports(self, m):
 		if m.tree is None:
@@ -344,15 +353,15 @@ class Bundler:
 			for d in node.decorator_list:
 				self.walk(m, d, stack)
 			self.walk(m, node.args, stack)
-			st, gl, nl, imp = self.scope_frame(m, node)
-			st.update(self.params_of(node))
-			stack.append(Frame("func", st, gl, nl, imp))
+			local_defs, gl, nl, imp = self.scope_frame(m, node)
+			local_defs.update(self.params_of(node))
+			stack.append(Scope("func", local_defs, gl, nl, imp))
 			for c in node.body:
 				self.walk(m, c, stack)
 			stack.pop()
 			return
 		if isinstance(node, ast.Lambda):
-			stack.append(Frame("lambda", self.params_of(node)))
+			stack.append(Scope("lambda", self.params_of(node)))
 			self.walk(m, node.body, stack)
 			stack.pop()
 			return
@@ -365,8 +374,8 @@ class Bundler:
 				self.walk(m, k.value, stack)
 			for d in node.decorator_list:
 				self.walk(m, d, stack)
-			st, gl, nl, imp = self.scope_frame(m, node)
-			stack.append(Frame("class", st))
+			local_defs, gl, nl, imp = self.scope_frame(m, node)
+			stack.append(Scope("class", local_defs))
 			for c in node.body:
 				self.walk(m, c, stack)
 			stack.pop()
@@ -378,8 +387,8 @@ class Bundler:
 			self.walk(m, gens[0].iter, stack)
 			locals_ = {}
 			for g in gens:
-				locals_.update(target_names(g.target))
-			stack.append(Frame("comp", locals_))
+				locals_.update(store_target_names(g.target))
+			stack.append(Scope("comp", locals_))
 			for g in gens:
 				if g is not gens[0]:
 					self.walk(m, g.iter, stack)
@@ -512,7 +521,7 @@ class Bundler:
 	# ---------- rewriting ----------
 
 	def on(self, m, start, end):
-		return m.lines[start[0] - 1] + start[1], m.lines[end[0] - 1] + end[1]
+		return m.line_offsets[start[0] - 1] + start[1], m.line_offsets[end[0] - 1] + end[1]
 
 	def strip_stmt(self, m, toks, i, reps):
 		n = len(toks)
@@ -538,7 +547,7 @@ class Bundler:
 		t = toks[i]
 		s, e = self.on(m, t.start, endtok.end)
 		if endtok.type == tokenize.NEWLINE:
-			s = m.lines[t.start[0] - 1]
+			s = m.line_offsets[t.start[0] - 1]
 		elif endtok.string == ";":
 			while e < len(m.text) and m.text[e] == " ":
 				e += 1
@@ -767,7 +776,7 @@ class Bundler:
 		m = Mod("", entry)
 		m.rel = os.path.basename(entry)
 		m.text = read_text(entry)
-		m.lines = line_lengths(m.text)
+		m.line_offsets = line_offsets(m.text)
 		m.tokens = tokenize_text(m.text)
 		m.tree = ast.parse(m.text)
 		self.mods[""] = m
