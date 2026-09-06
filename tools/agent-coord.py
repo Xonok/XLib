@@ -258,6 +258,13 @@ def cmd_status(args):
 			if owned:
 				print("%s: %s" % (slot, ", ".join(owned)))
 
+WORKER_MAP = {
+	"coding": "worker-mimo",
+	"reasoning": "worker-nemotron-ultra",
+	"bulk": "worker-nemotron-lightning",
+	"general": "worker-ling",
+}
+
 def cmd_rotation(args):
 	with locked():
 		cursor = load(ROTATION_CURSOR, 0)
@@ -269,6 +276,13 @@ def cmd_rotation(args):
 			print(model)
 		else:
 			print(ROTATION[cursor % len(ROTATION)])
+
+def cmd_dispatch(args):
+	cat = args.category.lower()
+	if cat not in WORKER_MAP:
+		sys_stderr("unknown category: %s (valid: %s)" % (cat, ", ".join(WORKER_MAP)))
+		raise SystemExit(2)
+	print(WORKER_MAP[cat])
 
 def cmd_news(args):
 	agent = my_id()
@@ -385,10 +399,12 @@ def main():
 	p = sub.add_parser("check-clean", help="report which of the given paths have uncommitted changes")
 	p.add_argument("paths", nargs="+", help="files or dirs under the repo to check")
 	p.add_argument("--repo", default=None, help="git working tree (default: inferred from the given paths)")
+	p = sub.add_parser("dispatch", help="get the worker model for a task category")
+	p.add_argument("category", choices=["coding", "reasoning", "bulk", "general"], help="task category")
 	args = parser.parse_args()
 	{"id": cmd_id, "note": cmd_note, "workspace": cmd_workspace, "claim": cmd_claim,
 	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
-	 "rotation": cmd_rotation, "news": cmd_news, "check-clean": cmd_check_clean}[args.command](args)
+	 "rotation": cmd_rotation, "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch}[args.command](args)
 
 if __name__ == "__main__":
 	main()
