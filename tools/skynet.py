@@ -25,7 +25,8 @@ def load_stats(limit_seconds):
 			json_extract(data, '$.tokens.input'),
 			json_extract(data, '$.tokens.output'),
 			json_extract(data, '$.tokens.total'),
-			json_extract(data, '$.error.data.statusCode')
+			json_extract(data, '$.error.data.statusCode'),
+			json_extract(data, '$.error.name')
 		FROM message
 		WHERE json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.time.created') >= ?
 		""",
@@ -58,7 +59,7 @@ def human_tokens(n):
 
 def aggregate(rows, now):
 	by_model = defaultdict(lambda: {"msgs": 0, "input": 0, "output": 0, "total": 0, "refusals": 0, "last_refusal": 0})
-	for model, created, token_in, token_out, token_total, status in rows:
+	for model, created, token_in, token_out, token_total, status, error_name in rows:
 		stats = by_model[model]
 		stats["msgs"] += 1
 		if token_in is not None:
@@ -67,7 +68,7 @@ def aggregate(rows, now):
 			stats["output"] += int(token_out)
 		if token_total is not None:
 			stats["total"] += int(token_total)
-		if status == 429:
+		if status == 429 or error_name == "MessageAbortedError":
 			stats["refusals"] += 1
 			stats["last_refusal"] = max(stats["last_refusal"], created)
 	return by_model
@@ -99,7 +100,7 @@ def render(rows, now):
 	all_stats = aggregate(rows, now)
 	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	today_cutoff = local_midnight.timestamp()
-	today_rows = [(m, c, ti, to, tt, s) for m, c, ti, to, tt, s in rows if c >= today_cutoff]
+	today_rows = [(m, c, ti, to, tt, s, en) for m, c, ti, to, tt, s, en in rows if c >= today_cutoff]
 	today_stats = aggregate(today_rows, now)
 	if not all_stats:
 		return "no agents active in window"
