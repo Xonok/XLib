@@ -1,5 +1,5 @@
-from .csv_tok import tokenize as _tokenize
-from .csv_ser import serialize as _serialize
+from ._.csv_tok import tokenize as _tokenize
+from ._.csv_ser import serialize as _serialize
 
 def tokenize(line):
 	"""Split a CSV line (with // comments and quoting) into cells."""

@@ -92,6 +92,7 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 
 - Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
 - Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`). This keeps the public surface minimal and makes internal refactoring safer.
+- **Dev library folders must not contain `__init__.py`.** Only the `xlib/` releases folder has `__init__.py`. Internal modules go in a subfolder (e.g., `csv/csv/`) so imports like `from .csv.csv_tok import ...` work without a top-level package marker.
 
 ### Bundler and the public API
 
