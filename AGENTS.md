@@ -135,6 +135,8 @@ Four free worker models are available as subagents: `worker-mimo`, `worker-nemot
 
 A failed attempt from the wrong model costs more than skipping a rotation turn, but don't force a model onto a job it fits poorly just because it's the nominal default. Match the worker to the task.
 
+**Mandatory dispatch for non-trivial work.** Before starting any non-trivial coding, reasoning, bulk, or general task, run `python3 tools/agent-coord.py dispatch <category>` to get the correct worker, then dispatch via the `task` tool with that `subagent_type`. The main model must NOT do the work itself.
+
 **Never dispatch if not needed**: Simple, single-step tasks (quick edits, simple questions) are faster done directly by the main model than via subagent dispatch overhead.
 
 **Concurrent dispatch**: When dispatching multiple workers simultaneously, assign different models to each.
