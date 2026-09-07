@@ -9,7 +9,7 @@ A server can serve files — but only the files it has explicitly allowed. Conte
 ## Security: default is to serve nothing
 
 - The default behaviour is to not serve any file that isn't explicitly allowed.
-- Allowed files are determined by configuration (see Config), generally "by type" today — the config says which extensions may be served, and only those roots are reachable.
+- Allowed files are determined by configuration (see XConf), generally "by type" today — the config says which extensions may be served, and only those roots are reachable.
 - Bypassing the default (e.g. "serve whatever is in this folder") must be an explicit, visible statement in the main function of the server that uses the library — not buried in config, not a flag the library defaults to true.
 
 ## Requirements
@@ -22,13 +22,13 @@ A server can serve files — but only the files it has explicitly allowed. Conte
 
 ## Config
 
-- Servable locations come from the config library: which served files exist and where. Currently this is typed (by extension/type); a way to serve whatever happens to be in a given folder is a useful addition on top of that.
+- Servable locations come from the xconf library: which served files exist and where. Currently this is typed (by extension/type); a way to serve whatever happens to be in a given folder is a useful addition on top of that.
 - Config drives allow/deny so the security story is declarative and inspectable, consistent with the "explicit statement in main" rule for the opt-out.
 
 ## Depends on
 
 - server-framework (plugin API, request/response helpers).
-- config (which locations and types are allowed).
+- xconf (which locations and types are allowed).
 - file-handling (path/root helpers, safe join, content detection if taken on).
 
 ## Order

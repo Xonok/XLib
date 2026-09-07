@@ -11,7 +11,7 @@ Data is appended as records; the schema describes each record type; queries read
 - Append-only CSV log(s) as storage; schema (from typechecking) describes valid records and their columns.
 - Project configures: which record types exist, their columns/types, and how to split or name log files — without editing library code.
 - Reads: sequential scan at first (log DBs are naturally sequential); indices are a later concern.
-- Built on csv + file-handling; schema via typechecking.
+- Built on xcsv + file-handling; schema via typechecking.
 
 ## Requirements
 
@@ -22,13 +22,13 @@ Data is appended as records; the schema describes each record type; queries read
 
 ## Depends on
 
-- csv (tokenizer/serializer with comment support)
+- xcsv (tokenizer/serializer with comment support)
 - file-handling (safe append, rotation helpers)
 - typechecking (schema definitions, validation)
 
 ## Order
 
-Phase 2 item 9 (as soon as csv + file-handling + typechecking land).
+Phase 2 item 9 (as soon as xcsv + file-handling + typechecking land).
 
 ## Out of scope for v1
 

@@ -15,11 +15,11 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [command-runner.md](command-runner.md) — command dispatch for server + websocket, sessions, typechecking integration.
 - [testing.md](testing.md) — easier test authoring for projects (`xtest`).
 - [logdb.md](logdb.md) — log-based database, project details via schema configuration.
-- [csv.md](csv.md) — CSV with comment support, usable standalone and over HTTP.
+- [xcsv.md](xcsv.md) — XCSV with comment support, usable standalone and over HTTP.
 - [dnd-math.md](dnd-math.md) — dice and similar math.
 - [loot-tables.md](loot-tables.md) — loot tables with recursion and configuration.
 - [file-handling.md](file-handling.md) — file handling helpers.
-- [config.md](config.md) — JSON config with defaults; drives what file-server may serve.
+- [xconf.md](xconf.md) — JSON config with defaults; drives what file-server may serve.
 - [js-libraries.md](js-libraries.md) — an "xlib for JS": versioned JS bundles, opt-in serving.
 - [webapp.md](webapp.md) — minimal Py/JS webapp framework with lazy views.
 - [reactive-web.md](reactive-web.md) — JS reactive toolkit for data dependencies.

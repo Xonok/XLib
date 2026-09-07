@@ -5,11 +5,11 @@ Recommended order = dependencies first, with early work establishing the dev-fol
 ## The dependency picture
 
 ```
-csv ─────────────┐
+xcsv ────────────┐
 file-handling ───┼──> logdb
 typechecking ────┴──┐
                     ├──> command-runner ──> sessions
-config ──> file-server
+xconf ──> file-server
 dnd-math ──> loot-tables
 server-framework ──> websocket ─┐
      └─> file-server ───────────┤
@@ -28,21 +28,21 @@ Why first: everything below needs a way to become a versioned release, and it va
 ## Phase 1 — foundations (leaf libraries, no internal deps)
 
 3. **typechecking** (with schema candidacy) — shape validation + custom types. Foundation for command-runner, logdb, and likely testing and CSV round-trips. The schema/typechecking split decision lives here.
-4. **csv** — comments + tokenizer/serializer, stringly-typed by nature. Leaf library, good early test of the release pipeline.
+4. **xcsv** — comments + tokenizer/serializer, stringly-typed by nature. Leaf library, good early test of the release pipeline.
 5. **file-handling** — building blocks for file-server and logdb.
 6. **dnd-math** — dice etc. Leaf, dependencies are just stdlib.
-7. **config** — JSON config with a defaults layer (from `xlib_legacy/Config.py`); file-server depends on it, logdb may validate against it.
+7. **xconf** — JSON config with a defaults layer (from `xlib_legacy/Config.py`); file-server depends on it, logdb may validate against it.
 8. **xtest** (was "testing") — built early so every library after it is developed against real tests, but must not block the other phase-1 libs; they can exist before it and gain tests later. It is a normal versioned library (external projects can depend on it), which also makes it a good first end-to-end test of the release pipeline.
 
 ## Phase 2 — infrastructure
 
 9. **server-framework** — the plug-in host. Everything web-shaped hangs off it, so its plugin/declarative design has to be settled early even if consumers arrive late.
-10. **logdb** — consumable as soon as csv + file-handling + typechecking land; independent of the server stack.
+10. **logdb** — consumable as soon as xcsv + file-handling + typechecking land; independent of the server stack.
 11. **websocket** — protocol lib first; the server plugin layer comes when the framework is ready. Can be developed and released in parallel with 9.
 
 ## Phase 3 — built on the server framework
 
-12. **file-server** — server plugin + file-handling + config. Default is to serve nothing; allowed types/locations come from config, folder-serving is an explicit statement in main.
+12. **file-server** — server plugin + file-handling + xconf. Default is to serve nothing; allowed types/locations come from xconf, folder-serving is an explicit statement in main.
 13. **command-runner** — the typechecking-integrated dispatcher; gets a `POST` transport plugin and a websocket transport plugin once both hosts exist. Sessions live in this library.
 
 ## Phase 4 — the web layer

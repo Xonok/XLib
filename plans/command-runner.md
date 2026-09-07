@@ -24,7 +24,7 @@ Write a command once as (name, description of arguments via types, handler); the
 - server-framework (plugin mounting)
 - websocket (message transport)
 - typechecking (arg validation, help)
-- optionally csv (dense responses), testing (of the runner itself), logdb (session persistence later)
+- optionally xcsv (dense responses), testing (of the runner itself), logdb (session persistence later)
 
 ## Sessions
 
