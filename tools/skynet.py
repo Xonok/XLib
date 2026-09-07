@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Keep an eye on the AI agents: per-model usage and refusal counts.
+"""Keep an eye on the AI agents: per-model usage, refusals, and finish reasons.
 
 Reads opencode's message log read-only (no API calls, so this never adds usage)
-and prints, per model, how many assistant messages and tokens it produced in the
-last window, plus how many times it was refused (HTTP 429) and how long ago the
-last refusal was. Message and token counts show how work is spread between
-models; refusals are a rough proxy for how close a model is to refusing again.
+and prints per-model stats including messages, tokens, refusals, and finish reasons.
 """
 import argparse,datetime,os,sqlite3,sys,time
 from collections import defaultdict
@@ -25,10 +22,16 @@ def load_stats(limit_seconds):
 			json_extract(data, '$.tokens.input'),
 			json_extract(data, '$.tokens.output'),
 			json_extract(data, '$.tokens.total'),
+			json_extract(data, '$.tokens.reasoning'),
+			json_extract(data, '$.tokens.cache.read'),
+			json_extract(data, '$.tokens.cache.write'),
 			json_extract(data, '$.error.data.statusCode'),
-			json_extract(data, '$.error.name')
+			json_extract(data, '$.error.name'),
+			json_extract(data, '$.finish'),
+			session_id
 		FROM message
 		WHERE json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.time.created') >= ?
+		ORDER BY time_created
 		""",
 		(cutoff,),
 	).fetchall()
@@ -58,8 +61,17 @@ def human_tokens(n):
 	return str(n)
 
 def aggregate(rows, now):
-	by_model = defaultdict(lambda: {"msgs": 0, "input": 0, "output": 0, "total": 0, "refusals": 0, "last_refusal": 0})
-	for model, created, token_in, token_out, token_total, status, error_name in rows:
+	by_model = defaultdict(lambda: {
+		"msgs": 0, "input": 0, "output": 0, "total": 0,
+		"reasoning": 0, "cache_read": 0, "cache_write": 0,
+		"refusals": 0, "last_refusal": 0,
+		"finish_stop": 0, "finish_tool_calls": 0, "finish_length": 0, "finish_unknown": 0,
+		"other_errors": 0, "last_other_error": 0,
+		"first_seen": now, "last_seen": 0,
+	})
+	for (model, created, token_in, token_out, token_total,
+		 token_reasoning, cache_read, cache_write,
+		 status, error_name, finish, session_id) in rows:
 		stats = by_model[model]
 		stats["msgs"] += 1
 		if token_in is not None:
@@ -68,45 +80,95 @@ def aggregate(rows, now):
 			stats["output"] += int(token_out)
 		if token_total is not None:
 			stats["total"] += int(token_total)
+		if token_reasoning is not None:
+			stats["reasoning"] += int(token_reasoning)
+		if cache_read is not None:
+			stats["cache_read"] += int(cache_read)
+		if cache_write is not None:
+			stats["cache_write"] += int(cache_write)
+		stats["first_seen"] = min(stats["first_seen"], created)
+		stats["last_seen"] = max(stats["last_seen"], created)
+
 		if status == 429 or error_name == "MessageAbortedError":
 			stats["refusals"] += 1
 			stats["last_refusal"] = max(stats["last_refusal"], created)
+		elif error_name and error_name not in ("MessageAbortedError",):
+			stats["other_errors"] += 1
+			stats["last_other_error"] = max(stats["last_other_error"], created)
+
+		if finish == "stop":
+			stats["finish_stop"] += 1
+		elif finish == "tool-calls":
+			stats["finish_tool_calls"] += 1
+		elif finish == "length":
+			stats["finish_length"] += 1
+		elif finish == "unknown":
+			stats["finish_unknown"] += 1
 	return by_model
 
-def render_table(by_model, now):
+def render_table(by_model, now, show_tokens=True, col_w=None):
 	if not by_model:
 		return "no agents active"
 	models = sorted(by_model, key=lambda m: -by_model[m]["total"])
-	col_w = max(len(m) for m in models)
-	hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'Input':>7}  {'Output':>7}  {'Total':>7}  {'Refusals'}"
-	sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * 8}"
+	if col_w is None:
+		col_w = max(len(m) for m in models)
+	ref_w = 12
+	if show_tokens:
+		hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}  {'Active'}"
+		sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * ref_w}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 11}"
+	else:
+		hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'Ref':>{ref_w}}  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}  {'Active'}"
+		sep = f"{'─' * col_w}  {'─' * 5}  {'─' * ref_w}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 11}"
 	lines = [hdr, sep]
 	for model in models:
 		s = by_model[model]
 		ref = str(s["refusals"])
 		if s["last_refusal"]:
-			ref += f" ({human_age(now - s['last_refusal'])} ago)"
-		lines.append(
-			f"{model:<{col_w}}"
-			f"  {s['msgs']:>5}"
-			f"  {human_tokens(s['input']):>7}"
-			f"  {human_tokens(s['output']):>7}"
-			f"  {human_tokens(s['total']):>7}"
-			f"  {ref}"
-		)
+			ref += f"({human_age(now - s['last_refusal'])})"
+		active = ""
+		if s["last_seen"]:
+			active = f"{human_age(now - s['first_seen'])}-{human_age(now - s['last_seen'])}"
+		if show_tokens:
+			lines.append(
+				f"{model:<{col_w}}"
+				f"  {s['msgs']:>5}"
+				f"  {human_tokens(s['input']):>7}"
+				f"  {human_tokens(s['output']):>7}"
+				f"  {human_tokens(s['total']):>7}"
+				f"  {ref:>{ref_w}}"
+				f"  {s['finish_length']:>4}"
+				f"  {s['finish_tool_calls']:>4}"
+				f"  {s['finish_stop']:>4}"
+				f"  {s['finish_unknown']:>4}"
+				f"  {active}"
+			)
+		else:
+			lines.append(
+				f"{model:<{col_w}}"
+				f"  {s['msgs']:>5}"
+				f"  {ref:>{ref_w}}"
+				f"  {s['finish_length']:>4}"
+				f"  {s['finish_tool_calls']:>4}"
+				f"  {s['finish_stop']:>4}"
+				f"  {s['finish_unknown']:>4}"
+				f"  {active}"
+			)
 	return "\n".join(lines)
 
 def render(rows, now):
 	all_stats = aggregate(rows, now)
 	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	today_cutoff = local_midnight.timestamp()
-	today_rows = [(m, c, ti, to, tt, s, en) for m, c, ti, to, tt, s, en in rows if c >= today_cutoff]
+	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
+	              for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
 	today_stats = aggregate(today_rows, now)
 	if not all_stats:
 		return "no agents active in window"
+	all_models = set(all_stats.keys()) | set(today_stats.keys())
+	col_w = max(len(m) for m in all_models)
 	return (
-		f"Window:\n{render_table(all_stats, now)}"
-		f"\n\nToday:\n{render_table(today_stats, now)}"
+		f"=== Models (Window) ===\n{render_table(all_stats, now, show_tokens=True, col_w=col_w)}"
+		f"\n\n=== Models (Today) ===\n{render_table(today_stats, now, show_tokens=True, col_w=col_w)}"
 	)
 
 def db_stamp():
@@ -139,7 +201,7 @@ def watch(window_hours):
 		draw(build_report(window_hours, time.time()))
 
 def main():
-	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage and refusal counts")
+	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage, refusals, finish reasons")
 	parser.add_argument("--window-hours", type=int, default=7 * 24, help="how far back to look (default 168)")
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw when usage changes")
 	args = parser.parse_args()
