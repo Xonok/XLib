@@ -123,16 +123,18 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 
 ## Subagent dispatch
 
-Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
+Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle / nemotron-3-ultra-free) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
 
 **Rotation is authoritative and stateful.** Run `python3 tools/agent-coord.py rotation --next` to get the model to dispatch now; it atomically returns and advances the shared cursor (`mimo` → `lightning` → `ultra` → `ling` → repeat) so agents don't guess or drift. Always consult it before dispatching a worker.
 
 **Pick the model by the job, not by rote rotation.** Rotation only balances *planning* load; the fit of the model to the work always wins over which turn it is:
 
-- **Coding** → `worker-mimo`. It is the strongest coder of the four; use it for coding by default, not just when rotation points at it.
-- **Deep reasoning / long-context analysis** → `worker-nemotron-ultra`.
+- **Coding / implementation** → `worker-mimo`. Strongest coder; use for coding by default.
+- **Deep reasoning / long-context analysis / technical architecture** → `worker-nemotron-ultra` (nemotron-3-ultra-free). Best for technical tasks, structured reasoning.
 - **Bulk, speed-critical, or repetitive grunt work** → `worker-nemotron-lightning`.
 - **General text / agentic tasks in between** → `worker-ling`.
+
+**Main model (big-pickle) strengths**: Best at understanding user intent, tracking implied specifications, and checking its own assumptions for false/untested claims. Use directly for planning, clarification, and assumption-auditing — do NOT dispatch these to workers.
 
 A failed attempt from the wrong model costs more than skipping a rotation turn, but don't force a model onto a job it fits poorly just because it's the nominal default. Match the worker to the task.
 
@@ -143,6 +145,10 @@ A failed attempt from the wrong model costs more than skipping a rotation turn, 
 **Concurrent dispatch**: When dispatching multiple workers simultaneously, assign different models to each.
 
 **Meta exclusion**: `worker-muse-spark` was removed — Meta's Contributor tier trains on user prompts. Do not re-add it.
+
+## Human feedback
+
+**Call out errors.** If the human is wrong about a technical fact, assumption, or direction, say so directly. Do not defer to incorrect premises. Correct mistakes immediately rather than building on them.
 
 ## Rule-change news
 
