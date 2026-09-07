@@ -1,4 +1,4 @@
-# Config
+# XConf
 
 Configuration library, used by file-server and potentially logdb/webapp later. Evolved from `xlib_legacy/Config.py`, which reads JSON configs from `config/<name>.json` with defaults in `config/default/<name>.json`, reports or fills omissions, and caches loaded configs.
 

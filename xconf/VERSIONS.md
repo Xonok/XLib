@@ -1,4 +1,4 @@
-# Config version history
+# XConf version history
 
 ## 1_0_0
 

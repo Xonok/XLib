@@ -1,6 +1,6 @@
-# CSV library
+# XCSV library
 
-CSV with comment support. Usable standalone and over HTTP (denser than JSON for tabular data).
+XCSV with comment support. Usable standalone and over HTTP (denser than JSON for tabular data).
 
 ## Goal
 
