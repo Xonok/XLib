@@ -75,7 +75,7 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 
 ## Development approach
 
-- Each library is developed in its own folder and has exactly one entry point. That folder can be imported with `from libraryname import libraryname` to get the development version.
+- Each library is developed in its own folder and has exactly one entry point (`<libraryname>.py`). Dev folders are **not packages** (no `__init__.py`); import the API directly via `from libraryname.libraryname import ...` (e.g., `from csv.csv import tokenize`).
 - Users should generally not use development versions, but instead versioned releases in the `xlib` folder.
 - Versioned releases can be imported either unversioned (`from xlib import libraryname`) or explicitly (`from xlib import libraryname_5_9_27`). `xlib/__init__.py` resolves an unversioned import to a version at runtime:
   - If the project has an `xlib_pins.py` in its working directory declaring `PIN = {"libraryname": "5_9_27"}`, that version is used.
