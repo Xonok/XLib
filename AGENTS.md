@@ -4,6 +4,8 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 `.agents/agent-notes-<id>.md` in this repo is a per-agent, git-ignored file that holds current state and gotchas that don't belong in the standing rules. It doesn't exist on a fresh clone; create your own near the start of a session, seeded from the reasonable initial rules below, and read it before starting work on later sessions.
 
+`.agents/shared-notes.md` is a shared, git-ignored file for user thoughts that aren't tied to one agent or machine. It survives `/new` and is shared across all agents. Write cross-agent user preferences, decisions, and context there instead of per-agent notes.
+
 Multiple opencode agents may work in this repo at once (generally two). They coordinate through `tools/agent-coord.py`:
 
 - `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Ids are workspace-qualified: `XLib/a1` here means slot `a1` in this repo's workspace, distinct from `Agents/a1` in the `/storage/Agents` control-panel workspace. Your session notes live in this workspace's `.agents/agent-notes-<id>.md`, not a shared file. `workspace` prints which workspace the coordinator thinks you are in; `note` prints your notes path.
