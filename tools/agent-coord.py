@@ -264,8 +264,6 @@ WORKER_MAP = {
 	"general": "worker-ling",
 }
 
-
-
 def cmd_dispatch(args):
 	cat = args.category.lower()
 	if cat not in WORKER_MAP:
