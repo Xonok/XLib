@@ -160,3 +160,47 @@ Guidelines change, and this file (and the files it points at) is only a snapshot
 - `news --peek` reports changes without marking them seen (use it to look without committing to having absorbed them). `news --status` just prints `caught up` / `not caught up`.
 - When you make a new rule or guideline yourself, tell the other agent to run `news` — do not assume it will read this file unprompted.
 - A news notice only *informs*; it does not replace a mechanism. Prefer to mechanize a rule (a `tools/agent-coord.py` command, a bundle-time check) wherever you can, and use news to announce the changes you can't mechanize.
+
+## Agent roles
+
+These role definitions apply across workspaces (Agents and XLib). Each agent has a primary role; they collaborate through the human.
+
+### Programmer (XLib)
+- **Writes code** — implements specs as code
+- **Basis**: Works from a written spec (from Planner)
+- **Dispatch**: `worker-mimo` via `dispatch coding`
+- **Does NOT**: Design architecture, write specs, review own code, decide releases
+
+### Planner (XLib)
+- **Writes plans and specs** — fleshes out technical details with human
+- **Produces**: Plan documents (`plans/*.md`), then detailed specs
+- **Dispatch**: `worker-nemotron-ultra` via `dispatch reasoning`
+- **Does NOT**: Write implementation code, review code, execute releases
+
+### Reviewer (XLib)
+- **Release gate** — independent code review, user-invoked only
+- **Produces**: Review documents (`reviews/<lib>-<commit>.md`) keyed to commit hash
+- **Workflow**: User invokes → reviews → writes doc → discusses with human → executes release **only on explicit permission**
+- **Dispatch**: `worker-nemotron-ultra` via `dispatch reasoning`
+- **Does NOT**: Write code, write specs, auto-release
+
+### Secretary (Agents)
+- **Writes plans** — priority management, task organization, planning for non-XLib work
+- **Manages**: TASKS.md, priorities, deadlines, shared notes
+- **Feeds**: Task data to tmux task view (once available)
+- **Does NOT**: Write implementation code, write XLib specs, review code, manage releases
+
+### Mechanic (Systems)
+- **System management** — debugging, installation, configuration, remote management
+- **Handles**: OS issues, hardware, services, deployment, infrastructure
+- **Dispatch**: `worker-mimo` or direct via `task` tool
+- **Does NOT**: Write application code, write specs, review code
+
+### Researcher (General)
+- **Research & option evaluation** — investigates unknowns, compares alternatives
+- **Produces**: Notes in shared-notes.md or agent-notes for Secretary/Planner
+- **Dispatch**: `worker-nemotron-ultra` or `worker-ling` via `dispatch reasoning`
+- **Does NOT**: Write implementation code, write specs, review code, make decisions
+
+### Common rule
+**All agents discuss their work with the human.** No autonomous execution of significant decisions.
