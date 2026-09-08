@@ -56,6 +56,10 @@ Rules are split across files so this file stays small and only the rules you nee
 - `<library>/SPEC.md` — a built library's map: current module structure, data
   flow, invariants, design decisions, plus a "Planned changes" section only
   when future work exists. Read a library's spec before working on it.
+- `STATUS.md` — master status file at repo root (coordinator-maintained
+  summary of what exists / is in progress / is blocked / is done). Update it
+  when you start or finish work: what you're working on + a rough % done.
+  Claim it before editing; keep the Snapshot date current.
 
 Module format and project rules (versioning, API/internal split, bundler behavior, tooling) are rule content and live in this file.
 
