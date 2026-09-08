@@ -37,8 +37,8 @@ Repurpose an unused tmux panel in the XLib tmux session (tmux-xlib.sh) to show p
 5. Test and refine
 
 ## Status
-- [ ] Plan approved
-- [ ] Technical spec written
-- [ ] Implementation started
-- [ ] Testing
-- [ ] Release
+- [x] Plan approved
+- [x] Technical spec written
+- [x] Implementation started
+- [x] Testing
+- [x] Release

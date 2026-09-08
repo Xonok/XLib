@@ -57,7 +57,7 @@ Recommendation: **Option A** — single DB connection, shared poll loop, renders
 - Key bindings to toggle hidden columns in Tracker 1
 
 ## Status
-- [ ] Plan approved
-- [ ] Spec written
+- [x] Plan approved
+- [x] Spec written → `plans/skynet-second-tracker-spec.md`
 - [ ] Implementation
 - [ ] Test
