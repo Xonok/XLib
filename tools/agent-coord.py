@@ -1,7 +1,7 @@
-import argparse,fcntl,glob,hashlib,json,os,subprocess,sys
+import argparse,fcntl,glob,hashlib,json,os,subprocess,sys,time
 from contextlib import contextmanager
 
-SLOTS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"]
+MAX_INSTANCES = 8
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, ".agents")
 LOCK = os.path.join(DIR, "lock")
@@ -9,6 +9,11 @@ IDS = os.path.join(DIR, "ids.json")
 CLAIMS = os.path.join(DIR, "claims.json")
 ROTATION_CURSOR = os.path.join(DIR, "rotation.json")
 RULE_CURSOR = os.path.join(DIR, "rule-cursor.json")
+SUBAGENT_CTX = os.path.join(DIR, "subagent-ctx.json")
+CTX_BUDGET = 8
+CTX_WARN_AT = 6
+BATCH_FLUSH_N = 3
+BATCH_FLUSH_AGE = 60
 
 def rule_files(ws_root):
 	paths = [os.path.join(ws_root, "AGENTS.md")]
@@ -109,26 +114,74 @@ def root_for_tag(tag):
 			return root
 	return None
 
+def agent_role():
+	return os.environ.get("OPENCODE_AGENT_ROLE") or "unknown"
+
 def qualify(agent):
 	if "/" in agent:
 		return agent
 	return "%s/%s" % (ws_tag(), agent)
 
+def allocate_instance(role, tag, ids):
+	"""Return next available instance number for (tag, role), recycling dead processes."""
+	prefix = tag + "/" + role + "-"
+	taken = set()
+	for v in ids.values():
+		if v.startswith(prefix):
+			try:
+				n = int(v.rsplit("-", 1)[1])
+				taken.add(n)
+			except (ValueError, IndexError):
+				pass
+	# Also check for dead processes among taken numbers
+	for n_val in list(taken):
+		session_key_for_num = None
+		for k, val in ids.items():
+			if val == tag + "/" + role + "-" + str(n_val):
+				session_key_for_num = k
+				break
+		if session_key_for_num and session_key_for_num.startswith("pid-"):
+			try:
+				pid = int(session_key_for_num.split("-")[1])
+				if not is_process_alive(pid):
+					taken.discard(n_val)
+			except (ValueError, IndexError):
+				pass
+	for n in range(1, MAX_INSTANCES + 1):
+		if n not in taken:
+			return n
+	return None
+
 def migrate_ids():
-	"""Upgrade unqualified ids, claims, and cursors to workspace-qualified."""
+	"""Upgrade old-format ids, claims, and cursors to new role-N format.
+	Old slot-based IDs (workspace/a1) are simply dropped -- fresh start per plan."""
 	tag = ws_tag()
 	ids = load(IDS, {})
-	new = {k: ("%s/%s" % (tag, v) if "/" not in v else v) for k, v in ids.items()}
-	if new != ids:
-		save(IDS, new)
+	changed = False
+	# Remove old slot-based entries (workspace/a1, workspace/a2, etc.)
+	old_slots = {k for k, v in ids.items() if "/" in v and v.split("/", 1)[1].startswith("a") and v.split("/", 1)[1][1:].isdigit()}
+	for k in old_slots:
+		del ids[k]
+		changed = True
+	if changed:
+		save(IDS, ids)
+	# Clean claims and cursors of old slot references
 	claims = load(CLAIMS, {})
-	new = {("%s/%s" % (tag, k) if "/" not in k else k): v for k, v in claims.items()}
-	if new != claims:
-		save(CLAIMS, new)
 	cursors = load(RULE_CURSOR, {})
-	new = {("%s/%s" % (tag, k) if "/" not in k else k): v for k, v in cursors.items()}
-	if new != cursors:
-		save(RULE_CURSOR, new)
+	changed_c = False
+	changed_cu = False
+	for k in list(claims.keys()):
+		if k not in ids:
+			claims.pop(k, None)
+			changed_c = True
+	for k in list(cursors.keys()):
+		if k not in ids:
+			cursors.pop(k, None)
+			changed_cu = True
+	if changed_c:
+		save(CLAIMS, claims)
+	if changed_cu:
+		save(RULE_CURSOR, cursors)
 
 def my_id():
 	key = session_key()
@@ -141,16 +194,15 @@ def my_id():
 		if key in ids:
 			return qualify(ids[key])
 		tag = ws_tag()
-		prefix = tag + "/"
-		taken = set(v.split("/", 1)[1] for v in ids.values() if v.startswith(prefix))
-		free = [s for s in SLOTS if s not in taken]
-		if not free:
-			sys_stderr("no free agent slot in %s (limit %s, %s in use); set OPENCODE_AGENT_ID to pick one" % (tag, len(SLOTS), len(taken)))
+		role = agent_role()
+		n = allocate_instance(role, tag, ids)
+		if n is None:
+			sys_stderr("no free instance for role %s in %s (limit %s); set OPENCODE_AGENT_ID to pick one" % (role, tag, MAX_INSTANCES))
 			raise SystemExit(1)
-		slot = free[0]
-		ids[key] = "%s/%s" % (tag, slot)
+		agent_id = "%s/%s-%d" % (tag, role, n)
+		ids[key] = agent_id
 		save(IDS, ids)
-		return ids[key]
+		return agent_id
 
 def sys_stderr(msg):
 	print(msg, file=sys.stderr)
@@ -160,7 +212,7 @@ def is_process_alive(pid):
 	return os.path.exists("/proc/%s" % pid)
 
 def recycle_dead_slots():
-	"""Remove ids.json entries for processes that no longer exist, freeing their slots."""
+	"""Remove ids.json entries for processes that no longer exist, freeing their instance numbers."""
 	ids = load(IDS, {})
 	claims = load(CLAIMS, {})
 	cursors = load(RULE_CURSOR, {})
@@ -174,20 +226,32 @@ def recycle_dead_slots():
 			except (ValueError, IndexError):
 				pass
 	for key in dead_keys:
-		slot = ids[key]
+		agent_id = ids[key]
 		ids.pop(key, None)
-		claims.pop(slot, None)
-		cursors.pop(slot, None)
+		claims.pop(agent_id, None)
+		cursors.pop(agent_id, None)
 	if dead_keys:
 		save(IDS, ids)
 		save(CLAIMS, claims)
 		save(RULE_CURSOR, cursors)
 
-def note_path(agent):
-	parts = agent.split("/", 1)
-	root = root_for_tag(parts[0]) if len(parts) == 2 else None
-	root = root or workspace_root()
-	return os.path.join(root, ".agents", "agent-notes-%s.md" % parts[-1])
+def instance_note_path(agent_id):
+	"""Return the instance note path for an agent ID like 'XLib/planner-1'."""
+	tag_role_num = agent_id.split("/")[-1]
+	parts = tag_role_num.rsplit("-", 1)
+	if len(parts) != 2:
+		return os.path.join(DIR, "agent-notes-%s.md" % tag_role_num)
+	role, num = parts
+	# Find workspace root for this agent's tag
+	tag = agent_id.split("/")[0] if "/" in agent_id else ws_tag()
+	root = root_for_tag(tag) or workspace_root()
+	return os.path.join(root, ".agents", "agent-notes-%s-%s.md" % (role, num))
+
+def role_note_path(role, ws_root=None):
+	"""Return the role notes path for a role within a workspace."""
+	if ws_root is None:
+		ws_root = workspace_root()
+	return os.path.join(ws_root, ".agents", "role-notes-%s.md" % role)
 
 def claim_paths(paths):
 	return [os.path.abspath(p) for p in paths]
@@ -199,8 +263,24 @@ def cmd_workspace(args):
 	root = workspace_root()
 	print("%s (%s)" % (root, ws_tag()))
 
+def cmd_instance_note(args):
+	print(instance_note_path(my_id()))
+
 def cmd_note(args):
-	print(note_path(my_id()))
+	"""Deprecated alias for instance-note."""
+	print(instance_note_path(my_id()))
+
+def cmd_role_note(args):
+	role = args.role if args.role else agent_role()
+	ws_root = workspace_root()
+	if args.workspace:
+		tag_root = root_for_tag(args.workspace)
+		if tag_root:
+			ws_root = tag_root
+		else:
+			sys_stderr("unknown workspace tag: %s" % args.workspace)
+			raise SystemExit(1)
+	print(role_note_path(role, ws_root))
 
 def cmd_claim(args):
 	paths = claim_paths(args.paths)
@@ -257,6 +337,71 @@ def cmd_status(args):
 			if owned:
 				print("%s: %s" % (slot, ", ".join(owned)))
 
+def cmd_role_status(args):
+	"""Show role note claims (claims on role-notes-{role}.md files)."""
+	with locked():
+		claims = load(CLAIMS, {})
+		if not claims:
+			print("no claims")
+			return
+		for slot, owned in sorted(claims.items()):
+			role_claims = [p for p in owned if os.path.basename(p).startswith("role-notes-")]
+			if role_claims:
+				print("%s: %s" % (slot, ", ".join(role_claims)))
+
+def cmd_role_claim(args):
+	"""Claim role notes for the caller's role (or explicit role)."""
+	role = args.role if args.role else agent_role()
+	ws_root = workspace_root()
+	if args.workspace:
+		tag_root = root_for_tag(args.workspace)
+		if tag_root:
+			ws_root = tag_root
+		else:
+			sys_stderr("unknown workspace tag: %s" % args.workspace)
+			raise SystemExit(1)
+	path = os.path.abspath(role_note_path(role, ws_root))
+	agent = my_id()
+	with locked():
+		claims = load(CLAIMS, {})
+		owner = {}
+		for slot, owned in claims.items():
+			for p in owned:
+				owner[p] = slot
+		if path in owner and owner[path] != agent:
+			if not args.force:
+				sys_stderr("%s is held by %s" % (path, owner[path]))
+				sys_stderr("pass --force to steal it (the holder may be editing)")
+				raise SystemExit(1)
+			for slot, owned in claims.items():
+				claims[slot] = [p for p in owned if p != path]
+		mine = claims.get(agent, [])
+		if path not in mine:
+			mine.append(path)
+		claims[agent] = mine
+		save(CLAIMS, claims)
+	print("claimed %s" % path)
+
+def cmd_role_release(args):
+	"""Release role notes for the caller's role (or explicit role)."""
+	role = args.role if args.role else agent_role()
+	ws_root = workspace_root()
+	if args.workspace:
+		tag_root = root_for_tag(args.workspace)
+		if tag_root:
+			ws_root = tag_root
+		else:
+			sys_stderr("unknown workspace tag: %s" % args.workspace)
+			raise SystemExit(1)
+	path = os.path.abspath(role_note_path(role, ws_root))
+	agent = my_id()
+	with locked():
+		claims = load(CLAIMS, {})
+		mine = [p for p in claims.get(agent, []) if p != path]
+		claims[agent] = mine
+		save(CLAIMS, claims)
+	print("released %s" % path)
+
 WORKER_MAP = {
 	"coding": "worker-mimo",
 	"reasoning": "worker-nemotron-ultra",
@@ -270,6 +415,187 @@ def cmd_dispatch(args):
 		sys_stderr("unknown category: %s (valid: %s)" % (cat, ", ".join(WORKER_MAP)))
 		raise SystemExit(2)
 	print(WORKER_MAP[cat])
+
+def resolve_type(name):
+	name = name.lower()
+	return WORKER_MAP.get(name, name)
+
+def ctx_data():
+	return load(SUBAGENT_CTX, {})
+
+def ctx_save(data):
+	save(SUBAGENT_CTX, data)
+
+def ctx_ws(data):
+	return data.setdefault(ws_tag(), {"registry": {}, "queues": {}})
+
+def cmd_ctx_status(args):
+	now = time.time()
+	with locked():
+		data = ctx_data()
+		ws = ctx_ws(data)
+		reg = ws.get("registry", {})
+		queues = ws.get("queues", {})
+		if args.type:
+			t = resolve_type(args.type)
+			entry = reg.get(t)
+			q = queues.get(t, [])
+			if not entry and not q:
+				print("no context for %s" % t)
+				return
+			if entry:
+				n = entry["dispatches"]
+				suffix = ""
+				if n >= CTX_BUDGET:
+					suffix = " | ROTATE NOW"
+				elif n >= CTX_WARN_AT:
+					suffix = " | rotate soon"
+				print("%s: %s (%d/%d dispatches)%s" % (t, entry["task_id"], n, CTX_BUDGET, suffix))
+			if q:
+				age = int(now - q[0]["ts"])
+				n = len(q)
+				flush = ""
+				if n >= BATCH_FLUSH_N or age >= BATCH_FLUSH_AGE:
+					flush = " | FLUSH READY"
+				print("queue %s: %d pending (oldest %ds)%s" % (t, n, age, flush))
+			return
+		shown = set()
+		for t in sorted(reg):
+			entry = reg[t]
+			n = entry["dispatches"]
+			suffix = ""
+			if n >= CTX_BUDGET:
+				suffix = " | ROTATE NOW"
+			elif n >= CTX_WARN_AT:
+				suffix = " | rotate soon"
+			print("%s: %s (%d/%d dispatches)%s" % (t, entry["task_id"], n, CTX_BUDGET, suffix))
+			shown.add(t)
+		for t in sorted(queues):
+			q = queues[t]
+			if not q:
+				continue
+			if t in shown:
+				continue
+			age = int(now - q[0]["ts"])
+			n = len(q)
+			flush = ""
+			if n >= BATCH_FLUSH_N or age >= BATCH_FLUSH_AGE:
+				flush = " | FLUSH READY"
+			print("queue %s: %d pending (oldest %ds)%s" % (t, n, age, flush))
+			shown.add(t)
+		if not shown:
+			print("no subagent context")
+
+def cmd_ctx_set(args):
+	t = resolve_type(args.type)
+	now = time.time()
+	with locked():
+		data = ctx_data()
+		ws = ctx_ws(data)
+		reg = ws.setdefault("registry", {})
+		for other, entry in reg.items():
+			if other != t and entry.get("task_id") == args.task_id:
+				sys_stderr("warning: task_id %s already registered to %s" % (args.task_id, other))
+		reg[t] = {"task_id": args.task_id, "dispatches": 0, "ts": now}
+		ctx_save(data)
+	print("%s -> %s" % (t, args.task_id))
+
+def cmd_ctx_get(args):
+	t = resolve_type(args.type)
+	with locked():
+		data = ctx_data()
+		entry = ctx_ws(data).get("registry", {}).get(t)
+		if entry:
+			print(entry["task_id"])
+
+def cmd_ctx_bump(args):
+	t = resolve_type(args.type)
+	with locked():
+		data = ctx_data()
+		entry = ctx_ws(data).get("registry", {}).get(t)
+		if not entry:
+			sys_stderr("no active task_id for %s" % t)
+			raise SystemExit(1)
+		entry["dispatches"] += 1
+		entry["ts"] = time.time()
+		ctx_save(data)
+		print(entry["dispatches"])
+
+def cmd_ctx_rotate(args):
+	t = resolve_type(args.type)
+	with locked():
+		data = ctx_data()
+		entry = ctx_ws(data).get("registry", {}).pop(t, None)
+		ctx_save(data)
+	if entry:
+		print("dropped %s task_id" % t)
+	else:
+		print("no task_id for %s" % t)
+
+def cmd_ctx_queue(args):
+	t = resolve_type(args.type)
+	now = time.time()
+	with locked():
+		data = ctx_data()
+		ws = ctx_ws(data)
+		q = ws.setdefault("queues", {}).setdefault(t, [])
+		for text in args.text:
+			q.append({"text": text, "ts": now})
+		total = len(q)
+		ctx_save(data)
+	print("queued %d task(s) for %s (%d pending)" % (len(args.text), t, total))
+
+def cmd_ctx_batch(args):
+	t = resolve_type(args.type)
+	now = time.time()
+	with locked():
+		data = ctx_data()
+		q = ctx_ws(data).get("queues", {}).get(t, [])
+		if not q:
+			print("no pending batch for %s" % t)
+			return
+		for item in q:
+			age = int(now - item["ts"])
+			print("[%ds] %s" % (age, item["text"]))
+
+def cmd_ctx_flush(args):
+	t = resolve_type(args.type)
+	now = time.time()
+	with locked():
+		data = ctx_data()
+		ws = ctx_ws(data)
+		q = ws.get("queues", {}).get(t, [])
+		if not q:
+			print("no pending batch for %s" % t)
+			return
+		for item in q:
+			age = int(now - item["ts"])
+			print("[%ds] %s" % (age, item["text"]))
+		n = len(q)
+		ws.get("queues", {})[t] = []
+		ctx_save(data)
+	sys_stderr("flushed %d task(s) for %s" % (n, t))
+
+def cmd_ctx_reset(args):
+	with locked():
+		data = ctx_data()
+		if args.type:
+			t = resolve_type(args.type)
+			ws = ctx_ws(data)
+			ws.get("registry", {}).pop(t, None)
+			ws.get("queues", {}).pop(t, None)
+			ctx_save(data)
+			print("reset %s" % t)
+		else:
+			tag = ws_tag()
+			data.pop(tag, None)
+			ctx_save(data)
+			print("reset all context for %s" % tag)
+
+def cmd_ctx(args):
+	{"status": cmd_ctx_status, "set": cmd_ctx_set, "get": cmd_ctx_get,
+	 "bump": cmd_ctx_bump, "rotate": cmd_ctx_rotate, "queue": cmd_ctx_queue,
+	 "batch": cmd_ctx_batch, "flush": cmd_ctx_flush, "reset": cmd_ctx_reset}[args.ctx_cmd](args)
 
 def cmd_news(args):
 	agent = my_id()
@@ -368,7 +694,8 @@ def main():
 	parser = argparse.ArgumentParser(prog="agent-coord")
 	sub = parser.add_subparsers(dest="command", required=True)
 	sub.add_parser("id", help="print this agent's workspace-qualified id")
-	sub.add_parser("note", help="print this agent's notes file path")
+	sub.add_parser("note", help="(deprecated) print this agent's instance notes file path")
+	sub.add_parser("instance-note", help="print this agent's instance notes file path")
 	sub.add_parser("workspace", help="print this session's workspace root and tag")
 	p = sub.add_parser("claim", help="claim files before editing")
 	p.add_argument("paths", nargs="+")
@@ -385,10 +712,48 @@ def main():
 	p.add_argument("--repo", default=None, help="git working tree (default: inferred from the given paths)")
 	p = sub.add_parser("dispatch", help="get the worker model for a task category")
 	p.add_argument("category", choices=["coding", "reasoning", "bulk", "general"], help="task category")
+	# Role-based note commands
+	p = sub.add_parser("role-note", help="print role notes file path")
+	p.add_argument("--role", default=None, help="role (default: caller's role)")
+	p.add_argument("--workspace", default=None, help="workspace tag (default: caller's workspace)")
+	p = sub.add_parser("role-claim", help="claim role notes for this role")
+	p.add_argument("--role", default=None, help="role (default: caller's role)")
+	p.add_argument("--workspace", default=None, help="workspace tag (default: caller's workspace)")
+	p.add_argument("--force", action="store_true", help="steal role notes held by another agent")
+	p = sub.add_parser("role-release", help="release role notes for this role")
+	p.add_argument("--role", default=None, help="role (default: caller's role)")
+	p.add_argument("--workspace", default=None, help="workspace tag (default: caller's workspace)")
+	sub.add_parser("role-status", help="show role note claims")
+	p = sub.add_parser("ctx", help="manage subagent context (task_ids, batch queues)")
+	cp = p.add_subparsers(dest="ctx_cmd", required=True)
+	sp = cp.add_parser("status", help="show subagent context status")
+	sp.add_argument("--type", default=None, help="filter to a specific subagent type")
+	sp = cp.add_parser("set", help="register or replace a task_id for a subagent type")
+	sp.add_argument("type", help="subagent type or category name")
+	sp.add_argument("task_id", help="task_id to register")
+	sp = cp.add_parser("get", help="print the active task_id for a type (or nothing)")
+	sp.add_argument("type", help="subagent type or category name")
+	sp = cp.add_parser("bump", help="increment dispatch count for a type")
+	sp.add_argument("type", help="subagent type or category name")
+	sp = cp.add_parser("rotate", help="drop the registry entry for a type")
+	sp.add_argument("type", help="subagent type or category name")
+	sp = cp.add_parser("queue", help="add tasks to a type's batch queue")
+	sp.add_argument("type", help="subagent type or category name")
+	sp.add_argument("text", nargs="+", help="task description(s) to queue")
+	sp = cp.add_parser("batch", help="show queued tasks for a type")
+	sp.add_argument("type", help="subagent type or category name")
+	sp = cp.add_parser("flush", help="print and clear queued tasks for a type")
+	sp.add_argument("type", help="subagent type or category name")
+	sp = cp.add_parser("reset", help="clear context state")
+	sp.add_argument("--type", default=None, help="reset only this type (else reset all)")
 	args = parser.parse_args()
-	{"id": cmd_id, "note": cmd_note, "workspace": cmd_workspace, "claim": cmd_claim,
+	{"id": cmd_id, "note": cmd_note, "instance-note": cmd_instance_note,
+	 "workspace": cmd_workspace, "claim": cmd_claim,
 	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
-	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch}[args.command](args)
+	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch,
+	 "role-note": cmd_role_note, "role-claim": cmd_role_claim,
+	 "role-release": cmd_role_release, "role-status": cmd_role_status,
+	 "ctx": cmd_ctx}[args.command](args)
 
 if __name__ == "__main__":
 	main()
