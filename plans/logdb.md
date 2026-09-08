@@ -17,6 +17,8 @@ Data is appended as records; the schema describes each record type; queries read
 
 - Write a validated record (reject records that don't match their schema).
 - Read records back with typing applied (not stringly-typed forever).
+- **Fold / last-write-wins by key** — read the full log, return folded state where the last record for a given key (e.g., `task_id`) wins. This is a logdb concern, NOT an xcsv concern.
+- **Key-value / sparse columns** — support records where different rows have different columns. Requires xcsv to allow "unfinished lines" (fewer fields than current schema) without error. xcsv needs an override to suppress the unfinished-line error; logdb uses this for KV rows.
 - Multiple record types in one log or one log per type — decided by config.
 - Truncate/rotate support (legacy CSV had a `truncate`; rotation by size/date as config).
 
