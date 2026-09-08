@@ -147,6 +147,16 @@ A failed attempt from the wrong model costs more than fixing it later, so don't 
 
 **Meta exclusion**: `worker-muse-spark` was removed — Meta's Contributor tier trains on user prompts. Do not re-add it.
 
+## Subagent context optimization
+
+Every subagent dispatch pays cold-start cost (fresh preamble, rebuilt context). Two mechanisms cut that waste (the full analysis and risk table are in the Agents workspace's `.agents/shared-notes.md`, 2026-09-07) — both are mechanized in `python3 tools/agent-coord.py ctx`:
+
+**Batching** — group homogeneous, latency-tolerant tasks into one dispatch (e.g. "fix these 3 lint errors", "generate these 5 test files"). Queue them with `ctx queue <type-or-category> <task...>` (persisted, survives `/new`), inspect with `ctx batch <type>`, dispatch the whole batch at once, then `ctx flush <type>`. Flush when the batch hits ~3–5 tasks, a ~60s window expires, a high-priority task preempts, or the session ends (`ctx status` marks `FLUSH READY`). Batch only non-interactive background work — never batch tasks the human wants to inspect mid-flight.
+
+**task_id resumption** — keep the most-used subagent's context warm by reusing its returned `task_id` for related dispatches: first `task` call returns a `task_id`; pass it back in to continue that subagent conversation. Track it with `ctx set <type> <task_id>` / `ctx get <type>` / `ctx bump <type>` (counts dispatches; `ctx status` warns `rotate soon` at 6/8 and `ROTATE NOW` at 8/8). Never cross-pollinate: a task_id belongs to one model.
+
+**One session per task** — resume via `task_id` only for related work within one task; start a fresh `task_id` for the next task (no cross-task bleed) via `ctx rotate <type>`. When a subagent context approaches ~80% of its window, have it write a short state summary, then start a fresh session carrying that summary forward. `ctx reset [--type <type>]` clears state (registry + queues) for a type or the whole workspace.
+
 ## Human feedback
 
 **Call out errors.** If the human is wrong about a technical fact, assumption, or direction, say so directly. Do not defer to incorrect premises. Correct mistakes immediately rather than building on them.
