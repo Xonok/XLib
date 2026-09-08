@@ -23,9 +23,14 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [js-libraries.md](js-libraries.md) — an "xlib for JS": versioned JS bundles, opt-in serving.
 - [webapp.md](webapp.md) — minimal Py/JS webapp framework with lazy views.
 - [reactive-web.md](reactive-web.md) — JS reactive toolkit for data dependencies.
+- [reviewer-agent.md](reviewer-agent.md) — release gate agent: user-invoked code review, produces review docs keyed to commit hashes, executes releases on explicit permission.
+- [skynet-second-tracker.md](skynet-second-tracker.md) — second agent tracker pane: live sessions with workspace-scoped names and statuses; trim first tracker (drop Active, hide Len/Tool/Stop/Unk).
+- [taskview-time-refresh.md](taskview-time-refresh.md) — periodic time-based refresh for `taskview/taskview.py` tmux task view so relative timestamps update.
+- [tmux-panel-priorities.md](tmux-panel-priorities.md) — repurpose unused tmux panel to show priorities in condensed form.
 
 ## Cross-cutting decisions (recorded so far)
 
+- **Planning pattern**: Standard workflow for projects: requirements → plan → spec → implement → review → release. Secretary writes plan, planner in XLib fleshes out technical details with user to write spec, programmer implements spec as code, reviewer checks the work and (after asking for permission) makes a release if appropriate.
 - **Schema and typechecking**: possibly the same library; decision deferred. Treat as one design until a reason to split appears.
 - **Server framework**: fresh design, not an evolution of `xlib_legacy/dumb_http.py`. Legacy code stays as reference material only.
 - **Command runner sessions**: part of the command runner library, not a separate one.
@@ -35,3 +40,4 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - **Language split**: most libraries are Python. `reactive-web` and the webapp view layer are JS. The webapp framework is Py + JS.
 - **File server security**: default is to serve nothing that isn't explicitly allowed; allowed types/locations come from config, and "serve whatever is in a folder" requires an explicit statement in the server's main function.
 - **JS provisioning**: JS libraries are versioned bundles (an "xlib for JS") and servers opt in per-server to hand them to clients — never on by default.
+- **xlint release decision**: Currently a dev tool (not released). Traveller could use it; decision pending discussion. If released: would need versioning, SPEC.md, and entry in build order. Add to backlog.

@@ -49,6 +49,7 @@ Rules are split across files so this file stays small and only the rules you nee
 - `style/common.md` — language-independent legibility code rules: maps/orchestration, guard-first failures, return documentation, single-pass structure, cross-platform compatibility, the legibility pass.
 - `style/python.md` — Python-specific formatting, imports, naming, type hints, section titles, declarative style.
 - `style/js.md` — JavaScript rules. Empty; only add rules when JS work appears in this repo.
+- `style/markdown.md` — Markdown-specific formatting (indentation).
 - `plans/*.md` — cross-cutting and roadmap design docs (multi-library, or
   redesigns still in progress); `plans/bundler.md` is the exemplar for the map
   style.
