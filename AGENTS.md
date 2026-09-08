@@ -99,7 +99,7 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 
 - Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
 - Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`). This keeps the public surface minimal and makes internal refactoring safer.
-- **Dev library folders must not contain `__init__.py`.** Only the `xlib/` releases folder has `__init__.py`. Internal modules go in a subfolder (e.g., `csv/csv/`) so imports like `from .csv.csv_tok import ...` work without a top-level package marker.
+- **Dev library folders must not contain `__init__.py`.** Only the `xlib/` releases folder has `__init__.py`. Internal modules go in a subfolder named `_` (e.g., `csv/_/`) so imports like `from ._.csv_tok import ...` work without a top-level package marker.
 
 ### Bundler and the public API
 
@@ -108,7 +108,7 @@ The bundler (`pybundle/bundler.py`) packs a library into one file and renames in
 - **Public API functions must be defined in the entry file** (`<libraryname>.py`), not imported-and-re-exported from an internal module. The bundler does not keep a clean re-exported name; it rewrites the import to the prefixed internal name.
 - To give an internal function a clean public name with room for documentation, define a thin wrapper in the entry file that calls the internal one:
   ```python
-  from .csv_tok import tokenize as _tokenize
+  from ._.csv_tok import tokenize as _tokenize
 
   def tokenize(line):
       """Split a CSV line (with // comments and quoting) into cells."""
