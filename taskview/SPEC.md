@@ -67,10 +67,12 @@ Categories are not displayed (future enhancement).
 
 **Modes**:
 - `python3 taskview/taskview.py` — render once, exit
-- `python3 taskview/taskview.py --watch` — poll file (1s), redraw on change
+- `python3 taskview/taskview.py --watch` — watch for changes, redraw on change
 
-**Refresh**: Watch mode polls file size/mtime; on change, re-read, re-fold, re-render.
+**Refresh**: Watch mode uses **inotify as primary** (Linux, efficient), **poll fallback** (1s interval, portable). On change, re-read, re-fold, re-render.
 Uses ANSI clear-screen (`\033[2J\033[H`) like `skynet.py`.
+
+**Periodic time refresh** (planned): `--refresh-interval SECONDS` (default 600) triggers redraw even without file changes to update relative timestamps ("2h ago" → "3h ago"). See `plans/taskview-time-refresh.md`.
 
 **No API calls** — read-only local file monitor (follows project rule: monitoring scripts don't add AI usage).
 
@@ -80,7 +82,7 @@ Uses ANSI clear-screen (`\033[2J\033[H`) like `skynet.py`.
 - **Folding**: `state[id] = row` in file order; skip comment lines (`//`); ignore rows with missing `id`.
 - **Current task selection**: Most recent `open` by `chg_ts` (or first `open` if no `chg_ts` ordering). Fallback: first `open`.
 - **Time parsing**: `due_ts` and `chg_ts` are Unix seconds (int). Display formats as relative ("2d", "Sep 13") or absolute.
-- **Dependencies**: None beyond stdlib. xcsv used by secretary only (writer).
+- **Dependencies**: None beyond stdlib. `inotify` optional (Linux) — if unavailable, falls back to 1s polling. xcsv used by secretary only (writer).
 - **No release** — stays in `taskview/` dev folder. Not versioned.
 
 ## Integration
