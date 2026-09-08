@@ -128,9 +128,7 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 
 Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle / nemotron-3-ultra-free) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
 
-**Rotation is authoritative and stateful.** Run `python3 tools/agent-coord.py rotation --next` to get the model to dispatch now; it atomically returns and advances the shared cursor (`mimo` → `lightning` → `ultra` → `ling` → repeat) so agents don't guess or drift. Always consult it before dispatching a worker.
-
-**Pick the model by the job, not by rote rotation.** Rotation only balances *planning* load; the fit of the model to the work always wins over which turn it is:
+**Pick the model by the job.** Use `python3 tools/agent-coord.py dispatch <category>` to get the correct worker for a task. Dispatch maps each category to a fixed worker chosen by fit — there is no round-robin rotation of models; strength-fit always wins:
 
 - **Coding / implementation** → `worker-mimo`. Strongest coder; use for coding by default.
 - **Deep reasoning / long-context analysis / technical architecture** → `worker-nemotron-ultra` (nemotron-3-ultra-free). Best for technical tasks, structured reasoning.
@@ -139,7 +137,7 @@ Four free worker models are available as subagents: `worker-mimo`, `worker-nemot
 
 **Main model (big-pickle) strengths**: Best at understanding user intent, tracking implied specifications, and checking its own assumptions for false/untested claims. Use directly for planning, clarification, and assumption-auditing — do NOT dispatch these to workers.
 
-A failed attempt from the wrong model costs more than skipping a rotation turn, but don't force a model onto a job it fits poorly just because it's the nominal default. Match the worker to the task.
+A failed attempt from the wrong model costs more than fixing it later, so don't force a model onto a job it fits poorly just because it's the common default. Match the worker to the task.
 
 **Mandatory dispatch for non-trivial work.** Before starting any non-trivial coding, reasoning, bulk, or general task, run `python3 tools/agent-coord.py dispatch <category>` to get the correct worker, then dispatch via the `task` tool with that `subagent_type`. The main model must NOT do the work itself.
 
