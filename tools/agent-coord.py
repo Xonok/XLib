@@ -474,8 +474,6 @@ def cmd_ctx_status(args):
 			q = queues[t]
 			if not q:
 				continue
-			if t in shown:
-				continue
 			age = int(now - q[0]["ts"])
 			n = len(q)
 			flush = ""
