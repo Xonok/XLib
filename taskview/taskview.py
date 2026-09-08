@@ -2,9 +2,13 @@
 """
 taskview — Read-only task display for tmux pane.
 Reads append-only CSV from ~/.local/share/taskview/tasks.csv
+
+Pipeline: main → parse_args → ensure_data_dir → render
+	  render → read_csv → compute_metrics → build_view → draw
+Watch modes: inotify (primary) → poll (fallback)
 """
 
-import argparse,csv,os,sys,time
+import argparse,csv,os,signal,shutil,sys,time
 from datetime import datetime,timedelta
 from pathlib import Path
 
@@ -17,9 +21,35 @@ except ImportError:
 DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "taskview"
 DEFAULT_CSV = DEFAULT_DATA_DIR / "tasks.csv"
 POLL_INTERVAL = 1.0
+DEFAULT_WIDTH = shutil.get_terminal_size().columns or 80
 
 _CLEAR_SCREEN = "\033[2J\033[H"
 _HEADER = "=== Tasks ==="
+
+def main():
+	args = parse_args()
+	ensure_data_dir(args.csv)
+
+	def render():
+		state = read_csv(args.csv)
+		metrics = compute_metrics(state)
+		view = build_view(state, metrics)
+		draw(view)
+
+	render()
+
+	if not args.watch:
+		return 0
+
+	if HAS_INOTIFY:
+		try:
+			_watch_inotify(args.csv, render)
+		except Exception:
+			_watch_poll(args.csv, render)
+	else:
+		_watch_poll(args.csv, render)
+
+	return 0
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Display condensed task view")
@@ -40,7 +70,10 @@ def ensure_data_dir(path):
 	path.parent.mkdir(parents=True, exist_ok=True)
 
 def read_csv(path):
-	"""Read and fold CSV into current state per task id."""
+	"""Read and fold CSV into current state per task id.
+
+	Skips // comments and header row. Last-write-wins by id.
+	"""
 	if not path.exists():
 		return {}
 	state = {}
@@ -51,6 +84,8 @@ def read_csv(path):
 				if not row:
 					continue
 				if row[0].startswith("//"):
+					continue
+				if row[0] == "id":
 					continue
 				if len(row) < 5:
 					continue
@@ -69,12 +104,23 @@ def read_csv(path):
 					}
 				except (ValueError, IndexError):
 					continue
-	except OSError:
-		pass
+	except OSError as e:
+		sys.stderr.write(f"taskview: failed to read {path}: {e}\n")
 	return state
 
 def compute_metrics(state):
-	"""Compute pace and queue metrics from folded state."""
+	"""Compute pace and queue metrics from folded state.
+
+	Returns dict with keys:
+	    done_day (int): tasks completed today (calendar day)
+	    done_week (int): tasks completed in last 7 days (rolling)
+	    done_month (int): tasks completed in last 30 days (rolling)
+	    active (int): open tasks
+	    this_week (int): open tasks due this week
+	    this_month (int): open tasks due this month
+	    later (int): open tasks due later or no due date
+	    open_tasks (list): open tasks sorted by chg_ts desc
+	"""
 	now = time.time()
 	today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 	week_ago = now - 7 * 86400
@@ -87,7 +133,8 @@ def compute_metrics(state):
 	open_tasks = []
 
 	for task in state.values():
-		if task["status"] == "done":
+		status = task["status"]
+		if status == "done":
 			ts = task["chg_ts"]
 			if ts >= today_start:
 				done_day += 1
@@ -95,11 +142,13 @@ def compute_metrics(state):
 				done_week += 1
 			if ts >= month_ago:
 				done_month += 1
-		elif task["status"] == "open":
+		elif status == "open":
 			active_count += 1
 			open_tasks.append(task)
+		elif status == "cancelled":
+			pass
 
-	open_tasks.sort(key=lambda t: -t["chg_ts"])
+	open_tasks.sort(key=lambda t: t["chg_ts"], reverse=True)
 
 	this_week = 0
 	this_month = 0
@@ -161,9 +210,9 @@ def fmt_due(ts):
 def truncate(text, width):
 	if len(text) <= width:
 		return text
-	return text[: max(0, width - 1)] + "…"
+	return text[: max(0, width - 1)] + "..."
 
-def build_view(state, metrics, width=80):
+def build_view(state, metrics, width=DEFAULT_WIDTH):
 	lines = []
 	lines.append(_HEADER)
 	lines.append("")
@@ -207,7 +256,7 @@ def draw(view):
 	sys.stdout.write(view)
 	sys.stdout.flush()
 
-def watch_inotify(csv_path, callback):
+def _watch_inotify(csv_path, callback):
 	"""Watch file using inotify, call callback on change."""
 	parent = csv_path.parent
 	filename = csv_path.name
@@ -222,7 +271,7 @@ def watch_inotify(csv_path, callback):
 		i.remove_watch(str(parent))
 		i.close()
 
-def watch_poll(csv_path, callback):
+def _watch_poll(csv_path, callback):
 	"""Fallback: poll file size/mtime."""
 	last_stat = (0, 0)
 	while True:
@@ -232,34 +281,11 @@ def watch_poll(csv_path, callback):
 			if cur_stat != last_stat:
 				last_stat = cur_stat
 				callback()
-		except OSError:
-			pass
+		except OSError as e:
+			sys.stderr.write(f"taskview: poll error on {csv_path}: {e}\n")
 		time.sleep(POLL_INTERVAL)
 
-def main():
-	args = parse_args()
-	ensure_data_dir(args.csv)
-
-	def render():
-		state = read_csv(args.csv)
-		metrics = compute_metrics(state)
-		view = build_view(state, metrics)
-		draw(view)
-
-	render()
-
-	if not args.watch:
-		return 0
-
-	if HAS_INOTIFY:
-		try:
-			watch_inotify(args.csv, render)
-		except (OSError, PermissionError):
-			watch_poll(args.csv, render)
-	else:
-		watch_poll(args.csv, render)
-
-	return 0
-
 if __name__ == "__main__":
+	signal.signal(signal.SIGINT, lambda s, f: sys.exit(0))
+	signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
 	sys.exit(main())
