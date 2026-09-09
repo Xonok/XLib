@@ -52,6 +52,9 @@ rules; this file only adds Python-specific rules.
   explicit hints (`config: str | None = None`).
 - Annotate where the name doesn't carry the type or the contract is
   non-obvious; boilerplate annotations everywhere are overkill.
+- **API functions (public entry points) MUST have type hints on all parameters
+  and return values.** Internal code only needs them where the name doesn't
+  carry the type or the contract is non-obvious.
 
 ## Imperative shape
 
