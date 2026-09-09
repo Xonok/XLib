@@ -58,6 +58,18 @@ language-specific rules live in `style/<language>.md` (currently
 - Where a library parses lines or strings, the tests include a CRLF-garbled
   fixture.
 
+## Factor out repetitive or hard-to-read patterns
+
+- When the same logic appears multiple times, or when a block of code requires
+  mental parsing to understand its intent, extract it into a well-named function
+  or variable. The name should express *what* it does, not *how*.
+- Example: if a tokenizer repeatedly checks `i < line_len and line[i] == ","`,
+  factor that into `peek_char()` or `at_comma()`. The calling code becomes
+  self-documenting: `if at_comma(): ...` vs. the raw condition.
+- This applies to conditions, loop bodies, token/character inspection, and
+  error-message construction. A pattern repeated ≥2 times is a candidate; a
+  pattern that takes >5 seconds to read is a candidate even once.
+
 ## Legibility pass
 
 - Non-trivial code isn't done until a legibility pass: the map is current,
