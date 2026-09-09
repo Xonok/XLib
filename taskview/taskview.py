@@ -148,7 +148,15 @@ def compute_metrics(state):
 		elif status == "cancelled":
 			pass
 
-	open_tasks.sort(key=lambda t: t["chg_ts"], reverse=True)
+# Sort by due date (soonest first), then by chg_ts (most recent first) as tiebreaker
+	# Tasks with no due date go to the end
+	def sort_key(t):
+		due = t["due_ts"]
+		if due is None:
+			return (float("inf"), -t["chg_ts"])
+		return (due, -t["chg_ts"])
+
+	open_tasks.sort(key=sort_key)
 
 	this_week = 0
 	this_month = 0
@@ -196,15 +204,18 @@ def fmt_due(ts):
 		return "no due"
 	dt = datetime.fromtimestamp(ts)
 	now = datetime.now()
-	diff = dt - now
-	if diff.days < 0:
-		return f"overdue {abs(diff.days)}d"
-	if diff.days == 0:
+	# Use calendar day difference (date only) for "today"/"tomorrow"
+	due_date = dt.date()
+	now_date = now.date()
+	day_diff = (due_date - now_date).days
+	if day_diff < 0:
+		return f"overdue {abs(day_diff)}d"
+	if day_diff == 0:
 		return "today"
-	if diff.days == 1:
+	if day_diff == 1:
 		return "tomorrow"
-	if diff.days < 7:
-		return f"{diff.days}d"
+	if day_diff < 7:
+		return f"{day_diff}d"
 	return dt.strftime("%m-%d")
 
 def truncate(text, width):
