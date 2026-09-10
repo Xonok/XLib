@@ -2,3 +2,6 @@ __pycache__
 .agents/
 agent-notes*.md
 .opencode/agent/
+.opencode/opencode.jsonc
+.opencode/agent
+.opencode/agent-common
