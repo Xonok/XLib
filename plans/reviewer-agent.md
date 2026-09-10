@@ -1,12 +1,12 @@
 # XLib Reviewer Agent
 
 ## Goal
-Implement a reviewer agent that acts as a release gate — user-invoked, independent code review, produces review documents keyed to commit hashes, executes releases only on explicit user permission.
+Implement a reviewer agent that acts as a release gate — user-invoked, independent code review, produces review documents keyed to dev folder content hash, executes releases only on explicit user permission.
 
 ## Requirements
 - **User-invoked only**: Programmer never calls reviewer
 - **Per-library reviews**: Each library reviewed independently
-- **Review documents**: Stored in `reviews/<library>-<commit-hash>.md`, keyed to commit so staleness detectable via `git diff`
+- **Review documents**: Stored in `reviews/<library>-<hash>.md` where `<hash>` is a content hash of the dev folder (all files combined). The hash serves as a change detector — if the folder content changes, the review is stale.
 - **Release execution**: Reviewer runs `release/release.py` on explicit user permission
 - **Independent gate**: Separate agent from programmer
 - **Bump recommendation**: Reviewer analyzes and recommends bump type (revision/minor/major)
@@ -15,8 +15,8 @@ Implement a reviewer agent that acts as a release gate — user-invoked, indepen
 
 ## Review Document Format
 ```
-reviews/<library>-<commit-hash>.md
-# Review: <library> @ <commit-hash>
+reviews/<library>-<hash>.md          # hash = content hash of dev folder
+# Review: <library> @ <hash>
 **Date**: <ISO date>
 **Reviewer**: <agent-id>
 **Scope**: <files or "full library">
@@ -41,26 +41,28 @@ reviews/<library>-<commit-hash>.md
 - `request-changes` — fix issues first
 - `block` — fundamental problems
 
-## Outdated Check
-`git diff <commit-hash>..HEAD -- <library>/` — if non-empty, review is stale
+## Staleness Check
+Compute hash of `<library>/` folder (all files). If different from `<hash>` in filename, review is stale.
 ```
 
 ## Workflow
 1. User invokes: "Review <library>" (or "Review all")
-2. Reviewer finds latest commit touching that library, analyzes current state
-3. Reviewer runs tests (xtest) — silent on pass, reports failures
-4. Reviewer checks all rules: SPEC compliance, style/common.md, style/python.md, style/architecture.md
-5. Reviewer writes review document to `reviews/` with bump recommendation
-6. Reviewer presents findings, recommends bump type (rev/minor/major)
-7. User discusses, decides
-8. If user says "Release <library> [--minor|--major]", reviewer runs `python3 release/release.py <library> [--minor|--major]`
-9. Reviewer updates review doc status to `approved` with release version
+2. Reviewer computes content hash of `<library>/` dev folder
+3. If `reviews/<library>-<hash>.md` exists, it's still valid — reviewer can update or note staleness
+4. Reviewer analyzes current state
+5. Reviewer runs tests (xtest) — silent on pass, reports failures
+6. Reviewer checks all rules: SPEC compliance, style/common.md, style/python.md, style/architecture.md
+7. Reviewer writes/updates review document to `reviews/<library>-<hash>.md` with bump recommendation
+8. Reviewer presents findings, recommends bump type (rev/minor/major)
+9. User discusses, decides
+10. If user says "Release <library> [--minor|--major]", reviewer runs `python3 release/release.py <library> [--minor|--major]`
+11. Reviewer updates review doc status to `approved` with release version
 
 ## Integration Points
-- **Reads**: Library source in `<library>/<library>.py`, release script, SPEC.md, xtest
-- **Writes**: Review documents in `reviews/`
+- **Reads**: Library source in `<library>/` (working tree), release script, SPEC.md, xtest
+- **Writes**: Review documents `reviews/<library>-<hash>.md`
 - **Executes**: `release/release.py` on permission; `xtest` during review
-- **Uses**: `git` for commit hashes and staleness checks (read-only)
+- **Uses**: Content hashing for staleness detection (no git required)
 
 ## Open Questions
 1. How to handle multi-library reviews (dependencies)?

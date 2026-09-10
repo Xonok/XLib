@@ -52,7 +52,9 @@ Rules are split across files so this file stays small and only the rules you nee
 - `style/markdown.md` — Markdown-specific formatting (indentation).
 - `plans/*.md` — cross-cutting and roadmap design docs (multi-library, or
   redesigns still in progress); `plans/bundler.md` is the exemplar for the map
-  style.
+  style. A high-level pipeline map (phases / data flow / invariants) is required
+  for any non-trivial redesign and lives either in the plan doc or a module
+  header; the map must describe how the system works, not just list functions.
 - `<library>/SPEC.md` — a built library's map: current module structure, data
   flow, invariants, design decisions, plus a "Planned changes" section only
   when future work exists. Read a library's spec before working on it.
@@ -100,7 +102,7 @@ Libraries are versioned. A versioned file is named `libraryname_major_minor_revi
 - Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
 - Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`). This keeps the public surface minimal and makes internal refactoring safer.
 - **The library's root dev folder must not contain `__init__.py`.** This keeps it a non-package so it can be imported by path during development. Only the `xlib/` releases folder has `__init__.py`.
-- **Internal module subfolders (e.g., `_/`) should contain `__init__.py`.** This makes them proper packages so relative imports like `from ._.csv_tok import ...` work correctly. The `_` folder is a package; the library root is not.
+- **Internal modules may use ordinary subfolders (e.g., `xcsv/_/`).** `_` is an ordinary folder name; if importable as a package it needs `__init__.py` like any other folder, and imports use normal Python syntax (e.g., `from ._.csv_tok import ...` requires the folder to be a package). The library root must not contain `__init__.py`.
 
 ### Bundler and the public API
 
@@ -193,7 +195,7 @@ These role definitions apply across workspaces (Agents and XLib). Each agent has
 
 ### Reviewer (XLib)
 - **Release gate** — independent code review, user-invoked only
-- **Produces**: Review documents (`reviews/<lib>-<commit>.md`) keyed to commit hash
+- **Produces**: Review documents `reviews/<lib>-<hash>.md` where `<hash>` is a content hash of the dev folder (all files combined). The hash serves as a change detector — if the folder content changes, the review is stale.
 - **Workflow**: User invokes → reviews → writes doc → discusses with human → executes release **only on explicit permission**
 - **Dispatch**: `worker-nemotron-ultra` via `dispatch reasoning`
 - **Does NOT**: Write code, write specs, auto-release
