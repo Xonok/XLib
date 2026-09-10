@@ -9,6 +9,7 @@ from collections import defaultdict
 
 NAME = "Skynet"
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+SHOW_EXTRA = False
 _CLEAR_SCREEN = "\033[2J\033[H"
 _POLL_SECONDS = 1.0
 
@@ -106,53 +107,44 @@ def aggregate(rows, now):
 			stats["finish_unknown"] += 1
 	return by_model
 
-def render_table(by_model, now, show_tokens=True, col_w=None):
+def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None):
 	if not by_model:
 		return "no agents active"
 	models = sorted(by_model, key=lambda m: -by_model[m]["total"])
+	if max_models is not None:
+		models = models[:max_models]
 	if col_w is None:
 		col_w = max(len(m) for m in models)
 	ref_w = 12
-	if show_tokens:
-		hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}  {'Active'}"
-		sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * ref_w}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 11}"
-	else:
-		hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'Ref':>{ref_w}}  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}  {'Active'}"
-		sep = f"{'─' * col_w}  {'─' * 5}  {'─' * ref_w}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 11}"
+	hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}"
+	sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * ref_w}"
+	if show_extra:
+		hdr += f"  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}"
+		sep += f"  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}"
 	lines = [hdr, sep]
 	for model in models:
 		s = by_model[model]
+		if s["total"] == 0:
+			continue
 		ref = str(s["refusals"])
 		if s["last_refusal"]:
 			ref += f"({human_age(now - s['last_refusal'])})"
-		active = ""
-		if s["last_seen"]:
-			active = f"{human_age(now - s['first_seen'])}-{human_age(now - s['last_seen'])}"
 		if show_tokens:
-			lines.append(
-				f"{model:<{col_w}}"
+			line = (f"{model:<{col_w}}"
 				f"  {s['msgs']:>5}"
 				f"  {human_tokens(s['input']):>7}"
 				f"  {human_tokens(s['output']):>7}"
 				f"  {human_tokens(s['total']):>7}"
-				f"  {ref:>{ref_w}}"
-				f"  {s['finish_length']:>4}"
-				f"  {s['finish_tool_calls']:>4}"
-				f"  {s['finish_stop']:>4}"
-				f"  {s['finish_unknown']:>4}"
-				f"  {active}"
-			)
+				f"  {ref:>{ref_w}}")
 		else:
-			lines.append(
-				f"{model:<{col_w}}"
+			line = (f"{model:<{col_w}}"
 				f"  {s['msgs']:>5}"
-				f"  {ref:>{ref_w}}"
-				f"  {s['finish_length']:>4}"
-				f"  {s['finish_tool_calls']:>4}"
-				f"  {s['finish_stop']:>4}"
-				f"  {s['finish_unknown']:>4}"
-				f"  {active}"
-			)
+				f"  {ref:>{ref_w}}")
+		if show_extra:
+			line += f"  {s['finish_length']:>4}  {s['finish_tool_calls']:>4}  {s['finish_stop']:>4}  {s['finish_unknown']:>4}"
+		lines.append(line)
+	if len(lines) <= 2:  # header + sep only, nothing displayed
+		return "no agents active"
 	return "\n".join(lines)
 
 def render(rows, now):
@@ -166,9 +158,11 @@ def render(rows, now):
 		return "no agents active in window"
 	all_models = set(all_stats.keys()) | set(today_stats.keys())
 	col_w = max(len(m) for m in all_models)
+	# Today first (moved up); Window below and height-limited
+	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=10)
 	return (
-		f"=== Models (Window) ===\n{render_table(all_stats, now, show_tokens=True, col_w=col_w)}"
-		f"\n\n=== Models (Today) ===\n{render_table(today_stats, now, show_tokens=True, col_w=col_w)}"
+		f"=== Models (Today) ===\n{render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA)}"
+		f"\n\n=== Models (Window) ===\n{window_text}"
 	)
 
 def db_stamp():
@@ -204,7 +198,10 @@ def main():
 	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage, refusals, finish reasons")
 	parser.add_argument("--window-hours", type=int, default=7 * 24, help="how far back to look (default 168)")
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw when usage changes")
+	parser.add_argument("--extra", action="store_true", help="show extra columns (Len, Tool, Stop, Unk)")
 	args = parser.parse_args()
+	global SHOW_EXTRA
+	SHOW_EXTRA = args.extra
 	if not os.path.exists(DB_PATH):
 		print(f"{NAME}: opencode db not found: {DB_PATH}")
 		return 1
