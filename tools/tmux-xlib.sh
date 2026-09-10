@@ -15,6 +15,9 @@ tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 taskview/taskview.py --watc
 tmux split-window -h
 tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/skynet.py --watch" Enter
 
+tmux split-window -h
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 -m marduk.marduk --watch" Enter
+
 tmux set-option -g mouse on
 tmux select-layout tiled
 
