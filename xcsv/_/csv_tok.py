@@ -1,32 +1,21 @@
-def tokenize(line):
+def tokenize(line: str):
 	if not line or not line.strip():
 		return None, None
-	if line.strip().startswith("//"):
-		return None, None
+
+	# Handle line endings: \r\n, \n, \r
 	if line.endswith("\r\n"):
 		line = line[:-2]
 	elif line.endswith("\n") or line.endswith("\r"):
 		line = line[:-1]
-	in_quotes = False
-	comment_pos = -1
-	line_len = len(line)
-	def peek(c):
-		return i + 1 < line_len and line[i + 1] == c
-	i = 0
-	while i < line_len:
-		c = line[i]
-		if c == '"':
-			in_quotes = not in_quotes
-		elif c == "/" and not in_quotes and peek("/"):
-			comment_pos = i
-			break
-		i += 1
-	if comment_pos >= 0:
-		line = line[:comment_pos].rstrip()
-	if not line:
+
+	# Comment detection: only at line start (after stripping leading whitespace)
+	stripped = line.lstrip()
+	if stripped.startswith("//"):
 		return None, None
-	tokens = []
+
+	tokens: list[str | None] = []
 	i = 0
+	line_len = len(line)
 	while i < line_len:
 		c = line[i]
 		if c == '"':
@@ -35,7 +24,7 @@ def tokenize(line):
 			while i < line_len:
 				c = line[i]
 				if c == '"':
-					if peek('"'):
+					if i + 1 < line_len and line[i + 1] == '"':
 						field.append('"')
 						i += 2
 					else:
@@ -60,6 +49,8 @@ def tokenize(line):
 			tokens.append(field if field else None)
 			if i < line_len and line[i] == ",":
 				i += 1
+
 	if line.endswith(","):
 		tokens.append(None)
+
 	return tokens, None

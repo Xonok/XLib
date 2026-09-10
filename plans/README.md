@@ -23,7 +23,7 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [js-libraries.md](js-libraries.md) — an "xlib for JS": versioned JS bundles, opt-in serving.
 - [webapp.md](webapp.md) — minimal Py/JS webapp framework with lazy views.
 - [reactive-web.md](reactive-web.md) — JS reactive toolkit for data dependencies.
-- [reviewer-agent.md](reviewer-agent.md) — release gate agent: user-invoked code review, produces review docs keyed to commit hashes, executes releases on explicit permission.
+- [reviewer-agent.md](reviewer-agent.md) — release gate agent: user-invoked code review, produces review docs keyed to dev folder content hash (`<lib>-<hash>.md`), executes releases on explicit permission.
 - [skynet-second-tracker.md](skynet-second-tracker.md) — second agent tracker pane: live sessions with workspace-scoped names and statuses; trim first tracker (drop Active, hide Len/Tool/Stop/Unk).
 - [taskview-time-refresh.md](taskview-time-refresh.md) — periodic time-based refresh for `taskview/taskview.py` tmux task view so relative timestamps update.
 - [tmux-panel-priorities.md](tmux-panel-priorities.md) — repurpose unused tmux panel to show priorities in condensed form.

@@ -1,5 +1,20 @@
 # XCSV version history
 
+## 1_1_0 (minor)
+
+Major feature release adding read API and schema improvements:
+
+- **Exception hierarchy**: CSVError, ParseError, SchemaError, UnfinishedLineError, IOError, ReschemaError
+- **raise_errors parameter**: All public functions accept optional `raise_errors=False`. When True, raises exceptions instead of returning (result, error) tuples.
+- **schema_parse(as_list)**: New parameter; as_list=False (default) returns dict {col: index}, as_list=True returns list [col1, col2...]
+- **Dual schema support**: parse_line, parse_all, write_entry, write_entries accept both list [col1, col2...] and dict {col: index} schemas (dict deprecated, removed in v2_0_0)
+- **allow_unfinished parameter**: parse_line, parse_all, write_entry, write_entries accept allow_unfinished=False to allow missing fields
+- **Stage 1 (line-based) API**: read_line, read_all, write_line (tokens list), write_all
+- **Stage 2 (schema-aware) API**: parse_all, write_entries
+- **Reschema support**: parse_all(reschema=True) handles __reschema__ rows; raises ReschemaError by default
+- **Internal helper**: _normalize_schema converts list → dict
+- Tokenizer handles \r\n, \n, \r line endings
+
 ## 1_0_1 (revision)
 
 Fixes a release bug: the bundled file renamed the public `write_line` and `write_entry`
