@@ -76,7 +76,32 @@ class Marduk:
 				warn=True
 			agent.warn_sse_silence=warn
 
-	def _format_detail(self,agent):
+	def _visible_len(self, s: str) -> int:
+		"""Return visible length of string (strip ANSI escape codes)."""
+		import re
+		return len(re.sub(r"\033\[[0-9;]*m", "", s))
+
+	def _pad_status(self, status: str, width: int = 10) -> str:
+		"""Pad status to width based on visible characters, preserving ANSI codes."""
+		vis = self._visible_len(status)
+		if vis < width:
+			return status + " " * (width - vis)
+		return status
+
+	def _status_color(self, status_text: str) -> str:
+		"""Return ANSI-colored status string."""
+		code = {
+			"idle": "\033[36m",      # cyan
+			"working": "\033[33m",   # yellow
+			"delegating": "\033[35m",# magenta
+			"question": "\033[34m", # blue
+			"retry": "\033[31m",    # red
+			"disconnected": "\033[2m",# dim
+		}.get(status_text.split("⚠")[0], "")
+		reset = "\033[0m"
+		return f"{code}{status_text}{reset}"
+
+	def _format_detail(self, agent):
 		"""Format detail column per SPEC."""
 		if agent.status==AgentStatus.QUESTION:
 			return "?"
@@ -124,12 +149,15 @@ class Marduk:
 				status=agent.status.value
 				if agent.warn_sse_silence:
 					status+="⚠"
+				status=self._status_color(status)
 				detail=self._format_detail(agent)
 				age=format_age(time.time()-agent.last_event_ts) if agent.last_event_ts else "?"
 				if self.compact:
-					lines.append(f" {agent.role[:8]:8} {status[:7]:7} {detail[:10]:10} {age:>5}")
+					status=self._pad_status(status, 7)
+					lines.append(f" {agent.role[:8]:8} {status} {detail[:10]:10} {age:>5}")
 				else:
-					lines.append(f"  {agent.role:<12} {status:<10} {detail:<12} {age:>6}")
+					status=self._pad_status(status, 10)
+					lines.append(f"  {agent.role:<12} {status} {detail:<12} {age:>6}")
 		if not self._agents:
 			lines.append("no agents connected")
 		sys.stdout.write("\033[H\033[2J")
