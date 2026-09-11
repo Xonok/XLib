@@ -383,6 +383,16 @@ def truncate(text, width):
 		return text
 	return text[: max(0, width - 1)] + "..."
 
+def pick_current(open_tasks):
+	"""Pick the task shown as "now": the most urgent open task — the one with
+	the soonest due date, overdue first. open_tasks is already sorted by
+	(due_ts, -chg_ts) with no-due last, so pick the first element.
+	Returns None for an empty list.
+	"""
+	if not open_tasks:
+		return None
+	return open_tasks[0]
+
 def build_view(filtered, metrics, filter_data, width=DEFAULT_WIDTH):
 	lines = []
 	label = filter_data["label"]
@@ -391,9 +401,9 @@ def build_view(filtered, metrics, filter_data, width=DEFAULT_WIDTH):
 
 	open_tasks = metrics["open_tasks"]
 
-	if open_tasks:
-		# Current task: most recent open by chg_ts from filtered set
-		current = max(open_tasks, key=lambda t: t["chg_ts"])
+	# Current task: soonest due today-or-later; most overdue if all overdue
+	current = pick_current(open_tasks)
+	if current:
 		lines.append(f"▸ {current['title']}")
 		due_str = fmt_due(current["due_ts"])
 		chg_str = fmt_time(current["chg_ts"])
@@ -409,9 +419,8 @@ def build_view(filtered, metrics, filter_data, width=DEFAULT_WIDTH):
 
 	lines.append("UPCOMING")
 	if len(open_tasks) > 1:
-		# Current task is most recent by chg_ts
-		current_id = max(open_tasks, key=lambda t: t["chg_ts"])["id"]
-		upcoming = [t for t in open_tasks if t["id"] != current_id]
+		# Exclude the current task (same pick as above)
+		upcoming = [t for t in open_tasks if t["id"] != current["id"]]
 		for task in upcoming[:upcoming_limit]:
 			due_str = fmt_due(task["due_ts"])
 			lines.append(f" · {truncate(task['title'], width - 4)}  ({due_str})")

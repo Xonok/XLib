@@ -49,12 +49,32 @@ def parse_due(arg):
 		return str(int(arg))
 	except ValueError:
 		pass
-	for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M", "%m-%d", "%m-%d %H:%M"):
-		try:
-			dt = time.strptime(arg, fmt)
-			return str(int(time.mktime(dt)))
-		except ValueError:
-			pass
+	# Date only — store noon, not midnight. A due date stored at 00:00 lands
+	# exactly on the day boundary ("due at the start of that day"), which is
+	# an off-by-one trap for the calendar-day math in taskview's fmt_due.
+	try:
+		dt = time.strptime(arg, "%Y-%m-%d")
+		return str(int(time.mktime(dt)) + 12 * 3600)
+	except ValueError:
+		pass
+	# Month-day without year — current year (strptime alone would default to
+	# year 1900 and produce a nonsense timestamp), same noon rule.
+	try:
+		dt = time.strptime(f"{time.localtime().tm_year}-{arg}", "%Y-%m-%d")
+		return str(int(time.mktime(dt)) + 12 * 3600)
+	except ValueError:
+		pass
+	# Date + explicit time — keep the given time as-is.
+	try:
+		dt = time.strptime(arg, "%Y-%m-%d %H:%M")
+		return str(int(time.mktime(dt)))
+	except ValueError:
+		pass
+	try:
+		dt = time.strptime(f"{time.localtime().tm_year}-{arg}", "%Y-%m-%d %H:%M")
+		return str(int(time.mktime(dt)))
+	except ValueError:
+		pass
 	print(f"Invalid due date: {arg}", file=sys.stderr)
 	sys.exit(1)
 

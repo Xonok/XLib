@@ -1,6 +1,11 @@
 // tasks.csv — append-only, last-write-wins by id
 // Schema: id,status,title,due_ts,chg_ts,category,tags,importance
 // 
+// due_ts: Unix timestamp (seconds since epoch, local time). Date-only entries
+//   are stored at 12:00 noon of the due day, never midnight — e.g. "2026-09-13"
+//   is written as 1789290000. Enter dates via taskupdate.py; it converts.
+// chg_ts: Unix timestamp of the last change to the task.
+// 
 // category: single primary bucket (work|personal|house|learning|admin)
 // tags: comma-separated cross-cutting tags (oncall,blocking,someday,critical,emergency,migration,meeting,review,health,hobby,social,project)
 // importance: low|medium|high (impact rating, not used for filtering)
@@ -10,10 +15,10 @@
 //   never_show: cancelled, archived — always excluded
 
 id,status,title,due_ts,chg_ts,category,tags,importance
-1,open,Review bundler end-to-end,2026-09-13,1757280000,work,"review,blocking",high
-2,open,Move GitHub folder to second drive,2026-09-13,1757280500,admin,"migration",medium
-3,open,Team on-call rotation,2026-09-15,1757281000,work,"oncall",high
-4,open,Learn Rust async patterns,2026-09-30,1757281500,learning,"learning",medium
-5,open,Fix kitchen leak,2026-09-12,1757282000,house,"house,urgent",high
-6,open,Weekly team sync prep,2026-09-11,1757282500,work,"meeting,admin",low
-1,done,Review bundler end-to-end,2026-09-13,1757290000,work,"review,blocking",high
+1,open,Review bundler end-to-end,1789290000,1789020000,work,"review,blocking",high
+2,open,Move GitHub folder to second drive,1789290000,1789020050,admin,"migration",medium
+3,open,Team on-call rotation,1789462800,1789020100,work,"oncall",high
+4,open,Learn Rust async patterns,1790758800,1789020150,learning,"learning",medium
+5,open,Fix kitchen leak,1789203600,1789020200,house,"house,urgent",high
+6,open,Weekly team sync prep,1789117200,1789020250,work,"meeting,admin",low
+1,done,Review bundler end-to-end,1789290000,1789020300,work,"review,blocking",high

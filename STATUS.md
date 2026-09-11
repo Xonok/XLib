@@ -50,6 +50,17 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 
 ## Recently done
 
+- **taskview due-date fix** — `taskupdate.py parse_due`: date-only inputs now store
+  noon (12:00) not midnight; `%m-%d` without year uses current year (was year 1900).
+  `tasks.csv.example` corrected (due_ts was ISO strings → now Unix timestamps, noon
+  convention documented). Existing midnight due_ts in `~/.local/share/taskview/tasks.csv`
+  bumped +12h and tasks 13/14/15 shifted −1 day (yesterday/today/tomorrow), via
+  append-only rows (09-11). Fix uncommitted, human commit pending.
+- **taskview current-task selection** — was most-recent-by-`chg_ts` (a just-touched
+  tomorrow task could occupy the "now" slot while today's task sat in UPCOMING).
+  Now: first open task in due-date order (`pick_current` = soonest due, overdue
+  first — human confirmed "most overdue in now"). SPEC.md current-task sections
+  updated to match. Uncommitted, human commit pending.
 - **taskview context-aware filter** — implemented + committed (`129e4c2`, 09-11); SPEC,
   IMPLEMENTATION_NOTES, example YAMLs added. tmux launcher passes `--context all`
   (uncommitted change in `tools/tmux-xlib.sh`).

@@ -10,16 +10,17 @@ Replaces the unused shell pane in `tmux-xlib.sh`.
 
 ```csv
 // tasks.csv — append-only, last-write-wins by id
-id,status,title,due_ts,chg_ts,category,tags,importance
-1,open,Review bundler end-to-end,2026-09-13,1757280000,work,"review,blocking",high
-2,open,Move GitHub folder to second drive,2026-09-13,1757280500,admin,"migration",medium
-1,done,...,2026-09-13,1757290000,work,"review,blocking",high
+1,open,Review bundler end-to-end,1789290000,1789020000,work,"review,blocking",high
+2,open,Move GitHub folder to second drive,1789290000,1789020050,admin,"migration",medium
+1,done,...,1789290000,1789020300,work,"review,blocking",high
 ```
 
 - `id`: integer, assigned by secretary (via separate counter file `tasks.id`)
 - `status`: `open` | `done` | `cancelled` (reopen = new `open` row)
 - `title`: task description
-- `due_ts`: Unix epoch seconds (deadline), or empty
+- `due_ts`: Unix epoch seconds (deadline), or empty. Date-only entries are stored
+  at 12:00 noon of the due day — never midnight (see `taskupdate.py parse_due`
+  and `tasks.csv.example`)
 - `chg_ts`: Unix epoch seconds (when this record was written) — always present
 - `category`: single primary bucket (work/personal/house/learning/admin) — for display/grouping
 - `tags`: comma-separated cross-cutting concerns (oncall, blocking, someday, critical, emergency, migration) — PRIMARY filter mechanism
@@ -83,7 +84,9 @@ Narrow tmux pane, top to bottom:
 ```
 
 - **Header**: `=== Tasks (context-name) ===` — shows active context label
-- **Current task**: Most recent `open` task from *filtered* set, by `chg_ts`
+- **Current task**: Soonest-due `open` task from *filtered* set — overdue tasks
+  have priority, so the most overdue task sits in "now". No-due tasks never jump
+  the queue.
 - **Upcoming**: Next few `open` tasks from *filtered* set, one line each (respects `limits.upcoming`)
 - **Pace**: Rolling counts from *filtered* set
   - Day: calendar day (midnight → now)
@@ -119,7 +122,9 @@ Uses ANSI clear-screen (`\033[2J\033[H`) like `skynet.py`.
 - **Reading CSV**: Use Python's `csv` module (handles quoting) or simple manual parse (xcsv format is standard CSV with `//` comment lines skipped). xcsv `readline`/`readall` not required for MVP.
 - **Folding**: `state[id] = row` in file order; skip comment lines (`//`); ignore rows with missing `id`.
 - **Tag parsing**: `tags` column split by comma, stripped, empty strings filtered → `set[str]`. Missing/empty column = empty set.
-- **Current task selection**: Most recent `open` by `chg_ts` from filtered set. Fallback: first `open` from filtered set.
+- **Current task selection**: First `open` task in due-date order (open tasks
+  sorted by `due_ts`, then `chg_ts` desc, no-due last) — the most urgent task:
+  most overdue first, else soonest future due. No open tasks → none.
 - **Time parsing**: `due_ts` and `chg_ts` are Unix seconds (int). Display formats as relative ("2d", "Sep 13") or absolute.
 - **Dependencies**: None beyond stdlib. `inotify` optional (Linux) — if unavailable, falls back to 1s polling. `yaml` (PyYAML) for filter files. xcsv used by secretary only (writer).
 - **No release** — stays in `taskview/` dev folder. Not versioned.
