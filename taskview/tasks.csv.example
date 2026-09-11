@@ -1,0 +1,19 @@
+// tasks.csv — append-only, last-write-wins by id
+// Schema: id,status,title,due_ts,chg_ts,category,tags,importance
+// 
+// category: single primary bucket (work|personal|house|learning|admin)
+// tags: comma-separated cross-cutting tags (oncall,blocking,someday,critical,emergency,migration,meeting,review,health,hobby,social,project)
+// importance: low|medium|high (impact rating, not used for filtering)
+// 
+// Global tags (always active):
+//   always_show: critical, emergency — bypasses context filter
+//   never_show: cancelled, archived — always excluded
+
+id,status,title,due_ts,chg_ts,category,tags,importance
+1,open,Review bundler end-to-end,2026-09-13,1757280000,work,"review,blocking",high
+2,open,Move GitHub folder to second drive,2026-09-13,1757280500,admin,"migration",medium
+3,open,Team on-call rotation,2026-09-15,1757281000,work,"oncall",high
+4,open,Learn Rust async patterns,2026-09-30,1757281500,learning,"learning",medium
+5,open,Fix kitchen leak,2026-09-12,1757282000,house,"house,urgent",high
+6,open,Weekly team sync prep,2026-09-11,1757282500,work,"meeting,admin",low
+1,done,Review bundler end-to-end,2026-09-13,1757290000,work,"review,blocking",high

@@ -10,223 +10,167 @@ Add context-aware filtering to the tmux task view (`taskview/taskview.py`) so th
 - `--watch` mode polls CSV every 1s, redraws on change
 
 ## Requirements
-1. **External filter file** — filter logic lives in a separate, human-editable file, not hardcoded in `taskview.py`
-2. **Manual context switching** — user explicitly chooses context (not automatic by time), though the filter file can define time-based defaults if desired
-3. **Flexible matching** — not simple "category X only"; some non-work tasks visible on workdays if they're urgent/important
-4. **Complements urgency ranking** — filter narrows/supplements what's shown; existing priority order within the filtered set is preserved
-5. **Override mechanism** — tasks marked as "always show" (e.g., urgent phone call) bypass context filter
+1. **External filter files** — filter logic lives in separate, human-editable files (one per context), not hardcoded in `taskview.py`
+2. **Manual context switching** — user explicitly chooses context via `--context NAME` (not automatic by time)
+3. **Tag-based matching** — tasks shown if they have at least one tag matching the active context's tag list
+4. **Complements urgency ranking** — filter narrows what's shown; existing priority order within the filtered set is preserved
+5. **Override mechanism** — global `always_show` tags bypass context filter (e.g., critical/emergency)
 
 ## Design
 
 ### 1. Filter File Format
-**Location**: `~/.local/share/taskview/filters.yaml` (YAML for readability, supports comments)
 
-**Structure**:
+**Location**: `~/.local/share/taskview/filters/` (directory containing one YAML file per context)
+
+**File naming**: `<context-name>.yaml` (e.g., `work.yaml`, `evening.yaml`, `weekend.yaml`)
+
+**Structure** (per file):
 ```yaml
-# taskview filters — context-aware task filtering
-# Edit this file to define contexts and their rules
+# taskview filter — work context
+# Edit this file to define which tags are shown in this context
 
-# Named contexts the user can switch between
-contexts:
-  work:
-    # Human-readable label for UI
-    label: "Work Hours"
-    
-    # Core filter: which tasks to include
-    # All conditions are ANDed; a task must match ALL to be included
-    include:
-      # Category matching (exact or glob)
-      - category: "work"
-      - category: "admin"
-      
-      # Urgency override: always include if due soon regardless of category
-      # Evaluated per-task: if due_ts within this window, include it
-      - urgent_within: "4h"          # tasks due within 4 hours
-      
-      # Importance override: always include high-importance tasks
-      - importance: "high"           # if task has importance=high (future field)
-      
-      # Tag-based inclusion
-      - tags: ["oncall", "blocking"]
-    
-    # Explicit exclusions (applied after include)
-    exclude:
-      - category: "personal"
-      - tags: ["someday"]
-    
-    # Display limits for this context
-    limits:
-      upcoming: 5        # max upcoming tasks to show
-      queue_breakdown: true
-  
-  evening:
-    label: "Evening"
-    include:
-      - category: "personal"
-      - category: "learning"
-      - urgent_within: "2h"
-      - importance: "high"
-    exclude:
-      - category: "work"
-    limits:
-      upcoming: 7
-  
-  weekend:
-    label: "Weekend"
-    include:
-      - category: "personal"
-      - category: "house"
-      - category: "learning"
-      - urgent_within: "24h"
-    exclude: []
-    limits:
-      upcoming: 10
-  
-  all:
-    label: "All Tasks"
-    include: []          # empty = no filtering
-    exclude: []
-    limits:
-      upcoming: 15
+# Human-readable label for UI
+label: "Work Hours"
 
-# Default context if none selected (optional)
-default_context: "work"
+# Tags that cause a task to be shown in this context (OR logic: match ANY)
+tags: ["work", "admin", "oncall", "blocking"]
 
-# Global fallback rules (always applied regardless of context)
-global:
-  # Tasks matching these are ALWAYS shown (unless done/cancelled)
-  always_show:
-    - urgent_within: "1h"
-    - tags: ["critical", "emergency"]
-  
-  # Tasks matching these are NEVER shown
-  never_show:
-    - status: "cancelled"
-    - tags: ["archived"]
+# Optional: tags that ALWAYS show regardless of context (global override)
+# Typically defined once in a special file or built-in defaults
+# always_show_tags: ["critical", "emergency"]
+
+# Display limits for this context
+limits:
+  upcoming: 5        # max upcoming tasks to show
+  queue_breakdown: true
 ```
 
 **Notes on format**:
-- YAML chosen over JSON/TOML for: comments, readability, native list/dict support
-- `category` field doesn't exist in current CSV — this plan assumes a future `category` column or tag system (see Open Questions)
-- `urgent_within` accepts human durations: `30m`, `4h`, `2d`, `1w`
-- `importance` and `tags` are future CSV fields; filter file defines the schema taskview will expect
+- YAML chosen for: comments, readability, native list/dict support
+- One file per context = easy to add/edit/remove contexts without touching other files
+- Context name derived from filename (without `.yaml` extension)
+- `tags` list = the ONLY filter criterion; task matches if `set(task.tags) ∩ set(filter.tags) ≠ ∅`
+- `category`, `importance`, `urgent_within` are NOT used for filtering (kept in CSV for other uses)
 
 ---
 
 ### 2. Task Data Model Extensions
-The filter requires metadata not in the current CSV. Two approaches:
 
-**Option A: Extend CSV schema** (recommended for simplicity)
+The CSV schema is extended with three new columns (Option A — extend CSV schema):
+
 ```
 id,status,title,due_ts,chg_ts,category,tags,importance
 1,open,Review bundler,2026-09-13,1757280000,work,"review,blocking",high
 ```
+
+- **category**: single primary bucket (work/personal/house/learning) — used for display/grouping, NOT filtering
+- **tags**: comma-separated cross-cutting concerns (oncall, blocking, someday, critical, emergency) — PRIMARY filter mechanism
+- **importance**: low/medium/high — impact rating, NOT used for filtering (available for future enhancements)
+
 - Secretary agent writes these fields
-- Backward compatible: missing fields = empty string
+- Backward compatible: missing fields = empty string; empty tags = no match (unless `always_show` applies)
 - Filter file references match column names
-
-**Option B: Sidecar metadata file**
-- Separate `tasks.meta.yaml` mapping `id` → `{category, tags, importance}`
-- More flexible, doesn't touch CSV
-- Adds complexity (two files to keep in sync)
-
-**Decision**: Option A. Simpler, single source of truth, CSV is append-only so new columns just appear in new rows.
 
 ---
 
 ### 3. Context Selection Mechanism
+
 **User switches context manually** via:
-1. **Command-line flag**: `taskview.py --context work`
-2. **Runtime keybinding** (future): press `w`/`e`/`k`/`a` in `--watch` mode to cycle contexts
-3. **Environment variable**: `TASKVIEW_CONTEXT=work` (for tmux integration)
+1. **Command-line flag**: `taskview.py --context work` (loads `filters/work.yaml`)
+2. **Environment variable**: `TASKVIEW_CONTEXT=work` (for tmux integration)
+3. **Runtime keybinding** (future): press keys in `--watch` mode to cycle contexts
 
-**Initial implementation**: CLI flag only (`--context`). Keybindings deferred to interactive enhancement.
+**Initial implementation**: CLI flag + env var only. Keybindings deferred.
 
-**Default behavior**: If `--context` not given, use `default_context` from filter file, or `all` if undefined.
+**Default behavior**: If `--context` not given and `TASKVIEW_CONTEXT` not set, use `default` context (loads `filters/default.yaml`) or show all tasks if no default file exists.
+
+**Resolution**: `--context NAME` → `<filter_dir>/NAME.yaml` (must exist, else error)
 
 ---
 
 ### 4. Filter Evaluation Logic
+
 For each open task, evaluate in order:
 
-1. **Global `never_show`** — if matches, exclude (highest priority)
-2. **Global `always_show`** — if matches, include (bypasses context filter)
-3. **Context `exclude`** — if matches, exclude
-4. **Context `include`** — if empty, include all (subject to above); if non-empty, task must match AT LEAST ONE include rule
-5. **Result** — included tasks proceed to urgency ranking
+1. **Global `never_show`** (built-in) — if task has tag `cancelled` or `archived`, exclude (highest priority)
+2. **Global `always_show`** (built-in + optional filter file) — if task has tag `critical` or `emergency`, include (bypasses context filter)
+3. **Context filter** — if active context's `tags` list has ANY overlap with task's `tags`, include
+4. **Result** — included tasks proceed to urgency ranking
 
 **Matching rules**:
-- `category: "work"` — exact match on `category` column
-- `category: "work*"` — glob match (fnmatch)
-- `tags: ["oncall"]` — task's `tags` column (comma-separated) contains ANY listed tag
-- `urgent_within: "4h"` — task has `due_ts` and `due_ts - now() <= 4h`
-- `importance: "high"` — exact match on `importance` column
+- Task's `tags` column: comma-separated string → split → set of tags
+- Filter's `tags` list: YAML list → set of tags
+- Match = intersection non-empty (OR logic)
+- Empty task tags = no match (unless `always_show` applies)
+- Empty filter tags = match nothing (shows empty view)
 
-**Multiple include rules** = OR logic (task matches if ANY rule matches).
-**Multiple exclude rules** = OR logic (task excluded if ANY rule matches).
+**Global `always_show` tags** (built-in, always active):
+- `critical`
+- `emergency`
+
+**Global `never_show` tags** (built-in, always active):
+- `cancelled` (maps to status=done/cancelled via secretary)
+- `archived`
 
 ---
 
 ### 5. Display Changes
+
 - **Context indicator** in header: `=== Tasks (work) ===`
 - **Filtered counts** in Queue section: `23 tasks (8 shown, 15 filtered)`
 - **Upcoming section** respects `limits.upcoming` from context config
 - **Current task selection** — still picks most recent `open` from *filtered* set
-- **Pace/Queue stats** — computed from *filtered* set (option: show global stats too)
+- **Pace/Queue stats** — computed from *filtered* set
 
 ---
 
-### 6. Integration Points
-- **`taskview/taskview.py`** — add `--context` arg, load filter file, apply filter before ranking
-- **`tmux-xlib.sh`** — optional: pass `--context` based on time of day (user can override)
+### 6. Filter File Reloading (Watch Mode)
+
+In `--watch` mode:
+- Poll filter file mtime alongside CSV mtime (same 1s interval)
+- On filter file change: re-parse, re-apply filter, redraw
+- Consistent with CSV watching behavior
+
+---
+
+### 7. Integration Points
+
+- **`taskview/taskview.py`** — add `--context` arg, load filter directory, apply filter before ranking
+- **`tmux-xlib.sh`** — pass `--context` via env var or flag (user configures default)
 - **Secretary agent** — must write `category`, `tags`, `importance` when creating tasks
-- **Filter file** — user creates/edits `~/.local/share/taskview/filters.yaml`
+- **Filter directory** — user creates/edits `~/.local/share/taskview/filters/*.yaml`
 
 ---
 
-## Open Questions
+## Decisions (Resolved Open Questions)
 
-1. **CSV schema evolution**: How to handle existing tasks without `category`/`tags`? 
-   - *Proposal*: Treat missing as empty string; filter rules simply won't match them (unless `urgent_within` applies).
-
-2. **Category vs tags**: Should we use one or both?
-   - *Proposal*: Both. Category = single primary bucket (work/personal/house/learning). Tags = cross-cutting concerns (oncall, blocking, someday).
-
-3. **Importance field**: Is `importance` (low/medium/high) distinct from urgency (due date)?
-   - *Proposal*: Yes. Urgency = time pressure. Importance = impact. Both useful for filtering.
-
-4. **Time-based default context**: Should `tmux-xlib.sh` auto-select context by time?
-   - *Proposal*: Yes, as a convenience. User can override with `--context`. Example:
-     ```bash
-     hour=$(date +%H)
-     if [ $hour -ge 9 -a $hour -lt 16 ]; then ctx=work
-     elif [ $hour -ge 16 -a $hour -lt 22 ]; then ctx=evening
-     else ctx=weekend; fi
-     ```
-
-5. **Filter file reloading**: In `--watch` mode, should filter file changes trigger redraw?
-   - *Proposal*: Yes, same as CSV — poll filter file mtime, re-parse on change.
-
-6. **Multiple active contexts**: Allow `--context work,evening` (union)?
-   - *Proposal*: Not in MVP. Single context keeps mental model simple. Can add later.
+1. **CSV schema evolution**: Missing fields = empty string; filter rules won't match (except global `always_show`).
+2. **Category vs tags**: **Both**. Category = primary bucket (display/grouping). Tags = cross-cutting (filtering).
+3. **Importance field**: **Kept in CSV** but NOT used for filtering. Urgency = time (due_ts), Importance = impact.
+4. **Time-based default context**: **No**. Manual only (`--context` or `TASKVIEW_CONTEXT`). Default = `default` context file.
+5. **Filter file reloading**: **Yes**. Poll mtime in `--watch`, re-parse on change.
+6. **Multiple active contexts**: **No**. Single context at a time. One filter file per context.
 
 ---
 
 ## Status
-- [ ] Plan approved
+
+- [x] Plan approved
 - [ ] Spec written (update SPEC.md with filter behavior)
 - [ ] CSV schema extended (category, tags, importance columns)
 - [ ] Secretary agent updated to write new fields
 - [ ] Filter file format finalized
 - [ ] Implementation in `taskview.py`
-- [ ] `tmux-xlib.sh` integration (optional auto-context)
+- [ ] `tmux-xlib.sh` integration (env var for context)
 - [ ] Test with real tasks
 
 ---
 
 ## Future Enhancements (Post-MVP)
+
 - Interactive context switching in `--watch` mode (keybindings)
 - Context-specific sort orders (e.g., weekend sorts by "enjoyment" not urgency)
 - Filter composition: `work + urgent_personal`
 - Per-context column visibility (hide Pace on weekend)
 - Export filtered view to other formats (JSON for other tools)
+- `always_show_tags` / `never_show_tags` definable in a global filter file

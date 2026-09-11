@@ -1,0 +1,17 @@
+# taskview filter — weekend context
+# Tasks with ANY of these tags will be shown on weekends
+
+label: "Weekend"
+
+tags:
+  - "personal"
+  - "house"
+  - "learning"
+  - "hobby"
+  - "health"
+  - "social"
+  - "project"     # weekend projects
+
+limits:
+  upcoming: 10
+  queue_breakdown: true

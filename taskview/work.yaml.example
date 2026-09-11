@@ -1,0 +1,17 @@
+# taskview filter — work context
+# Tasks with ANY of these tags will be shown in work context
+# Edit this file to customize which tags appear during work hours
+
+label: "Work Hours"
+
+tags:
+  - "work"        # primary work tasks
+  - "admin"       # administrative tasks
+  - "oncall"      # on-call duties
+  - "blocking"    # tasks blocking others
+  - "meeting"     # meeting prep/followup
+  - "review"      # code/document reviews
+
+limits:
+  upcoming: 5
+  queue_breakdown: true

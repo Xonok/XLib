@@ -1,0 +1,18 @@
+# taskview filter — default context
+# Used when --context is not specified and TASKVIEW_CONTEXT is not set
+# Shows a broad set of tags; customize to your default view
+
+label: "Default"
+
+tags:
+  - "work"
+  - "personal"
+  - "admin"
+  - "learning"
+  - "house"
+  - "health"
+  - "hobby"
+
+limits:
+  upcoming: 10
+  queue_breakdown: true

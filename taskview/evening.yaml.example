@@ -1,0 +1,16 @@
+# taskview filter — evening context
+# Tasks with ANY of these tags will be shown in evening context
+
+label: "Evening"
+
+tags:
+  - "personal"    # personal projects
+  - "learning"    # study, courses, reading
+  - "house"       # household tasks
+  - "health"      # exercise, appointments
+  - "hobby"       # creative/leisure
+  - "admin"       # life admin (bills, etc.)
+
+limits:
+  upcoming: 7
+  queue_breakdown: true

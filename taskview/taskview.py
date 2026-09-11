@@ -3,12 +3,11 @@
 taskview — Read-only task display for tmux pane.
 Reads append-only CSV from ~/.local/share/taskview/tasks.csv
 
-Pipeline: main → parse_args → ensure_data_dir → render
-	  render → read_csv → compute_metrics → build_view → draw
+Pipeline: main → parse_args → ensure_data_dir → render → read_csv → load_filter → filter_tasks → compute_metrics → build_view → draw
 Watch modes: inotify (primary) → poll (fallback)
 """
 
-import argparse,csv,os,signal,shutil,sys,time
+import argparse,csv,os,signal,shutil,sys,time,yaml
 from datetime import datetime,timedelta
 from pathlib import Path
 
@@ -20,20 +19,46 @@ except ImportError:
 
 DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "taskview"
 DEFAULT_CSV = DEFAULT_DATA_DIR / "tasks.csv"
+DEFAULT_FILTER_DIR = DEFAULT_DATA_DIR / "filters"
 POLL_INTERVAL = 1.0
 DEFAULT_WIDTH = shutil.get_terminal_size().columns or 80
 
 _CLEAR_SCREEN = "\033[2J\033[H"
-_HEADER = "=== Tasks ==="
 
-def main():
+# Built-in global tags (always active, no config needed)
+_ALWAYS_SHOW_TAGS = {"critical", "emergency"}
+_NEVER_SHOW_TAGS = {"cancelled", "archived"}
+
+def main() -> int:
 	args = parse_args()
 	ensure_data_dir(args.csv)
+	ensure_filter_dir()
+
+	# Resolve context
+	context_name = args.context or os.environ.get("TASKVIEW_CONTEXT", "default")
+	filter_path = DEFAULT_FILTER_DIR / f"{context_name}.yaml"
+	if not filter_path.exists():
+		sys.stderr.write(f"taskview: filter file not found: {filter_path}\n")
+		sys.stderr.write(f"taskview: create it or use --context with an existing filter\n")
+		return 1
+
+	# Mutable state for watch mode
+	filter_data = load_filter(filter_path)
 
 	def render():
+		nonlocal filter_data
 		state = read_csv(args.csv)
-		metrics = compute_metrics(state)
-		view = build_view(state, metrics)
+		# Reload filter if mtime changed
+		try:
+			current_mtime = filter_path.stat().st_mtime
+			if current_mtime != filter_data.get("_mtime", 0):
+				filter_data = load_filter(filter_path)
+				filter_data["_mtime"] = current_mtime
+		except OSError:
+			pass
+		filtered = filter_tasks(state, filter_data)
+		metrics = compute_metrics(state, filter_data, filtered)
+		view = build_view(filtered, metrics, filter_data)
 		draw(view)
 
 	render()
@@ -43,21 +68,26 @@ def main():
 
 	if HAS_INOTIFY:
 		try:
-			_watch_inotify(args.csv, render)
+			_watch_inotify(args.csv, filter_path, render)
 		except Exception:
-			_watch_poll(args.csv, render)
+			_watch_poll(args.csv, filter_path, render)
 	else:
-		_watch_poll(args.csv, render)
+		_watch_poll(args.csv, filter_path, render)
 
 	return 0
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
 	parser = argparse.ArgumentParser(description="Display condensed task view")
 	parser.add_argument(
 		"--csv",
 		type=Path,
 		default=DEFAULT_CSV,
 		help="Path to tasks.csv (default: ~/.local/share/taskview/tasks.csv)",
+	)
+	parser.add_argument(
+		"--context",
+		default=None,
+		help="Context name (loads filters/<name>.yaml, default: 'default' or TASKVIEW_CONTEXT)",
 	)
 	parser.add_argument(
 		"--watch",
@@ -69,10 +99,60 @@ def parse_args():
 def ensure_data_dir(path):
 	path.parent.mkdir(parents=True, exist_ok=True)
 
+def ensure_filter_dir():
+	DEFAULT_FILTER_DIR.mkdir(parents=True, exist_ok=True)
+	# Create default.yaml from example if it doesn't exist
+	default_filter = DEFAULT_FILTER_DIR / "default.yaml"
+	if not default_filter.exists():
+		example = Path(__file__).parent / "default.yaml.example"
+		if example.exists():
+			shutil.copy2(example, default_filter)
+		else:
+			# Fallback: write minimal default
+			default_filter.write_text(
+				"label: \"Default\"\n"
+				"tags:\n"
+				"  - \"work\"\n"
+				"  - \"personal\"\n"
+				"  - \"admin\"\n"
+				"  - \"learning\"\n"
+				"  - \"house\"\n"
+				"  - \"health\"\n"
+				"  - \"hobby\"\n"
+				"limits:\n"
+				"  upcoming: 10\n"
+				"  queue_breakdown: true\n"
+			)
+
+def load_filter(path):
+	"""Load and parse a filter YAML file."""
+	with path.open("r", encoding="utf-8") as f:
+		data = yaml.safe_load(f) or {}
+
+	# Ensure required fields with defaults
+	label = data.get("label", path.stem)
+	tags = data.get("tags", [])
+	if not isinstance(tags, list):
+		tags = []
+	limits = data.get("limits", {})
+	upcoming = limits.get("upcoming", 5)
+	queue_breakdown = limits.get("queue_breakdown", True)
+
+	return {
+		"label": label,
+		"tags": set(tags),
+		"limits": {
+			"upcoming": upcoming,
+			"queue_breakdown": queue_breakdown,
+		},
+		"_mtime": path.stat().st_mtime,
+	}
+
 def read_csv(path):
 	"""Read and fold CSV into current state per task id.
 
 	Skips // comments and header row. Last-write-wins by id.
+	New columns: category (5), tags (6), importance (7) — backward compatible.
 	"""
 	if not path.exists():
 		return {}
@@ -95,12 +175,29 @@ def read_csv(path):
 					title = row[2]
 					due_ts = int(row[3]) if row[3] else None
 					chg_ts = int(row[4])
+
+					# New columns (backward compatible: missing = empty)
+					category = row[5] if len(row) > 5 and row[5] else ""
+					tags_str = row[6] if len(row) > 6 and row[6] else ""
+					importance = row[7] if len(row) > 7 and row[7] else ""
+
+					# Parse tags column: comma-separated, stripped, filtered empty
+					tags = set()
+					if tags_str:
+						for tag in tags_str.split(","):
+							t = tag.strip()
+							if t:
+								tags.add(t)
+
 					state[task_id] = {
 						"id": task_id,
 						"status": status,
 						"title": title,
 						"due_ts": due_ts,
 						"chg_ts": chg_ts,
+						"category": category,
+						"tags": tags,
+						"importance": importance,
 					}
 				except (ValueError, IndexError):
 					continue
@@ -108,18 +205,59 @@ def read_csv(path):
 		sys.stderr.write(f"taskview: failed to read {path}: {e}\n")
 	return state
 
-def compute_metrics(state):
-	"""Compute pace and queue metrics from folded state.
+def filter_tasks(state, filter_data):
+	"""Apply filter evaluation logic to folded state, returning ALL tasks that pass.
+
+	Order:
+	1. never_show: task has 'cancelled' or 'archived' tag → exclude
+	2. always_show: task has 'critical' or 'emergency' tag → include
+	3. context filter: task tags overlap filter tags → include
+	4. otherwise → exclude
+
+	Returns dict of task_id -> task for ALL statuses that pass filter.
+	"""
+	filter_tags = filter_data["tags"]
+	filtered = {}
+
+	for task_id, task in state.items():
+		task_tags = task["tags"]
+
+		# 1. never_show (built-in)
+		if task_tags & _NEVER_SHOW_TAGS:
+			continue
+
+		# 2. always_show (built-in)
+		if task_tags & _ALWAYS_SHOW_TAGS:
+			filtered[task_id] = task
+			continue
+
+		# 3. context filter (OR logic: any overlap → include)
+		if filter_tags and not (task_tags & filter_tags):
+			continue
+
+		filtered[task_id] = task
+
+	return filtered
+
+def compute_metrics(state, filter_data, filtered):
+	"""Compute pace and queue metrics from *filtered* tasks (all statuses).
+
+	Args:
+		state: full folded state (all tasks)
+		filter_data: parsed filter config
+		filtered: dict of task_id -> task for tasks that pass filter (all statuses)
 
 	Returns dict with keys:
-	    done_day (int): tasks completed today (calendar day)
-	    done_week (int): tasks completed in last 7 days (rolling)
-	    done_month (int): tasks completed in last 30 days (rolling)
-	    active (int): open tasks
-	    this_week (int): open tasks due this week
-	    this_month (int): open tasks due this month
-	    later (int): open tasks due later or no due date
-	    open_tasks (list): open tasks sorted by chg_ts desc
+		done_day (int): tasks completed today (calendar day) from filtered
+		done_week (int): tasks completed in last 7 days (rolling) from filtered
+		done_month (int): tasks completed in last 30 days (rolling) from filtered
+		active (int): open tasks in filtered set
+		this_week (int): open filtered tasks due this week
+		this_month (int): open filtered tasks due this month
+		later (int): open filtered tasks due later or no due date
+		open_tasks (list): open filtered tasks sorted by due_ts, then chg_ts desc
+		shown (int): count of open filtered tasks
+		filtered_total (int): total open tasks in state minus shown (i.e., filtered out)
 	"""
 	now = time.time()
 	today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -132,7 +270,7 @@ def compute_metrics(state):
 	active_count = 0
 	open_tasks = []
 
-	for task in state.values():
+	for task in filtered.values():
 		status = task["status"]
 		if status == "done":
 			ts = task["chg_ts"]
@@ -148,7 +286,7 @@ def compute_metrics(state):
 		elif status == "cancelled":
 			pass
 
-# Sort by due date (soonest first), then by chg_ts (most recent first) as tiebreaker
+	# Sort by due date (soonest first), then by chg_ts (most recent first) as tiebreaker
 	# Tasks with no due date go to the end
 	def sort_key(t):
 		due = t["due_ts"]
@@ -174,6 +312,26 @@ def compute_metrics(state):
 		else:
 			later += 1
 
+	# Count open tasks excluded by context filter (not never_show, not always_show, no tag overlap)
+	filter_tags = filter_data["tags"]
+	filtered_out = 0
+	for task in state.values():
+		if task["status"] != "open":
+			continue
+		task_tags = task["tags"]
+		# Skip never_show (globally excluded, not "filtered by context")
+		if task_tags & _NEVER_SHOW_TAGS:
+			continue
+		# Skip always_show (bypasses context filter)
+		if task_tags & _ALWAYS_SHOW_TAGS:
+			continue
+		# Count if doesn't match context filter
+		if filter_tags and not (task_tags & filter_tags):
+			filtered_out += 1
+
+	shown = len(open_tasks)
+	filtered_total = filtered_out
+
 	return {
 		"done_day": done_day,
 		"done_week": done_week,
@@ -183,6 +341,8 @@ def compute_metrics(state):
 		"this_month": this_month,
 		"later": later,
 		"open_tasks": open_tasks,
+		"shown": shown,
+		"filtered_total": filtered_total,
 	}
 
 def fmt_time(ts):
@@ -223,15 +383,17 @@ def truncate(text, width):
 		return text
 	return text[: max(0, width - 1)] + "..."
 
-def build_view(state, metrics, width=DEFAULT_WIDTH):
+def build_view(filtered, metrics, filter_data, width=DEFAULT_WIDTH):
 	lines = []
-	lines.append(_HEADER)
+	label = filter_data["label"]
+	lines.append(f"=== Tasks ({label}) ===")
 	lines.append("")
 
 	open_tasks = metrics["open_tasks"]
 
 	if open_tasks:
-		current = open_tasks[0]
+		# Current task: most recent open by chg_ts from filtered set
+		current = max(open_tasks, key=lambda t: t["chg_ts"])
 		lines.append(f"▸ {current['title']}")
 		due_str = fmt_due(current["due_ts"])
 		chg_str = fmt_time(current["chg_ts"])
@@ -241,9 +403,16 @@ def build_view(state, metrics, width=DEFAULT_WIDTH):
 		lines.append("▸ (no open tasks)")
 		lines.append("")
 
+	# Upcoming: next open tasks from filtered set, respect limits.upcoming
+	limits = filter_data["limits"]
+	upcoming_limit = limits["upcoming"]
+
 	lines.append("UPCOMING")
 	if len(open_tasks) > 1:
-		for task in open_tasks[1:4]:
+		# Current task is most recent by chg_ts
+		current_id = max(open_tasks, key=lambda t: t["chg_ts"])["id"]
+		upcoming = [t for t in open_tasks if t["id"] != current_id]
+		for task in upcoming[:upcoming_limit]:
 			due_str = fmt_due(task["due_ts"])
 			lines.append(f" · {truncate(task['title'], width - 4)}  ({due_str})")
 	else:
@@ -251,14 +420,25 @@ def build_view(state, metrics, width=DEFAULT_WIDTH):
 	lines.append("")
 
 	lines.append("PACE")
-	lines.append(f" Day:   {metrics['done_day']} done, {metrics['active']} active")
-	lines.append(f" Week:  {metrics['done_week']} done")
+	lines.append(f" Day:  {metrics['done_day']} done, {metrics['active']} active")
+	lines.append(f" Week: {metrics['done_week']} done")
 	lines.append(f" Month: {metrics['done_month']} done")
 	lines.append("")
 
+	# Queue breakdown
 	total = metrics["this_week"] + metrics["this_month"] + metrics["later"]
-	lines.append(f"QUEUE: {total} remaining ({metrics['this_week']} this week, "
-		f"{metrics['this_month']} this month, {metrics['later']} later)")
+	shown = metrics["shown"]
+	filtered_count = metrics["filtered_total"]
+	if limits["queue_breakdown"]:
+		lines.append("QUEUE")
+		lines.append(
+			f" {total} tasks remaining "
+			f"({metrics['this_week']} this week, {metrics['this_month']} this month, {metrics['later']} later) "
+			f"({shown} shown, {filtered_count} filtered)"
+		)
+	else:
+		lines.append("QUEUE")
+		lines.append(f" {total} tasks remaining ({shown} shown, {filtered_count} filtered)")
 
 	return "\n".join(lines)
 
@@ -267,33 +447,54 @@ def draw(view):
 	sys.stdout.write(view)
 	sys.stdout.flush()
 
-def _watch_inotify(csv_path, callback):
-	"""Watch file using inotify, call callback on change."""
-	parent = csv_path.parent
-	filename = csv_path.name
+def _watch_inotify(csv_path, filter_path, callback):
+	"""Watch both CSV and filter file using inotify, call callback on change."""
+	csv_parent = csv_path.parent
+	csv_filename = csv_path.name
+	filter_parent = filter_path.parent
+	filter_filename = filter_path.name
+
 	i = inotify.adapters.Inotify()
-	i.add_watch(str(parent))
+	i.add_watch(str(csv_parent))
+	if filter_parent != csv_parent:
+		i.add_watch(str(filter_parent))
+
 	try:
 		for event in i.event_gen(yield_nones=False):
 			_, type_names, _, fname = event
-			if fname == filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+			if fname == csv_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+				callback()
+			elif fname == filter_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
 				callback()
 	finally:
-		i.remove_watch(str(parent))
+		i.remove_watch(str(csv_parent))
+		if filter_parent != csv_parent:
+			i.remove_watch(str(filter_parent))
 		i.close()
 
-def _watch_poll(csv_path, callback):
-	"""Fallback: poll file size/mtime."""
-	last_stat = (0, 0)
+def _watch_poll(csv_path, filter_path, callback):
+	"""Fallback: poll both file size/mtime."""
+	last_csv_stat = (0, 0)
+	last_filter_stat = (0, 0)
 	while True:
 		try:
-			st = csv_path.stat()
-			cur_stat = (st.st_size, int(st.st_mtime))
-			if cur_stat != last_stat:
-				last_stat = cur_stat
+			csv_st = csv_path.stat()
+			cur_csv_stat = (csv_st.st_size, int(csv_st.st_mtime))
+			if cur_csv_stat != last_csv_stat:
+				last_csv_stat = cur_csv_stat
 				callback()
 		except OSError as e:
 			sys.stderr.write(f"taskview: poll error on {csv_path}: {e}\n")
+
+		try:
+			filter_st = filter_path.stat()
+			cur_filter_stat = (filter_st.st_size, int(filter_st.st_mtime))
+			if cur_filter_stat != last_filter_stat:
+				last_filter_stat = cur_filter_stat
+				callback()
+		except OSError as e:
+			sys.stderr.write(f"taskview: poll error on {filter_path}: {e}\n")
+
 		time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
