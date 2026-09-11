@@ -37,6 +37,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
   `xlint/xlint.py`, `plans/bundler.md` modified.
 - No file claims outstanding.
 - `.opencode/` is a symlink to `/storage/Agents/.opencode/` (git-ignored, not untracked).
+- **Coordinator model switched** to `openrouter/nex-agi/nex-n2.5-pro:free` (from `opencode/ling-3.0-flash-fin-free`). Updated `.opencode/agent/coordinator.md` and `.opencode/agent-common/coordinator.md`. Secretary, 09-11.
 
 ## In progress
 
