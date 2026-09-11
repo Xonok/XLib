@@ -2,114 +2,65 @@
 
 These rules apply to all code written in this repository. AI assistants must follow them.
 
-`.agents/agent-notes-<id>.md` in this repo is a per-agent, git-ignored file that holds current state and gotchas that don't belong in the standing rules. It doesn't exist on a fresh clone; create your own near the start of a session, seeded from the reasonable initial rules below, and read it before starting work on later sessions.
+`.agents/agent-notes-<id>.md` is a per-agent, git-ignored file for session state. `.agents/shared-notes.md` is a shared, cross-agent file for user preferences and cross-cutting context. Both survive `/new`.
 
-`.agents/shared-notes.md` is a shared, git-ignored file for user thoughts that aren't tied to one agent or machine. It survives `/new` and is shared across all agents. Write cross-agent user preferences, decisions, and context there instead of per-agent notes.
-
-Multiple opencode agents may work in this repo at once (generally two). They coordinate through `tools/agent-coord.py`:
-
-- `python3 tools/agent-coord.py id` prints your agent id (`a1` or `a2`, auto-assigned; override with `OPENCODE_AGENT_ID`). Ids are workspace-qualified: `XLib/a1` here means slot `a1` in this repo's workspace, distinct from `Agents/a1` in the `/storage/Agents` control-panel workspace. Your session notes live in this workspace's `.agents/agent-notes-<id>.md`, not a shared file. `workspace` prints which workspace the coordinator thinks you are in; `note` prints your notes path.
-- Claim a file before editing it, release it when done:
-  - `python3 tools/agent-coord.py claim <paths...>` before the first edit to a file.
-  - `python3 tools/agent-coord.py release <paths...>` once an edit is finished and saved.
-  - `python3 tools/agent-coord.py release-all` to drop all your claims (also on session end).
-  - `python3 tools/agent-coord.py status` to see who holds what.
-  A claim fails with exit 1 if the other agent holds the same path, so a conflicting file is simply not yours to touch right now. Use `claim --force` only to clear a stale claim from a dead session.
-- Read anything freely; only writes need claims. Don't edit files another agent holds.
+Multiple agents may work in this repo at once. Coordinate through `tools/agent-coord.py`: claim files before editing, release when done, `status` to see who holds what. Claim fails if the other agent holds the same path.
 
 ## Git access
 
-**Agents are only allowed to use read-only git commands** (`status`, `log`, `show`, `diff`, `ls-files`, `reflog`, ...). Any command that changes the repository in a lasting manner — `commit`, `add`, `mv`, `rm`, `reset`, `checkout`, `restore`, `clean`, `stash`, `switch`, `pull`, `push`, `merge`, `rebase`, `tag`, and the like — is reserved for the human. A `git clean` can destroy untracked work; never run it, not even "just to tidy up". If a lasting git change is needed, say so and ask the human to run it.
+**Agents use read-only git commands only** (`status`, `log`, `show`, `diff`, `ls-files`, `reflog`, ...). Commands that change the repository — `commit`, `add`, `push`, `pull`, `merge`, `rebase`, etc. — are reserved for the human. If a lasting git change is needed, ask the human.
 
 ## Working tree
 
-Don't change files that carry uncommitted changes you did not make yourself. That state is someone's work-in-progress — the human's or another agent's — and editing it blurs the commit and risks overwriting it.
-
-- Before your first edit to a file, run `python3 tools/agent-coord.py check-clean <path>`. Exit 0 with `clean` means proceed. `dirty <path>` with exit 1 means the file has uncommitted changes: do not edit it — say you are blocked by that and name the file.
-- Untracked files count as dirty: a file you did not create that the check reports is not yours to edit either.
-- A file you created or modified yourself earlier in this session is your own work-in-progress; you may keep editing it. That is the "you made them" exception.
-- Run the check over the whole repo before starting a task to get the baseline of what is off-limits: `python3 tools/agent-coord.py check-clean .` reports every dirty file.
-- The human can override: if you are explicitly asked to work on a dirty file, the human owns the commit and has decided — proceed as told.
-
-## Session lifecycle
-
-Context is re-sent on every turn, so a long session grows steadily more expensive and increases the chance of hitting model rate limits. Reset it whenever the old context stops paying for itself.
-
-- When a task finishes, check whether the next task still needs any of this session's context:
-  - If not, the cheapest state is a fresh one: say so explicitly so the user can start a new session (`/new` or `/clear`), which reloads base rules and the agent file from scratch.
-  - If some carryover matters (decisions, half-done files, open questions), `/compact` instead.
-- Anything the next session will need belongs in `.agents/agent-notes-<id>.md`, not in the conversation. The notes file survives `/new`; the conversation does not. Write it down before recommending a reset.
-- Sessions whose only remaining value is "I remember what happened earlier, but it's no longer needed" are dead weight. Suggest a reset rather than dragging the history along.
+Don't change files that carry uncommitted changes you did not make. Before your first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. A file you created yourself earlier in the session is yours to keep editing. The human can override by explicit instruction.
 
 ## Pointers
 
-Rules are split across files so this file stays small and only the rules you need are loaded at a time. Read the pointed file before work that hits that topic:
+Rules are split across files. Read the relevant one before work on that topic:
 
-- `style/architecture.md` — how the system is put together: A/B/C/D placement, leaf modules, fork control, handed-in IO.
-- `style/common.md` — language-independent legibility code rules: maps/orchestration, guard-first failures, return documentation, single-pass structure, cross-platform compatibility, the legibility pass.
-- `style/python.md` — Python-specific formatting, imports, naming, type hints, section titles, declarative style.
-- `style/js.md` — JavaScript rules. Empty; only add rules when JS work appears in this repo.
-- `style/markdown.md` — Markdown-specific formatting (indentation).
-- `plans/*.md` — cross-cutting and roadmap design docs (multi-library, or
-  redesigns still in progress); `plans/bundler.md` is the exemplar for the map
-  style. A high-level pipeline map (phases / data flow / invariants) is required
-  for any non-trivial redesign and lives either in the plan doc or a module
-  header; the map must describe how the system works, not just list functions.
-- `<library>/SPEC.md` — a built library's map: current module structure, data
-  flow, invariants, design decisions, plus a "Planned changes" section only
-  when future work exists. Read a library's spec before working on it.
-- `STATUS.md` — master status file at repo root (coordinator-maintained
-  summary of what exists / is in progress / is blocked / is done). Update it
-  when you start or finish work: what you're working on + a rough % done.
-  Claim it before editing; keep the Snapshot date current.
-
-Module format and project rules (versioning, API/internal split, bundler behavior, tooling) are rule content and live in this file.
+| File | What it covers |
+|------|---------------|
+| `style/architecture.md` | A/B/C/D placement, leaf modules, fork control, handed-in IO |
+| `style/common.md` | Maps, guard-first failures, return docs, single-pass, compatibility |
+| `style/python.md` | Formatting, imports, naming, type hints, declarative style |
+| `style/markdown.md` | Markdown formatting (indentation) |
+| `plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps |
+| `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
+| `STATUS.md` | Master status — what exists / is in progress / is done. Claim before editing. |
 
 ## Versioning
 
-Libraries are versioned. A versioned file is named `libraryname_major_minor_revision.py` (e.g. `net5_27_105.py`).
+Libraries are versioned as `libraryname_major_minor_revision.py` (e.g. `net5_27_105.py`).
 
-- Major: primarily an opportunity to drop deprecated code. Gated behind enough breaking changes (dropping deprecated code) AND enough time since the previous major. Rare, by design.
-- Minor: can add things, but must not break anything for previous users.
-  "Breaking" means: any change whatsoever in project code to keep the same
-  behaviour as before. Changing a default is therefore breaking unless it can
-  be shown that no caller relies on the old default — and if none can be
-  shown, consider requiring the argument instead (a default that nothing can
-  be verified to override is a hidden requirement, not a convenience).
-- Revision: bugfixes (or attempts at such). Fix bugs only; don't add features or change the API.
-- Cosmetic issues that don't change behavior — e.g. a linter flag on the bundled output — are not bugs and do not warrant a release on their own. Fix them without bumping the version when reasonable.
-- Default release bump is revision. `--minor` and `--major` bump theirs, resetting the trailing numbers to 0 (minor resets revision; major resets minor and revision).
-- A library's first release is always `1_0_0`; later versions are read from the latest existing release in `xlib/`.
-- Deprecations are marked in version terms, so that deprecated code can be dropped after exactly 2 major versions.
+- **Major**: drop deprecated code. Requires breaking changes AND time since last major. Rare.
+- **Minor**: additions only; must not break previous users. "Breaking" = any change a user would need to adapt to.
+- **Revision**: bugfixes only. Don't add features or change the API.
+- Cosmetic issues are not bugs; fix without bumping.
+- Default bump is revision. `--minor`/`--major` reset trailing numbers.
+- First release is `1_0_0`; later versions read from latest in `xlib/`.
+- Deprecations are marked in version terms; dropped after exactly 2 major versions.
 
 ## Development approach
 
-- Each library is developed in its own folder and has exactly one entry point (`<libraryname>.py`). Dev folders are **not packages** (no `__init__.py`); import the API directly via `from libraryname.libraryname import ...` (e.g., `from csv.csv import tokenize`).
-- Users should generally not use development versions, but instead versioned releases in the `xlib` folder.
-- Versioned releases can be imported either unversioned (`from xlib import libraryname`) or explicitly (`from xlib import libraryname_5_9_27`). `xlib/__init__.py` resolves an unversioned import to a version at runtime:
-  - If the project has an `xlib_pins.py` in its working directory declaring `PIN = {"libraryname": "5_9_27"}`, that version is used.
-  - Otherwise the latest version on disk is used, and updates to it are immediate (main projects should pin to avoid surprise breakage).
-- **Libraries never use the versionless import option, not even in development.** A library always imports other libraries' explicit released versions (`from xlib import libraryname_5_9_27 as ...`), both in development and in its released code. Versionless imports are only for throwaway scripts, where "whatever is on disk" is acceptable.
-- Each library pins specific public versions of whatever it requires, **manually written as versioned imports in the dev folder**. The release script does not resolve imports for you. A library is never released unless all its requirements are already released, so a release of one library never forces changes to other libraries; consumers update their pins at their own pace. Libraries use public versions of other libraries during development too, never development or unspecified versions.
+- Each library is developed in its own folder with one entry point (`<libraryname>.py`). Dev folders are **not packages** (no `__init__.py`); import via `from libraryname.libraryname import ...`.
+- Versioned releases import either unversioned (`from xlib import libraryname`) or explicitly (`from xlib import libraryname_5_9_27`). `xlib/__init__.py` resolves unversioned imports via `xlib_pins.py` or latest on disk.
+- **Libraries never use versionless imports**, even in development. Always import explicit released versions (`from xlib import libraryname_5_9_27 as ...`).
+- Each library pins its requirements as versioned imports in the dev folder. A library is never released unless all requirements are already released.
 
 ## Version history
 
-- Every versioned library must keep a version history (`VERSIONS.md`) in its dev folder. One entry per release, newest first, noting what changed in each version. Prepend new entries to it rather than removing older ones.
-- This applies to everything in the repository that gets a version. Anything that does not get a version (tools, scripts) does not need a version history either — no versions, no version history.
+Every versioned library keeps a `VERSIONS.md` in its dev folder: newest first, one entry per release, noting what changed. Tools and scripts that aren't versioned don't need one.
 
 ## Code structure
 
-- Each library has at minimum a `<libraryname>.py` file (replace with the actual library name) where the API functions live.
-- Libraries should have a clean split between API code and internal code. The API file (`<libraryname>.py`) contains only the public interface; internal helpers go in separate files (e.g., `<libraryname>_tok.py`). This keeps the public surface minimal and makes internal refactoring safer.
-- **The library's root dev folder must not contain `__init__.py`.** This keeps it a non-package so it can be imported by path during development. Only the `xlib/` releases folder has `__init__.py`.
-- **Internal modules may use ordinary subfolders (e.g., `xcsv/_/`).** `_` is an ordinary folder name; if importable as a package it needs `__init__.py` like any other folder, and imports use normal Python syntax (e.g., `from ._.csv_tok import ...` requires the folder to be a package). The library root must not contain `__init__.py`.
+- Each library has a `<libraryname>.py` entry file containing only the public interface. Internal helpers go in separate files (e.g., `<libraryname>_tok.py`).
+- The library root must not contain `__init__.py`. Internal subfolders (e.g., `xcsv/_/`) may have one if they're packages.
 
 ### Bundler and the public API
 
-The bundler (`pybundle/bundler.py`) packs a library into one file and renames internal functions with a module prefix (e.g. `tokenize` in `csv_tok.py` becomes `csv_tok_tokenize`). Because of this:
+The bundler packs a library into one file and prefixes internal function names (e.g. `tokenize` in `csv_tok.py` becomes `csv_tok_tokenize`). Because of this:
 
-- **Public API functions must be defined in the entry file** (`<libraryname>.py`), not imported-and-re-exported from an internal module. The bundler does not keep a clean re-exported name; it rewrites the import to the prefixed internal name.
-- To give an internal function a clean public name with room for documentation, define a thin wrapper in the entry file that calls the internal one:
+- **Public API must be defined in the entry file**, not imported-and-re-exported. Use a thin wrapper:
   ```python
   from ._.csv_tok import tokenize as _tokenize
 
@@ -117,106 +68,29 @@ The bundler (`pybundle/bundler.py`) packs a library into one file and renames in
       """Split a CSV line (with // comments and quoting) into cells."""
       return _tokenize(line)
   ```
-  The wrapper keeps the clean public name, carries the docstring, and correctly delegates to the bundled internal function.
-- Relative imports between a library's own modules are handled entirely by the bundler; the release script does not need to touch them.
-
-## Tooling
-
-Tools that live in this repo (e.g. `xlint`) follow the same development structure and code style as libraries, but are scripts you run, not things you import. They are not released as versioned files in the `xlib` folder.
-
-- `xlint` is a style checker. Run `python3 xlint/xlint.py <paths>` to check files once; run it with `--no-<check>` to disable an individual check, or `--watch` to keep running and redraw the issue list on change (it rechecks only the files that changed).
-- `release/release.py` is the release script: it assigns a version and saves a versioned file in `xlib/`, produced by calling the bundler on the dev folder. It is a thin wrapper around the bundler — it provides versioning, not code fixes, and it makes no edits to the bundler's output. Cross-library dependencies must already be written as versioned imports in the dev library. See `release/README.md`. Developed like a library but never released; owned by `release/`, not `tools/`.
-- `tools/tmux-xlib.sh` is an optional launcher that runs `xlint --watch` in one pane, a shell in another, and the `skynet` agent monitor in a third. It lives in `tools/` so others can copy it to their own what-works-for-them location. It takes an optional session name as its first argument (default `xlib`); running it kills any existing session with that name on purpose.
-- `tools/skynet.py` is the agent monitor. It reads opencode's message log read-only and shows how work is spread between models (message and token counts per model) plus refusal counts.
-- Watcher scripts that stay open in the tmux panes should identify themselves: print `=== <Name> ===` at the top of their output (as `skynet` and `xlint --watch` do), so it's obvious which pane is which.
-- A script that monitors AI usage must never itself add to it: it must not call model APIs, only read local state (e.g. opencode's SQLite log).
+- Relative imports between a library's own modules are handled by the bundler.
 
 ## Subagent dispatch
 
-Four free worker models are available as subagents: `worker-north-mini-code`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle / nemotron-3-ultra-free) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
+Use `python3 tools/agent-coord.py dispatch <category>` to get the correct worker:
 
-**Pick the model by the job.** Use `python3 tools/agent-coord.py dispatch <category>` to get the correct worker for a task. Dispatch maps each category to a fixed worker chosen by fit — there is no round-robin rotation of models; strength-fit always wins:
+| Category | Worker | Use for |
+|----------|--------|---------|
+| `coding` | `worker-north-mini-code` | Implementation |
+| `reasoning` | `worker-nemotron-ultra` | Deep analysis, architecture |
+| `bulk` | `worker-nemotron-lightning` | Speed-critical, repetitive |
+| `general` | `worker-ling` | Text, agentic tasks |
 
-- **Coding / implementation** → `worker-north-mini-code`. Strongest openrouter coder (purpose-built coding specialist for OpenCode); use for coding by default.
-- **Deep reasoning / long-context analysis / technical architecture** → `worker-nemotron-ultra` (nemotron-3-ultra-free). Best for technical tasks, structured reasoning.
-- **Bulk, speed-critical, or repetitive grunt work** → `worker-nemotron-lightning`.
-- **General text / agentic tasks in between** → `worker-ling`.
-
-**Main model (big-pickle) strengths**: Best at understanding user intent, tracking implied specifications, and checking its own assumptions for false/untested claims. Use directly for planning, clarification, and assumption-auditing — do NOT dispatch these to workers.
-
-A failed attempt from the wrong model costs more than fixing it later, so don't force a model onto a job it fits poorly just because it's the common default. Match the worker to the task.
-
-**Mandatory dispatch for non-trivial work.** Before starting any non-trivial coding, reasoning, bulk, or general task, run `python3 tools/agent-coord.py dispatch <category>` to get the correct worker, then dispatch via the `task` tool with that `subagent_type`. The main model must NOT do the work itself.
-
-**Never dispatch if not needed**: Simple, single-step tasks (quick edits, simple questions) are faster done directly by the main model than via subagent dispatch overhead.
-
-**Concurrent dispatch**: When dispatching multiple workers simultaneously, assign different models to each.
-
-**Meta exclusion**: `worker-muse-spark` was removed — Meta's Contributor tier trains on user prompts. Do not re-add it.
-
-## Subagent context optimization
-
-Every subagent dispatch pays cold-start cost (fresh preamble, rebuilt context). Two mechanisms cut that waste (the full analysis and risk table are in the Agents workspace's `.agents/shared-notes.md`, 2026-09-07) — both are mechanized in `python3 tools/agent-coord.py ctx`:
-
-**Batching** — group homogeneous, latency-tolerant tasks into one dispatch (e.g. "fix these 3 lint errors", "generate these 5 test files"). Queue them with `ctx queue <type-or-category> <task...>` (persisted, survives `/new`), inspect with `ctx batch <type>`, dispatch the whole batch at once, then `ctx flush <type>`. Flush when the batch hits ~3–5 tasks, a ~60s window expires, a high-priority task preempts, or the session ends (`ctx status` marks `FLUSH READY`). Batch only non-interactive background work — never batch tasks the human wants to inspect mid-flight.
-
-**task_id resumption** — keep the most-used subagent's context warm by reusing its returned `task_id` for related dispatches: first `task` call returns a `task_id`; pass it back in to continue that subagent conversation. Track it with `ctx set <type> <task_id>` / `ctx get <type>` / `ctx bump <type>` (counts dispatches; `ctx status` warns `rotate soon` at 6/8 and `ROTATE NOW` at 8/8). Never cross-pollinate: a task_id belongs to one model.
-
-**One session per task** — resume via `task_id` only for related work within one task; start a fresh `task_id` for the next task (no cross-task bleed) via `ctx rotate <type>`. When a subagent context approaches ~80% of its window, have it write a short state summary, then start a fresh session carrying that summary forward. `ctx reset [--type <type>]` clears state (registry + queues) for a type or the whole workspace.
+Main model (big-pickle) does planning, clarification, and assumption-auditing directly — do not dispatch these. Dispatch non-trivial work; do simple edits directly. Never re-add `worker-muse-spark` (Meta trains on prompts).
 
 ## Human feedback
 
-**Call out errors.** If the human is wrong about a technical fact, assumption, or direction, say so directly. Do not defer to incorrect premises. Correct mistakes immediately rather than building on them.
+If the human is wrong about a fact, assumption, or direction, say so directly.
 
 ## Rule-change news
 
-Guidelines change, and this file (and the files it points at) is only a snapshot at your session start — it can go stale mid-session. `tools/agent-coord.py news` reports which rule files changed since you last looked, keyed to a per-agent read cursor, so you catch up on updates without re-reading everything. It hashes the rule files — `AGENTS.md`, `.opencode/agent/*.md`, `style/*.md` — plus anything else in the rule set.
+Run `python3 tools/agent-coord.py news` at session start and before first subagent dispatch. It reports changed rule files and marks them seen. Prefer to mechanize rules (tool checks, bundle-time checks) over prose; use news for changes you can't mechanize.
 
-- Run `python3 tools/agent-coord.py news` at the start of a session and again before your first subagent dispatch. It prints the changed files (or `no new guideline changes`) and marks them seen.
-- `news --peek` reports changes without marking them seen (use it to look without committing to having absorbed them). `news --status` just prints `caught up` / `not caught up`.
-- When you make a new rule or guideline yourself, tell the other agent to run `news` — do not assume it will read this file unprompted.
-- A news notice only *informs*; it does not replace a mechanism. Prefer to mechanize a rule (a `tools/agent-coord.py` command, a bundle-time check) wherever you can, and use news to announce the changes you can't mechanize.
+## Module format
 
-## Agent roles
-
-These role definitions apply across workspaces (Agents and XLib). Each agent has a primary role; they collaborate through the human.
-
-### Programmer (XLib)
-- **Writes code** — implements specs as code
-- **Basis**: Works from a written spec (from Planner)
-- **Dispatch**: `worker-north-mini-code` via `dispatch coding`
-- **Does NOT**: Design architecture, write specs, review own code, decide releases
-
-### Planner (XLib)
-- **Writes plans and specs** — fleshes out technical details with human
-- **Produces**: Plan documents (`plans/*.md`), then detailed specs
-- **Dispatch**: `worker-nemotron-ultra` via `dispatch reasoning`
-- **Does NOT**: Write implementation code, review code, execute releases
-
-### Reviewer (XLib)
-- **Release gate** — independent code review, user-invoked only
-- **Produces**: Review documents `reviews/<lib>-<hash>.md` where `<hash>` is a content hash of the dev folder (all files combined). The hash serves as a change detector — if the folder content changes, the review is stale.
-- **Workflow**: User invokes → reviews → writes doc → discusses with human → executes release **only on explicit permission**
-- **Dispatch**: `worker-nemotron-ultra` via `dispatch reasoning`
-- **Does NOT**: Write code, write specs, auto-release
-
-### Secretary (Agents)
-- **Writes plans** — priority management, task organization, planning for non-XLib work
-- **Manages**: TASKS.md, priorities, deadlines, shared notes
-- **Feeds**: Task data to tmux task view (once available)
-- **Does NOT**: Write implementation code, write XLib specs, review code, manage releases
-
-### Mechanic (Systems)
-- **System management** — debugging, installation, configuration, remote management
-- **Handles**: OS issues, hardware, services, deployment, infrastructure
-- **Dispatch**: `worker-north-mini-code` or direct via `task` tool
-- **Does NOT**: Write application code, write specs, review code
-
-### Researcher (General)
-- **Research & option evaluation** — investigates unknowns, compares alternatives
-- **Produces**: Notes in shared-notes.md or agent-notes for Secretary/Planner
-- **Dispatch**: `worker-nemotron-ultra` or `worker-ling` via `dispatch reasoning`
-- **Does NOT**: Write implementation code, write specs, review code, make decisions
-
-### Common rule
-**All agents discuss their work with the human.** No autonomous execution of significant decisions.
+Module format and project rules (versioning, API/internal split, bundler behavior, tooling) are rule content and live in this file.

@@ -7,15 +7,6 @@ language-specific rules live in `style/<language>.md` (currently
 
 ## Maps
 
-- Every library keeps a short map — `SPEC.md`, in the library's dev folder —
-  covering module structure, data flow, key invariants, and design decisions,
-  in the style of `plans/bundler.md`'s pipeline map. Aim for well under 100
-  lines. It describes how things work, not what each line does.
-- The map describes current intent only. Future changes go in the spec's
-  "Planned changes" section, or in `plans/*.md` for cross-cutting/roadmap
-  work; never in the map.
-- The spec stays current with the code: a change to module structure or a key
-  invariant updates the spec in the same pass (see the legibility pass).
 - A file that is not trivially readable at a glance opens with either an
   orchestrator function that calls well-named helpers, or a short header map of
   its own structure.
