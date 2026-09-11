@@ -403,7 +403,7 @@ def cmd_role_release(args):
 	print("released %s" % path)
 
 WORKER_MAP = {
-	"coding": "worker-mimo",
+	"coding": "worker-north-mini-code",
 	"reasoning": "worker-nemotron-ultra",
 	"bulk": "worker-nemotron-lightning",
 	"general": "worker-ling",
