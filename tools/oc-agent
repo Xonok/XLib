@@ -1,0 +1,79 @@
+#!/bin/bash
+# Named-agent launcher for opencode. Writes port files to ~/.opencode/ports/.
+AGENT="$1"
+if [ -z "$AGENT" ]; then echo "Usage: oc-agent <agent-name>" >&2; exit 1; fi
+
+STATE="/tmp/oc-agent/$AGENT"
+mkdir -p "$STATE"
+
+for slotdir in "$STATE"/"$AGENT".*; do
+	[ -d "$slotdir" ] || continue
+	pidfile="$slotdir/pid"
+	[ -f "$pidfile" ] || { rm -rf "$slotdir"; continue; }
+	pid=$(<"$pidfile")
+	if ! kill -0 "$pid" 2>/dev/null; then rm -rf "$slotdir"; fi
+done
+
+N=""
+for i in $(seq 1 99); do
+	if mkdir "$STATE/$AGENT.$i" 2>/dev/null; then N=$i; break; fi
+done
+if [ -z "$N" ]; then echo "Error: all 99 slots busy for '$AGENT'" >&2; exit 1; fi
+
+echo $$ > "$STATE/$AGENT.$N/pid"
+TITLE="$AGENT"; [ "$N" -gt 1 ] && TITLE="$AGENT-$N"
+printf '\033]2;%s\007' "$TITLE"
+export OPENCODE_DISABLE_TERMINAL_TITLE=1
+export OPENCODE_AGENT_ROLE="$AGENT"
+
+ports_dir="$HOME/.opencode/ports"
+mkdir -p "$ports_dir"
+port_info_file="/tmp/oc_agent_port_$$"
+
+port=""
+cleanup() {
+	if [ -n "$port" ]; then rm -f "$ports_dir/$port.json"; fi
+	rm -f "$port_info_file"
+	rm -rf "$STATE/$AGENT.$N"
+}
+trap cleanup EXIT
+
+# Background detector: find opencode PID, then its listening port via ss.
+(
+	opencode_pid=""
+	while [ -z "$opencode_pid" ]; do
+		opencode_pid=$(pgrep -P $$ -f "opencode --agent $AGENT" | head -1)
+		sleep 0.25
+	done
+	current_port=""
+	written=false
+	while true; do
+		if ! kill -0 "$opencode_pid" 2>/dev/null; then break; fi
+		if [ "$written" = false ]; then
+			current_port=$(ss -tlnp 2>/dev/null | grep "pid=$opencode_pid" | awk '{print $4}' | grep -o '[0-9]*$' | head -1)
+			if [ -n "$current_port" ]; then
+				session_id=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+				cat > "$ports_dir/$current_port.json" <<PORTJSON
+{
+  "port": $current_port,
+  "role": "$TITLE",
+  "session_id": "$session_id",
+  "pid": $opencode_pid,
+  "started_at": $(date +%s.%3N)
+}
+PORTJSON
+				echo "$current_port" > "$port_info_file"
+				written=true
+			fi
+		fi
+		sleep 1.0
+	done
+) &
+
+# Run opencode; stderr goes to terminal only if needed, not spammed.
+opencode --agent "$AGENT" --port 0 --log-level WARN
+opencode_exit=$?
+
+port=""
+if [ -f "$port_info_file" ]; then port=$(cat "$port_info_file" 2>/dev/null); fi
+exit $opencode_exit
