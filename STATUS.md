@@ -16,7 +16,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - The % done number is **your own estimate of how done you think it is** — rough
   is fine, stale is not.
 
-## Snapshot (as of 2026-09-11 ~14:00 EEST)
+## Snapshot (as of 2026-09-11 ~11:52 EEST)
 
 - Repo on `master` at `8cb4daf`; since the previous snapshot (`314c158`, 09-09)
   **14 commits landed**:
@@ -76,6 +76,9 @@ on. Details live in the pointers at the bottom; this file stays a summary.
   (uncommitted change in `tools/tmux-xlib.sh`).
 - **skynet second tracker → marduk** — agent monitor added (`9665d1d`), integrated
   into the xlib tmux session (`155aa17`), panel made smaller for it (`6f90f32`).
+- **oc-agent moved into XLib tooling** — role-aware launcher now lives at
+  `tools/oc-agent`; `~/.local/bin/oc-agent` points there, and Marduk documents
+  the port-file integration contract.
 - **SPEC coverage complete** — xconf SPEC written (`4c4da82`); all five libraries
   (xcsv, xconf, xschema, xtest, marduk) now have SPECs.
 - **xcsv** — post-release fixes committed after many review rounds (`f0b81d0`);
@@ -119,7 +122,6 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - `.agents/rotation.json` orphaned (rotation feature removed) — deletion candidate.
 - Old slot-based notes (`agent-notes-a1..a4.md`) are legacy; new format is
   `agent-notes-{role}-{N}.md`. Do not treat them as current.
-- OPENCODE_AGENT_ROLE not set by anything yet — role-notes design depends on it.
 - pybundle now keeps a VERSIONS.md (1_0_0–1_0_3) although it's a tool, not released
   to `xlib/` — noting in case a decision is needed (AGENTS.md says tools get no versions).
 
