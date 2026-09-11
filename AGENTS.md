@@ -133,11 +133,11 @@ Tools that live in this repo (e.g. `xlint`) follow the same development structur
 
 ## Subagent dispatch
 
-Four free worker models are available as subagents: `worker-mimo`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle / nemotron-3-ultra-free) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
+Four free worker models are available as subagents: `worker-north-mini-code`, `worker-nemotron-lightning`, `worker-nemotron-ultra`, `worker-ling`. The main model (big-pickle / nemotron-3-ultra-free) is the primary rate-limit bottleneck — preserve it by offloading non-trivial work to subagents.
 
 **Pick the model by the job.** Use `python3 tools/agent-coord.py dispatch <category>` to get the correct worker for a task. Dispatch maps each category to a fixed worker chosen by fit — there is no round-robin rotation of models; strength-fit always wins:
 
-- **Coding / implementation** → `worker-mimo`. Strongest coder; use for coding by default.
+- **Coding / implementation** → `worker-north-mini-code`. Strongest openrouter coder (purpose-built coding specialist for OpenCode); use for coding by default.
 - **Deep reasoning / long-context analysis / technical architecture** → `worker-nemotron-ultra` (nemotron-3-ultra-free). Best for technical tasks, structured reasoning.
 - **Bulk, speed-critical, or repetitive grunt work** → `worker-nemotron-lightning`.
 - **General text / agentic tasks in between** → `worker-ling`.
@@ -184,7 +184,7 @@ These role definitions apply across workspaces (Agents and XLib). Each agent has
 ### Programmer (XLib)
 - **Writes code** — implements specs as code
 - **Basis**: Works from a written spec (from Planner)
-- **Dispatch**: `worker-mimo` via `dispatch coding`
+- **Dispatch**: `worker-north-mini-code` via `dispatch coding`
 - **Does NOT**: Design architecture, write specs, review own code, decide releases
 
 ### Planner (XLib)
@@ -209,7 +209,7 @@ These role definitions apply across workspaces (Agents and XLib). Each agent has
 ### Mechanic (Systems)
 - **System management** — debugging, installation, configuration, remote management
 - **Handles**: OS issues, hardware, services, deployment, infrastructure
-- **Dispatch**: `worker-mimo` or direct via `task` tool
+- **Dispatch**: `worker-north-mini-code` or direct via `task` tool
 - **Does NOT**: Write application code, write specs, review code
 
 ### Researcher (General)
