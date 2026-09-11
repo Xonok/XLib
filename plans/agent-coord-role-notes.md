@@ -65,7 +65,7 @@ Example: `XLib/planner-1`, `Agents/secretary-2`
 
 ### 2. Role Detection
 
-Agent role comes from environment (set by `oc-agent` / `/agents`):
+Agent role comes from environment (set by `tools/oc-agent` / `/agents`):
 ```python
 role = os.environ.get("OPENCODE_AGENT_ROLE") or "unknown"
 ```
@@ -147,5 +147,5 @@ def my_id():
 
 ## Dependencies
 
-- `oc-agent` / `/agents` must set `OPENCODE_AGENT_ROLE` (separate concern)
+- `tools/oc-agent` / `/agents` must set `OPENCODE_AGENT_ROLE` (separate concern)
 - No Python version or library changes

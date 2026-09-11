@@ -1,7 +1,7 @@
 # Marduk — Real-Time Agent Status Monitor
 
 ## Overview
-Marduk is a monitoring tool that displays live status of OpenCode agent instances by connecting to their SSE event streams. Agents are launched via `oc-agent` (existing launcher), which writes port metadata files to a shared directory. Marduk watches this directory, connects to each agent's SSE endpoint, and renders a real-time status view.
+Marduk is a monitoring tool that displays live status of OpenCode agent instances by connecting to their SSE event streams. Agents are launched via `tools/oc-agent`, a general-purpose role-aware launcher that writes port metadata files to a shared directory. Marduk watches this directory, connects to each agent's SSE endpoint, and renders a real-time status view.
 
 **Name**: Marduk — Mesopotamian god with four eyes and four ears, "who sees in all directions at once."
 
@@ -11,10 +11,12 @@ Marduk is a monitoring tool that displays live status of OpenCode agent instance
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  oc-agent (existing launcher)                                   │
-│    ├─ spawns: opencode --agent <role> --port 0 --print-logs    │
-│    ├─ captures stderr: "listening on http://127.0.0.1:4123"    │
-│    └─ writes: ~/.opencode/ports/4123.json                      │
+│  tools/oc-agent (role-aware launcher)                           │
+│    ├─ validates: agent name                                     │
+│    ├─ exports: OPENCODE_AGENT_ROLE=<agent-name>                 │
+│    ├─ spawns: opencode --agent <agent-name> --port 0 --log-level WARN │
+│    ├─ discovers: listening port via ss                          │
+│    └─ writes: ~/.opencode/ports/<port>.json                     │
 │         { "port": 4123, "role": "researcher",                  │
 │           "session_id": "abc123", "pid": 12345,                │
 │           "started_at": 1725800000 }                           │
@@ -38,7 +40,7 @@ Marduk is a monitoring tool that displays live status of OpenCode agent instance
 ## Port File Specification
 
 ### Location
-`~/.opencode/ports/` (created by `oc-agent` on first use)
+`~/.opencode/ports/` (created by `tools/oc-agent` on first use)
 
 ### Filename
 `<port>.json` — port number is unique, so no collisions. Later agent overwrites if port reused (OS won't reuse immediately).
@@ -146,18 +148,24 @@ Agents
 ## Command Line Interface
 
 ```bash
+# Launch an agent (repository path)
+tools/oc-agent researcher
+
+# Launch through the user command symlink
+oc-agent researcher
+
 # Watch mode (default)
-python3 tools/marduk.py --watch
+python3 -m marduk.marduk --watch
 
 # One-shot (for testing)
-python3 tools/marduk.py --once
+python3 -m marduk.marduk --once
 
 # Options
 --ports-dir PATH       # Default: ~/.opencode/ports/
 --poll-seconds FLOAT   # Default: 1.0 (fallback if no inotify)
 --warn-sse-secs INT    # Default: 60 (SSE silent → show ⚠ marker)
 --warn-age-hours INT   # Default: 24 (file age → show ⚠ marker)
---compact              # Compact mode for very narrow panes
+--compact              # Compact mode for narrow panes
 ```
 
 ---
@@ -192,39 +200,19 @@ python3 tools/marduk.py --once
 
 ---
 
-## Integration with `oc-agent`
+## Integration with `tools/oc-agent`
 
-`oc-agent` modification (minimal):
-```python
-# After spawning opencode process:
-proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, ...)
+`tools/oc-agent` is the producer of Marduk's port-file contract. It is a general-purpose, role-aware OpenCode launcher: callers provide an agent name, the launcher exports `OPENCODE_AGENT_ROLE`, starts OpenCode on an ephemeral port, discovers the listening port, and writes the metadata file Marduk watches.
 
-# Non-blocking read stderr for "listening on" line
-import threading, re
-def capture_port():
-    for line in proc.stderr:
-        m = re.search(r'listening on http://127.0.0.1:(\d+)', line.decode())
-        if m:
-            port = int(m.group(1))
-            write_port_file(port, role, session_id, proc.pid)
-            break
-
-threading.Thread(target=capture_port, daemon=True).start()
+```bash
+tools/oc-agent researcher
+# or, after installing the user command symlink:
+oc-agent researcher
 ```
 
-`write_port_file(port, role, session_id, pid)`:
-```python
-ports_dir = Path.home() / ".opencode" / "ports"
-ports_dir.mkdir(parents=True, exist_ok=True)
-data = {
-    "port": port,
-    "role": role,
-    "session_id": session_id,
-    "pid": pid,
-    "started_at": time.time()
-}
-(ports_dir / f"{port}.json").write_text(json.dumps(data))
-```
+The launcher and monitor remain separate processes. Marduk does not import or invoke `tools/oc-agent`; it only reads and cleans up files under the configured ports directory. The metadata schema is defined in [Port File Specification](#port-file-specification).
+
+The user-level `oc-agent` command is a symlink to `tools/oc-agent`, so moving the launcher into XLib does not change the existing command.
 
 ---
 
