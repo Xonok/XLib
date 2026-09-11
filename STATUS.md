@@ -16,7 +16,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - The % done number is **your own estimate of how done you think it is** — rough
   is fine, stale is not.
 
-## Snapshot (as of 2026-09-11 ~07:20 EEST)
+## Snapshot (as of 2026-09-11 ~14:00 EEST)
 
 - Repo on `master` at `8cb4daf`; since the previous snapshot (`314c158`, 09-09)
   **14 commits landed**:
@@ -47,9 +47,18 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 | agent-coord role-notes redesign | planner | ~90% — plan committed (`82bdeb4`); not merged into agent-coord.py yet | `plans/agent-coord-role-notes.md` |
 | xlint return-type-hint check | — | new check works (scratch tests at root); **uncommitted**, not wired into style rules | `xlint/xlint.py` diff, `test_return_type_hints*.py` |
 | taskview periodic time refresh | — | planned only; noted in taskview SPEC | `plans/taskview-time-refresh.md` |
+| **xAudit tool** | secretary | planned + decided; implementation pending | `plans/xaudit.md` |
+| **xlint + release move to `tools/`** | human-owned | decided; not started (git change, release.py carries uncommitted WIP) | blast radius in `plans/xaudit.md` |
 
 ## Recently done
 
+- **Rule audit + AGENTS.md trim** — ~157 lines (39%) cut from AGENTS.md
+  (222→96), common.md (79→69), architecture.md (101→80). Session lifecycle,
+  tooling docs, agent roles (duped in `.opencode/agent/`), subagent ctx prose
+  cut; R2/R6 folded into R5; Checking section removed. Secretary, 09-11.
+  Uncommitted; human commit pending.
+- **xAudit plan decided** — `plans/xaudit.md` (new): project-specific
+  structural checks, xaudit owns watch loop + calls xlint one-shot.
 - **taskview due-date fix** — `taskupdate.py parse_due`: date-only inputs now store
   noon (12:00) not midnight; `%m-%d` without year uses current year (was year 1900).
   `tasks.csv.example` corrected (due_ts was ISO strings → now Unix timestamps, noon
