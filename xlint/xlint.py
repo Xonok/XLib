@@ -76,7 +76,7 @@ def check_def_one_line(lines):
 			continue
 		if not _DEF_PREFIX_RE.match(line[:open_paren]):
 			continue
-		if not re.match(r"\(.*\)\s*:\s*$", line[open_paren:]):
+		if not re.match(r"\(.*\)\s*(->\s*.+)?\s*:\s*$", line[open_paren:]):
 			report.append((index, "function definition split across lines"))
 	return report
 
