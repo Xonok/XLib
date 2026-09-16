@@ -16,7 +16,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - The % done number is **your own estimate of how done you think it is** — rough
   is fine, stale is not.
 
-## Snapshot (as of 2026-09-11 ~11:52 EEST)
+## Snapshot (as of 2026-09-16; commits below are from the 09-11 snapshot, only the marduk fix has changed since)
 
 - Repo on `master` at `8cb4daf`; since the previous snapshot (`314c158`, 09-09)
   **14 commits landed**:
@@ -53,6 +53,15 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 
 ## Recently done
 
+- **marduk SSE reconnect storm fixed** — root cause: `_/sse_client.py` wrote every
+  event to `/tmp/marduk_pipe/events.log` but nothing created that dir; after the
+  Sep 15 boot its absence made the FIRST event throw `FileNotFoundError`, killing
+  the SSE connection; the poll loop then re-spawned a client thread every ~10s
+  (Thread-40+ observed) — the storm also leaked EventTarget listeners in opencode
+  ("Possible EventTarget memory leak detected"). Fix: `_log_event()` helper
+  (mkdir parents + OSError guard) replaces the two raw writes; plus one-time
+  `mkdir -p /tmp/marduk_pipe`. Verified stable: 1 agent tracked, 1 SSE thread.
+  Uncommitted, mechanic 09-16.
 - **Rule audit + AGENTS.md trim** — ~157 lines (39%) cut from AGENTS.md
   (222→96), common.md (79→69), architecture.md (101→80). Session lifecycle,
   tooling docs, agent roles (duped in `.opencode/agent/`), subagent ctx prose

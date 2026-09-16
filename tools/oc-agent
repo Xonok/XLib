@@ -42,7 +42,7 @@ trap cleanup EXIT
 (
 	opencode_pid=""
 	while [ -z "$opencode_pid" ]; do
-		opencode_pid=$(pgrep -P $$ -f "opencode --agent $AGENT" | head -1)
+		opencode_pid=$(pgrep -P $$ -f "opencode.*--agent $AGENT" | head -1)
 		sleep 0.25
 	done
 	current_port=""
@@ -70,7 +70,7 @@ PORTJSON
 	done
 ) &
 
-# Run opencode; stderr goes to terminal only if needed, not spammed.
+# Run opencode in the current project directory (agents are global via ~/.config/opencode/agent).
 opencode --agent "$AGENT" --port 0 --log-level WARN
 opencode_exit=$?
 

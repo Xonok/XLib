@@ -2,7 +2,19 @@
 
 import json,time
 from abc import ABC,abstractmethod
+from pathlib import Path
 from typing import Callable
+
+EVENTS_LOG=Path("/tmp/marduk_pipe/events.log")
+
+def _log_event(event_type:str,data:dict):
+	"""Append event to log; a logging failure must never break SSE."""
+	try:
+		EVENTS_LOG.parent.mkdir(parents=True,exist_ok=True)
+		with EVENTS_LOG.open("a") as f:
+			f.write(f"{event_type}:{json.dumps(data)}\n")
+	except OSError:
+		pass
 
 try:
 	import httpx
@@ -70,8 +82,7 @@ class HttpxSSEClient(SSEClient):
 						data=json.loads(event_data)
 						if not event_type and isinstance(data,dict) and isinstance(data.get("type"),str):
 							event_type=data["type"]
-						with open("/tmp/marduk_pipe/events.log","a") as f:
-							f.write(f"{event_type}:{json.dumps(data)}\n")
+						_log_event(event_type or "",data)
 						self.on_event(event_type or "",data)
 					except json.JSONDecodeError:
 						pass
@@ -105,8 +116,7 @@ class UrllibSSEClient(SSEClient):
 						data=json.loads(event_data)
 						if not event_type and isinstance(data,dict) and isinstance(data.get("type"),str):
 							event_type=data["type"]
-						with open("/tmp/marduk_pipe/events.log","a") as f:
-							f.write(f"{event_type}:{json.dumps(data)}\n")
+						_log_event(event_type or "",data)
 						self.on_event(event_type or "",data)
 					except json.JSONDecodeError:
 						pass
