@@ -87,7 +87,7 @@ or interleaved — the user sees one combined stream.
 
 ```
 tools/xaudit/
-    xaudit.py    # entry point, CLI, orchestration
+		xaudit.py    # entry point, CLI, orchestration
 ```
 
 Single file. Checks are functions like xlint (`check_init_py`, `check_versions_md`,
@@ -96,7 +96,7 @@ etc.). No external dependencies beyond stdlib.
 ## Open questions
 
 - What depends on the current `xlint/` path (scripts, tmux config, docs)?
-  Answered above — see blast radius table.
+	Answered above — see blast radius table.
 
 **Decided:** xaudit owns the watch loop; in watch mode it calls xlint in
 one-shot mode on every pass and merges both outputs. xlint is never run in

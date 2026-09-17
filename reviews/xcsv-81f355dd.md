@@ -98,7 +98,7 @@ Wait — the current `xcsv/_/csv_tok.py` (lines 11-14) correctly checks for comm
 ```python
 stripped = line.lstrip()
 if stripped.startswith("//"):
-    return None, None
+		return None, None
 ```
 
 But the released v1.0.1 (`xlib/xcsv_1_0_1.py` lines 10-22) has the buggy behavior:

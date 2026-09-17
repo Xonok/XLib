@@ -23,16 +23,16 @@ Add a second tracker pane showing live agent sessions with workspace-scoped name
 === Agents (Live) ===
 
 Agents/a1 (Agents)
-  secretary    working  2m ago
-  mechanic     idle     15m ago
+	secretary    working  2m ago
+	mechanic     idle     15m ago
 
 XLib/a1 (XLib)
-  planner      delegating  30s ago
-  reviewer     question    1m ago
-  programmer   working     2m ago
+	planner      delegating  30s ago
+	reviewer     question    1m ago
+	programmer   working     2m ago
 
 XLib/a2 (XLib)
-  researcher   idle        10m ago
+	researcher   idle        10m ago
 ```
 
 **Sorting**: First by workspace (alphabetical), then by agent name (alphabetical) — consistent ordering without fiddling.

@@ -41,8 +41,8 @@ tags: ["work", "admin", "oncall", "blocking"]
 
 # Display limits for this context
 limits:
-  upcoming: 5        # max upcoming tasks to show
-  queue_breakdown: true
+	upcoming: 5        # max upcoming tasks to show
+	queue_breakdown: true
 ```
 
 **Notes on format**:

@@ -8,21 +8,21 @@
 
 ```
 Test definition:
-    @test                          def test_foo(): ...
-         │                                 │
-         ▼                                 ▼
-    _registry.append(fn)            assertions (equal, raises, etc.)
-         │                                 │
-         │                +----------------+------------------+
-         │                |                |                  |
-         ▼                ▼                ▼                  ▼
-    run() ─────────► _run_funcs()    AssertionError     AssertionError
-         │                │             (fail)             (pass)
-         │                ▼
-         │         print "pass/FAIL"
-         │                │
-         ▼                ▼
-    returns (0|1)    passed, failed counts
+		@test                          def test_foo(): ...
+					│                                 │
+					▼                                 ▼
+		_registry.append(fn)            assertions (equal, raises, etc.)
+					│                                 │
+					│                +----------------+------------------+
+					│                |                |                  |
+					▼                ▼                ▼                  ▼
+		run() ─────────► _run_funcs()    AssertionError     AssertionError
+					│                │             (fail)             (pass)
+					│                ▼
+					│         print "pass/FAIL"
+					│                │
+					▼                ▼
+		returns (0|1)    passed, failed counts
 ```
 
 **Discovery modes:**
@@ -70,8 +70,8 @@ Each helper formats a readable message:
 - `same`: `not identical: {a!r} is not {b!r}`
 - `true`: `expected truthy, got {x!r}`
 - `raises`: 
-  - Wrong type: `expected {exc.__name__}, got {type(e).__name__}: {e}`
-  - None raised: `expected {exc.__name__}, but nothing raised`
+	- Wrong type: `expected {exc.__name__}, got {type(e).__name__}: {e}`
+	- None raised: `expected {exc.__name__}, but nothing raised`
 - `contains`: `{item!r} not in {container!r}`
 - `kind`: `expected {kind_.__name__}, got {type(value).__name__}`
 

@@ -74,21 +74,21 @@ role = os.environ.get("OPENCODE_AGENT_ROLE") or "unknown"
 
 ```python
 def allocate_instance(role, workspace_tag):
-    """Return next available instance number for (workspace, role), recycling dead."""
-    # Scan ids.json for existing role-N entries
-    # Check process liveness
-    # Return smallest free N (1..max_instances)
+		"""Return next available instance number for (workspace, role), recycling dead."""
+		# Scan ids.json for existing role-N entries
+		# Check process liveness
+		# Return smallest free N (1..max_instances)
 ```
 
 ### 4. Note Path Functions
 
 ```python
 def instance_note_path(agent_id):  # "XLib/planner-1"
-    role, num = agent_id.split("/")[-1].split("-")
-    return os.path.join(DIR, f"agent-notes-{role}-{num}.md")
+		role, num = agent_id.split("/")[-1].split("-")
+		return os.path.join(DIR, f"agent-notes-{role}-{num}.md")
 
 def role_note_path(role, workspace_root):
-    return os.path.join(workspace_root, ".agents", f"role-notes-{role}.md")
+		return os.path.join(workspace_root, ".agents", f"role-notes-{role}.md")
 ```
 
 ### 5. New Commands
@@ -107,9 +107,9 @@ def role_note_path(role, workspace_root):
 
 ```python
 def my_id():
-    # If OPENCODE_AGENT_ID set (explicit), use it
-    # Else: role from env, allocate instance, return "workspace/role-N"
-    # No migration of old slot-based IDs
+		# If OPENCODE_AGENT_ID set (explicit), use it
+		# Else: role from env, allocate instance, return "workspace/role-N"
+		# No migration of old slot-based IDs
 ```
 
 ### 7. Remove Legacy

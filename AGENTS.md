@@ -61,13 +61,13 @@ Every versioned library keeps a `VERSIONS.md` in its dev folder: newest first, o
 The bundler packs a library into one file and prefixes internal function names (e.g. `tokenize` in `csv_tok.py` becomes `csv_tok_tokenize`). Because of this:
 
 - **Public API must be defined in the entry file**, not imported-and-re-exported. Use a thin wrapper:
-  ```python
-  from ._.csv_tok import tokenize as _tokenize
+	```python
+	from ._.csv_tok import tokenize as _tokenize
 
-  def tokenize(line):
-      """Split a CSV line (with // comments and quoting) into cells."""
-      return _tokenize(line)
-  ```
+	def tokenize(line):
+			"""Split a CSV line (with // comments and quoting) into cells."""
+			return _tokenize(line)
+	```
 - Relative imports between a library's own modules are handled by the bundler.
 
 ## Subagent dispatch

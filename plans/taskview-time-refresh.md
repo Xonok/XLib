@@ -17,10 +17,10 @@ Add periodic time-based refresh to the tmux task view (`taskview/taskview.py`) s
 ## Design
 1. Add `--refresh-interval SECONDS` argument (default 600 = 10 min)
 2. In `--watch` mode:
-   - Track last full parse time
-   - On each poll (1s), check if refresh interval elapsed
-   - If yes: re-run `build_view` with fresh `datetime.now()` (no CSV re-read), redraw
-   - If no: only redraw if file changed
+		- Track last full parse time
+		- On each poll (1s), check if refresh interval elapsed
+		- If yes: re-run `build_view` with fresh `datetime.now()` (no CSV re-read), redraw
+		- If no: only redraw if file changed
 3. `fmt_time` and `fmt_due` already use `datetime.now()` — just need to call `build_view` again
 
 ## Integration Points

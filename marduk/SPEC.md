@@ -21,8 +21,8 @@ Marduk is a monitoring tool that displays live status of OpenCode agent instance
 │           "session_id": "abc123", "pid": 12345,                │
 │           "started_at": 1725800000 }                           │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+															│
+															▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Marduk (monitor)                                               │
 │    ├─ startup: reads all *.json in ~/.opencode/ports/          │
@@ -48,11 +48,11 @@ Marduk is a monitoring tool that displays live status of OpenCode agent instance
 ### Content (JSON)
 ```json
 {
-  "port": 4123,
-  "role": "researcher",
-  "session_id": "abc123def",
-  "pid": 12345,
-  "started_at": 1725800000.123
+	"port": 4123,
+	"role": "researcher",
+	"session_id": "abc123def",
+	"pid": 12345,
+	"started_at": 1725800000.123
 }
 ```
 - `port`: integer, the HTTP/SSE port
@@ -122,24 +122,24 @@ Marduk removes port files **only** on definitive signals:
 === Marduk (Live) ===
 
 XLib
-  planner      working     step:read  2s ago
-  reviewer     question    ?          5s ago
-  programmer   delegating  task       1s ago
+	planner      working     step:read  2s ago
+	reviewer     question    ?          5s ago
+	programmer   delegating  task       1s ago
 
 Agents
-  secretary    idle⚠                  3m ago
-  mechanic     working     step:write 10s ago
+	secretary    idle⚠                  3m ago
+	mechanic     working     step:write 10s ago
 ```
 
 ### Formatting Rules
 - **Header**: `=== Marduk (Live) ===`
 - **Workspace group**: Workspace name (from agent's cwd or role notes) — blank line before each group
 - **Agent line**: `  {role}  {status}  {detail}  {age}`
-  - Role: 12 chars, left-aligned
-  - Status: 10 chars, left-aligned (`idle`, `working`, `delegating`, `question`, `retry`, `disconnected`)
-  - **Warning marker**: `⚠` appended to status if SSE silent > `--warn-sse-secs` OR file age > `--warn-age-hours`
-  - Detail: current tool name or `?` for question, empty otherwise (truncated to fit)
-  - Age: right-aligned, human-readable (`2s`, `5m`, `1h23m`)
+	- Role: 12 chars, left-aligned
+	- Status: 10 chars, left-aligned (`idle`, `working`, `delegating`, `question`, `retry`, `disconnected`)
+	- **Warning marker**: `⚠` appended to status if SSE silent > `--warn-sse-secs` OR file age > `--warn-age-hours`
+	- Detail: current tool name or `?` for question, empty otherwise (truncated to fit)
+	- Age: right-aligned, human-readable (`2s`, `5m`, `1h23m`)
 - **Sorting**: Workspace alphabetical, then role alphabetical
 - **Empty state**: `no agents connected`
 

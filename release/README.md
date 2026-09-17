@@ -17,10 +17,10 @@ versioned file in `xlib/`.
 Versions are named `major_minor_revision`:
 
 - **Major**: primarily a chance to drop deprecated code. Gated behind enough
-  breaking changes AND enough time since the previous major. Rare, by design.
+	breaking changes AND enough time since the previous major. Rare, by design.
 - **Minor**: can add things, but must not break anything for previous users.
 - **Revision**: bugfixes (or attempts at such). Fix bugs only; don't add features
-  or change the API. This is the default bump.
+	or change the API. This is the default bump.
 
 A library's first release is always `1_0_0`; later versions are read from the
 latest existing release in `xlib/`.

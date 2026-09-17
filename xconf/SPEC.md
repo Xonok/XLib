@@ -8,36 +8,36 @@
 
 ```
 Directory structure:
-  <base>/default/name.json   ← default values (required)
-  <base>/name.json           ← user overrides (optional, auto-created)
+	<base>/default/name.json   ← default values (required)
+	<base>/name.json           ← user overrides (optional, auto-created)
 
 read("name"):
-    │
-    ▼
+		│
+		▼
 _load default (required) ──────► default dict
-    │
-    ▼
+		│
+		▼
 _load user (optional) ─────────► override dict (or create from default)
-    │
-    ▼
+		│
+		▼
 merge(default, override) ──────► merged dict (deep merge)
-    │
-    ├── if policy == "fill": ───► fill missing from default, write back
-    ├── if policy == "strict": ─► raise ValueError on missing keys
-    └── if policy == None: ─────► return override as-is (no default merge)
-    │
-    ▼
+		│
+		├── if policy == "fill": ───► fill missing from default, write back
+		├── if policy == "strict": ─► raise ValueError on missing keys
+		└── if policy == None: ─────► return override as-is (no default merge)
+		│
+		▼
 _data[name] = result ──────────► cached, returned
 
 save("name", data, diff_only=True):
-    │
-    ▼
+		│
+		▼
 _load default ─────────────────► default dict
-    │
-    ▼
+		│
+		▼
 difference(default, data) ─────► diff dict (only changed keys)
-    │
-    ▼
+		│
+		▼
 write_json(name, diff) ────────► <base>/name.json (only differences)
 ```
 
@@ -46,9 +46,9 @@ write_json(name, diff) ────────► <base>/name.json (only differ
 - **Deep merge**: `merge()` recursively merges dicts; non-dict values are replaced entirely. Lists are replaced, not merged.
 - **Defaults are mandatory**: A `default/name.json` must exist; user config is optional (auto-created on first read).
 - **Omission policies** (set via `no_omissions(name, strict=False)`):
-  - `fill` (default): missing keys from default are filled in, merged result written back to user config
-  - `strict`: missing keys raise `ValueError`; user must provide all keys
-  - `None`: no default merge; raw user config returned (or empty if none)
+	- `fill` (default): missing keys from default are filled in, merged result written back to user config
+	- `strict`: missing keys raise `ValueError`; user must provide all keys
+	- `None`: no default merge; raw user config returned (or empty if none)
 - **Diff-only save**: `save(name, data, diff_only=True)` computes `difference(default, data)` and writes only changed keys. If no changes, writes `{}`.
 - **Path format**: Base directory defaults to `"config"`. Changed via `configure(base)`.
 - **In-memory cache**: `read()` stores result in `_data[name]`; `get(name)` retrieves cached value.

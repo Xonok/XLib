@@ -13,8 +13,8 @@ the notes below describe the current design.
 - `release/release.py` — folder name equals the python file name. It is developed like a library (own folder, same code style) but is never itself released, like `xlint/`. Avoids "doer" names.
 - The release script does **not** test behavior of its output. The bundler is required to never change behavior; any case where it does is a bundler bug. So the script's own verification is minimal.
 - The bundler emits xlint-clean output with canonical external imports and
-  `############   from file: <rel>   ############` section markers. Import lines
-  are kept per module; there is no global merge pass.
+	`############   from file: <rel>   ############` section markers. Import lines
+	are kept per module; there is no global merge pass.
 
 ## Requirements
 

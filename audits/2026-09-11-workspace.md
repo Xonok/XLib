@@ -47,36 +47,36 @@ write-only API.
 
 **H2. pybundle/SPEC.md references a deleted entry file and removed machinery.**
 - `pybundle/SPEC.md:14`, `:118–120`, `:136` — "orchestrated by `bundle(entry)`
-  in `pybundle/bundler.py`" / "`pybundle/bundler.py`: Public API only" /
-  "`bundler.bundle(str(entry))`". `pybundle/bundler.py` is deleted in the
-  working tree (git status `D pybundle/bundler.py`); the public entry is the
-  untracked `pybundle/pybundle.py` with `bundle()` and `main()`.
+	in `pybundle/bundler.py`" / "`pybundle/bundler.py`: Public API only" /
+	"`bundler.bundle(str(entry))`". `pybundle/bundler.py` is deleted in the
+	working tree (git status `D pybundle/bundler.py`); the public entry is the
+	untracked `pybundle/pybundle.py` with `bundle()` and `main()`.
 - `:81–87` "Import Handling" and Known Limitations `:97–98`, `:101–106`
-  describe the hoisted-preamble machinery — `_merge_imports`, `_MERGE_IMPORT`,
-  `_MERGE_FROM` regexes — as current. VERSIONS.md 1_0_0 says "merge_imports
-  dropped" and 1_0_3 says "removed dead code (_merge_imports, _topo,
-  _MERGE_IMPORT, _MERGE_FROM)"; bundler_impl.py contains none of them; SPEC
-  `:74` itself says "no global merged preamble; `_merge_imports` removed".
-  The SPEC contradicts its own Import Handling section.
+	describe the hoisted-preamble machinery — `_merge_imports`, `_MERGE_IMPORT`,
+	`_MERGE_FROM` regexes — as current. VERSIONS.md 1_0_0 says "merge_imports
+	dropped" and 1_0_3 says "removed dead code (_merge_imports, _topo,
+	_MERGE_IMPORT, _MERGE_FROM)"; bundler_impl.py contains none of them; SPEC
+	`:74` itself says "no global merged preamble; `_merge_imports` removed".
+	The SPEC contradicts its own Import Handling section.
 - Internal contradiction on SyntaxError: `:23` says `ast.parse` failure raises
-  (hard stop, "never emitted as opaque"); `:110` (Known Limitation 6) says
-  syntax-broken modules get `tree = None` and are "emitted as-is (no
-  mangling)". Both cannot describe v1_x.
+	(hard stop, "never emitted as opaque"); `:110` (Known Limitation 6) says
+	syntax-broken modules get `tree = None` and are "emitted as-is (no
+	mangling)". Both cannot describe v1_x.
 - `:140` — "All 7 fixtures must pass" with a list of 7; `pybundle/test/fixtures/`
-  now has 10 (added: `self_alias`, `pep420_implicit`, `entry_only_imports`),
-  all verified passing.
+	now has 10 (added: `self_alias`, `pep420_implicit`, `entry_only_imports`),
+	all verified passing.
 
 **H3. STATUS.md snapshot and three rows no longer match HEAD.**
 - `STATUS.md:21` — "Repo on `master` at `8cb4daf`"; HEAD is `fcda15e` (three
-  commits later). STATUS.md itself was committed in `6fbd360` without
-  refreshing its own snapshot.
+	commits later). STATUS.md itself was committed in `6fbd360` without
+	refreshing its own snapshot.
 - `STATUS.md:93–94` — "agent-coord.py WORKER_MAP still says coding →
-  worker-mimo in the committed version … Uncommitted diff fixes it." The fix
-  is committed (`fcda15e`, "Update coder in agent-coord"); HEAD's WORKER_MAP
-  is `worker-north-mini-code`.
+	worker-mimo in the committed version … Uncommitted diff fixes it." The fix
+	is committed (`fcda15e`, "Update coder in agent-coord"); HEAD's WORKER_MAP
+	is `worker-north-mini-code`.
 - `STATUS.md:48` — xlint "new check works (scratch tests at root); uncommitted".
-  The xlint change is committed (`616d8c9`); and see M1 — the "check" claim
-  itself is misleading.
+	The xlint change is committed (`616d8c9`); and see M1 — the "check" claim
+	itself is misleading.
 
 **M1. STATUS.md overstates the xlint "return-type-hint check".**
 `STATUS.md:48` says "new check works". The committed xlint change is one regex
@@ -222,53 +222,53 @@ in-progress state to agents; it is shipped code. See R1.
 ## Cut candidates
 
 1. **`taskview/IMPLEMENTATION_NOTES.md`** — stale handoff brief; duplicates
-   `taskview/SPEC.md` (filter structure `:34–58`, filter evaluation `:104–115`,
-   integration `:123–133`, examples `:141`) and misrepresents shipped work as
-   pending, including a wrong default-context description. Replacement:
-   one-line reference in SPEC.md — "See `taskview/SPEC.md` for filter format
-   and evaluation." Evidence: feature committed in `129e4c2`; SPEC carries all
-   the information; nothing references the file (grep: only STATUS' commit
-   description).
+		`taskview/SPEC.md` (filter structure `:34–58`, filter evaluation `:104–115`,
+		integration `:123–133`, examples `:141`) and misrepresents shipped work as
+		pending, including a wrong default-context description. Replacement:
+		one-line reference in SPEC.md — "See `taskview/SPEC.md` for filter format
+		and evaluation." Evidence: feature committed in `129e4c2`; SPEC carries all
+		the information; nothing references the file (grep: only STATUS' commit
+		description).
 2. **Root scratch tests (`test_final.py`, `test_return_type_hints.py`,
-   `test_return_type_hints2.py`, `test_indent_edge.py`)** — STATUS itself
-   calls them cleanup candidates; no code references them; they test a check
-   that doesn't exist (see M1). If the return-type-hint check is wanted,
-   move the assertions into `xlint/` tests; otherwise delete. Evidence:
-   grep across repo finds references only in STATUS.md.
+		`test_return_type_hints2.py`, `test_indent_edge.py`)** — STATUS itself
+		calls them cleanup candidates; no code references them; they test a check
+		that doesn't exist (see M1). If the return-type-hint check is wanted,
+		move the assertions into `xlint/` tests; otherwise delete. Evidence:
+		grep across repo finds references only in STATUS.md.
 3. **pybundle/SPEC.md sections describing removed machinery** —
-   "Import Handling" (`:81–87`), Known Limitations 1/3/4 (`:97–98`,
-   `:101–106`) and limitation 6's opaque-SyntaxError paragraph (`:110`). They
-   describe `_merge_imports`/regex preamble/`tree = None` behavior that
-   VERSIONS 1_0_0/1_0_3 and bundler_impl.py contradict. Rewrite to current
-   single-pass behavior or delete. Evidence: SPEC's own `:74`; VERSIONS entries;
-   `bundler_impl.py` grep (no `_merge_imports`, no `_MERGE_*`).
+		"Import Handling" (`:81–87`), Known Limitations 1/3/4 (`:97–98`,
+		`:101–106`) and limitation 6's opaque-SyntaxError paragraph (`:110`). They
+		describe `_merge_imports`/regex preamble/`tree = None` behavior that
+		VERSIONS 1_0_0/1_0_3 and bundler_impl.py contradict. Rewrite to current
+		single-pass behavior or delete. Evidence: SPEC's own `:74`; VERSIONS entries;
+		`bundler_impl.py` grep (no `_merge_imports`, no `_MERGE_*`).
 
 ## Quick wins
 
 1. `xcsv/SPEC.md:5,11` — change "Current release (1_0_1) is write-only" to
-   "Current release 1_1_0", and extend the API table with `read_line`,
-   `read_all`, `write_line_tokens`, `write_all`, `parse_all`, `write_entries`,
-   `raise_errors`, and the exception hierarchy (all present in
-   `xcsv/xcsv.py`).
+		"Current release 1_1_0", and extend the API table with `read_line`,
+		`read_all`, `write_line_tokens`, `write_all`, `parse_all`, `write_entries`,
+		`raise_errors`, and the exception hierarchy (all present in
+		`xcsv/xcsv.py`).
 2. `STATUS.md` — refresh snapshot hash to `fcda15e`; update rows at `:47`,
-   `:48`, `:93–94` (role-notes complete: merged in `8aa653e`, env var wired
-   via oc-agent — see M4; xlint fix committed; WORKER_MAP committed); drop
-   `:101` ("OPENCODE_AGENT_ROLE not set by anything yet"); delete the
-   `reviews/xcsv-dev-review.md` pointer at `:110` (review is
-   `xcsv-81f355dd.md`).
+		`:48`, `:93–94` (role-notes complete: merged in `8aa653e`, env var wired
+		via oc-agent — see M4; xlint fix committed; WORKER_MAP committed); drop
+		`:101` ("OPENCODE_AGENT_ROLE not set by anything yet"); delete the
+		`reviews/xcsv-dev-review.md` pointer at `:110` (review is
+		`xcsv-81f355dd.md`).
 3. `AGENTS.md:129` — describe the four-pane launcher (xlint, taskview,
-   skynet, marduk) and drop "a shell in another".
+		skynet, marduk) and drop "a shell in another".
 4. `AGENTS.md:5,11,41` — update the id/notes scheme to `role-N` ids and
-   `.agents/agent-notes-{role}-{N}.md`, and mark `a1..a4`-style notes as
-   legacy (matches `STATUS.md:99–100`).
+		`.agents/agent-notes-{role}-{N}.md`, and mark `a1..a4`-style notes as
+		legacy (matches `STATUS.md:99–100`).
 5. `pybundle/SPEC.md` — rename `bundler.py` → `pybundle.py` (`:14`, `:118–120`,
-   `:136`), update fixtures to 10 with the three new names (`:140`), resolve
-   the SyntaxError contradiction (`:23` vs `:110`).
+		`:136`), update fixtures to 10 with the three new names (`:140`), resolve
+		the SyntaxError contradiction (`:23` vs `:110`).
 6. `release/README.md:30` — point at `pybundle/pybundle.py`, and rewrite once
-   the release.py direction (lib.bundle vs bundler) is committed.
+		the release.py direction (lib.bundle vs bundler) is committed.
 7. `marduk/SPEC.md:150–153` — `python3 tools/marduk.py` →
-   `python3 -m marduk.marduk`.
+		`python3 -m marduk.marduk`.
 8. Commit `tools/tmux-xlib.sh`'s `--context all` change (human-owned; it's the
-   only uncommitted line, matching `STATUS.md:55`).
+		only uncommitted line, matching `STATUS.md:55`).
 9. `plans/README.md` — add the six missing entries (`bundler.md` first) or
-   delete reality-plans per its own rule.
+		delete reality-plans per its own rule.

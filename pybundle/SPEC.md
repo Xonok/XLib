@@ -28,8 +28,8 @@ For each `Mod`:
 - Read the text (binary read, UTF-8 decode with Latin-1 fallback), build four parallel views: raw text, line start-offsets (`line_offsets`), tokens (`tokenize.generate_tokens`), and AST (`ast.parse`).
 - `_scope_frame`: determine which names are locals / globals / nonlocals / imports at each scope. Imports are tracked as their own category. Handles all assignment forms: `Assign`, `AnnAssign`, `AugAssign`, `NamedExpr`, `For`/`AsyncFor`, `With`/`AsyncWith`, `ExceptHandler`, plus function/class defs, lambdas, comprehensions.
 - `_resolve_imports` → `_import_stmt` / `_from_stmt`: walk **all** imports anywhere in the tree (nested ones included), resolve them locally where possible, record bindings (`bindmap`: name → `("mod", Module)` or `("name", "<flat>_<name>)"`), record `depmods` (each module this one depends on, including package prefixes via `_ensure_prefixes`), and mark each import statement as strip-or-keep (`imports_at`).
-  - Strip decision: `strip = local_hit or toplev` where `toplev = node.col_offset == 0`. **Only module-level imports are stripped**; imports inside functions/classes are preserved in the module body.
-  - External imports are **canonicalized** via `_canon_import`/`_canon_from` (preserving aliases, not verbatim).
+	- Strip decision: `strip = local_hit or toplev` where `toplev = node.col_offset == 0`. **Only module-level imports are stripped**; imports inside functions/classes are preserved in the module body.
+	- External imports are **canonicalized** via `_canon_import`/`_canon_from` (preserving aliases, not verbatim).
 - Build `namespace`: classify every module-level binding as `"mod"` or `"value"`, using both the imports and the top-level assignments.
 
 ### 3. Classify (`_classify` / `_walk`)
@@ -39,14 +39,14 @@ One AST walk with an explicit scope stack (functions, lambdas, comprehensions, c
 For every name reference (`ast.Name`):
 
 - `_resolve` walks the scope stack (reversed) to find whether the name is shadowed, then which binding it hits.
-  - Function/lambda/comprehension scopes: `globals` passes through; `nonlocals`/`locals` (if not in `imports`) shadows.
-  - Class scope: shadows only if the current node IS the class body (`stack[-1] is f`).
+	- Function/lambda/comprehension scopes: `globals` passes through; `nonlocals`/`locals` (if not in `imports`) shadows.
+	- Class scope: shadows only if the current node IS the class body (`stack[-1] is f`).
 - `_name_ref` records the final mangled replacement for each reference position (`ownrefs`):
-  - If binding is `("mod", Module)`:
-    - If `store` and module has `flat` prefix: record `("x", "<flat>_<name>")` and add to `topvals` (module assigned to a name).
-    - Else: record `("M", target_module)` for chain folding.
-  - If binding is `("name", mangled)`: record `("x", mangled)`.
-  - If no binding and `store` and `m.flat`: record `("x", "<flat>_<name>")` and add to `topvals` (top-level definition).
+	- If binding is `("mod", Module)`:
+		- If `store` and module has `flat` prefix: record `("x", "<flat>_<name>")` and add to `topvals` (module assigned to a name).
+		- Else: record `("M", target_module)` for chain folding.
+	- If binding is `("name", mangled)`: record `("x", mangled)`.
+	- If no binding and `store` and `m.flat`: record `("x", "<flat>_<name>")` and add to `topvals` (top-level definition).
 - `_strip_selfalias` kills `x = modulename` aliases **only when the RHS resolves to a `("mod", ...)` binding**. The alias statement is marked for stripping (`strips_at`); the name `x` gets the module's own mangled name.
 - `_global_stmt` rewrites `global x` to the mangled name where `x` is a module-level value. Builds `m.globals_at[lineno][name] = mangled_name` for the rewrite phase.
 - `_defkw_of` maps `def`/`class` **keyword token positions** to their mangled names. Scans **tokens** (not AST) for `NAME` tokens `"def"`/`"class"` followed by a `NAME`; matches against module-level defs/classes in `topvals`.
@@ -64,9 +64,9 @@ Reconstruct the source text by walking the token stream and applying replacement
 - Every `ownrefs` position: if `("x", mangled)` → replace token; if `("M", module)` → gather chain via `_gather_chain` and fold via `_fold`.
 - `_gather_chain`: collects consecutive `NAME . NAME . NAME` tokens.
 - `_fold(ctx, target_module, chain)`: iterates chain segments:
-  - If `cur.namespace.get(seg) == "value"` → return `prefix_seg` (mangled value).
-  - Else → lookup child module in `ctx.mods.get(cur.modpath + "." + seg)`; if **not found, bail (return `None`)** — the disk-child fix. If found, descend, extend prefix, continue.
-  - On success returns `(mangled_text, consumed_count, owner_module)`.
+	- If `cur.namespace.get(seg) == "value"` → return `prefix_seg` (mangled value).
+	- Else → lookup child module in `ctx.mods.get(cur.modpath + "." + seg)`; if **not found, bail (return `None`)** — the disk-child fix. If found, descend, extend prefix, continue.
+	- On success returns `(mangled_text, consumed_count, owner_module)`.
 - Replacements sorted by start offset, applied to original text.
 
 ### 5. Order & Assemble (`_topo`, `_bundle`)
@@ -99,9 +99,9 @@ Reconstruct the source text by walking the token stream and applying replacement
 2. **CRLF line endings**: `line_offsets` has no Windows (CRLF) support, but this is latent — consumers receive token positions, not raw `\r` bytes.
 
 3. **Single-pass redesign**: Currently a five-phase pipeline. A single-pass depth-first design is viable for acyclic import graphs (post-order emission IS a topological order), but would need to handle:
-   - The hoisted imports preamble (where do stripped imports go?)
-   - Cycle detection (explicit in-progress set)
-   - Per-module inline imports vs global merge
+		- The hoisted imports preamble (where do stripped imports go?)
+		- Cycle detection (explicit in-progress set)
+		- Per-module inline imports vs global merge
 
 4. **`merge_imports` necessity**: Currently serves the hoisted preamble — dedup + collapse of plain imports + group `from X import Y,Z`. It is presentation, not semantics. Open question: keep, drop, or replace with per-module dedup.
 
@@ -123,12 +123,12 @@ Per AGENTS.md, the public API split is:
 
 ```python
 def bundle(entry: str) -> str:
-    """Bundle `entry` (a file path) into one self-contained source string."""
-    ...
+		"""Bundle `entry` (a file path) into one self-contained source string."""
+		...
 
 def main():
-    """CLI entry point: bundle the entry script and print/stdout-write the result."""
-    ...
+		"""CLI entry point: bundle the entry script and print/stdout-write the result."""
+		...
 ```
 
 ## Release Integration

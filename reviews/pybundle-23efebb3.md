@@ -74,11 +74,11 @@ print(pkg.run())
 ```python
 # helper.py
 def load():
-    try:
-        import json
-    except ImportError:
-        json = None
-    return json
+		try:
+				import json
+		except ImportError:
+				json = None
+		return json
 # main.py
 import helper
 print(helper.load() is not None)
@@ -88,11 +88,11 @@ Original prints `True`. Bundled:
 
 ```python
 def helper_load():
-    try:
-        import json
-    except ImportError:
-        helper_json = None
-    return helper_json
+		try:
+				import json
+		except ImportError:
+				helper_json = None
+		return helper_json
 ```
 
 → `UnboundLocalError: cannot access local variable 'helper_json'` (json *does* import, so the except never assigns, and the mangled `helper_json` was never bound; even if it were, it's the wrong scope).
@@ -114,9 +114,9 @@ This is the single most common import idiom in Python (optional-dependency fallb
 ```python
 # main.py
 try:
-    from pkg.mod import x
+		from pkg.mod import x
 except ImportError:
-    from pkg.mod import x
+		from pkg.mod import x
 print(x)
 ```
 
@@ -128,9 +128,9 @@ with `pkg/__init__.py` empty and `pkg/mod.py` = `x = 5`. Bundled output keeps th
 
 ```python
 try:
-    from helper import x
+		from helper import x
 except ImportError:
-    x = 99
+		x = 99
 print(x)
 ```
 
@@ -148,9 +148,9 @@ Original prints `1` (import succeeds); bundle prints `99` — the kept import ca
 
 ```python
 try:
-    import helper
+		import helper
 except* ImportError:
-    raise
+		raise
 print('done')
 ```
 
@@ -159,7 +159,7 @@ Bundled output:
 ```python
 try:
 except* ImportError:
-    raise
+		raise
 print('done')
 ```
 
@@ -181,10 +181,10 @@ print('SIDE')
 x = 1
 # main.py
 if False:
-    import helper
-    print(helper.x)
+		import helper
+		print(helper.x)
 else:
-    print('skip')
+		print('skip')
 ```
 
 Original prints `skip`. Bundle prints `SIDE\nskip` — `helper`'s module-level code executes unconditionally because the import is stripped (`local_hit or toplev` — a block-nested internal import is stripped, contradicting SPEC.md line 31 "Only module-level imports are stripped") and the module is hoisted into the emitted set regardless of the condition.
@@ -219,8 +219,8 @@ Verified: a dependency containing `from b import *` emits `star import kept as-i
 
 ```python
 if body.strip() == "" and mod is not m:
-    # skip empty non-entry bodies; still record emitted
-    pass
+		# skip empty non-entry bodies; still record emitted
+		pass
 ```
 
 The `pass` branch is a no-op; the real empty-body check happens later (line 63-64). Remove it.
@@ -323,11 +323,11 @@ Orchestration + assembly — the only code the redesign rewrote — saved roughl
 1. **The rewrite engine was never in scope.** `_rewrite` (token walk), `_scope_frame`/`_walk`/`_resolve` (scope analysis), `_fold`/`_gather_chain` (chain folding) existed before the redesign and still exist; together they are ~430 of the 865 lines, and they are orthogonal to single- vs multi-pass ordering. "Easier" was a claim about control flow, and the control flow was already the small part.
 
 2. **Every bug fix is additive, and the fixes outsized the redesign's savings.** Each new behaviour is a new explicit case-branch in the engine:
-   - `_rewrite_import_module` (543-613): ~70 lines — rewriting non-stripped imports inside try/except (1_0_2/1_0_3).
-   - `_remove_internal_try_except` (816-865): ~50 lines — stripping internal-only try/except blocks (1_0_3). Note what this is: a **line-based re-implementation of string-munging** — precisely the category of code the single-pass AST redesign was supposed to eliminate — and it is buggy (bug 3: nested modules defeat it; the membership test keys on flat names against a modpath-keyed dict).
-   - `_resolve_imports_walk` + `try_stack` (~+20 lines) for import-stripping inside try/except.
-   - `SPECIAL` set growth, `_strip_selfalias` bindmap registration, `_fold`'s alias branch, `_name_ref` store handling, `_import_stmt`/`_from_stmt` prefix machinery, cycle-path tracking: together ~+50.
-   - The two try/except fixes alone (`_rewrite_import_module` + `_remove_internal_try_except` + the `_resolve` escape) added ~140 lines — the try/except problem domain went from "not handled" to "handled by ~145 lines across two mechanisms (AST walk *and* line parser)".
+		- `_rewrite_import_module` (543-613): ~70 lines — rewriting non-stripped imports inside try/except (1_0_2/1_0_3).
+		- `_remove_internal_try_except` (816-865): ~50 lines — stripping internal-only try/except blocks (1_0_3). Note what this is: a **line-based re-implementation of string-munging** — precisely the category of code the single-pass AST redesign was supposed to eliminate — and it is buggy (bug 3: nested modules defeat it; the membership test keys on flat names against a modpath-keyed dict).
+		- `_resolve_imports_walk` + `try_stack` (~+20 lines) for import-stripping inside try/except.
+		- `SPECIAL` set growth, `_strip_selfalias` bindmap registration, `_fold`'s alias branch, `_name_ref` store handling, `_import_stmt`/`_from_stmt` prefix machinery, cycle-path tracking: together ~+50.
+		- The two try/except fixes alone (`_rewrite_import_module` + `_remove_internal_try_except` + the `_resolve` escape) added ~140 lines — the try/except problem domain went from "not handled" to "handled by ~145 lines across two mechanisms (AST walk *and* line parser)".
 
 3. **The redesign also created new bookkeeping the old code lacked:** per-module import emission needs `imports_at` keyed by `(lineno, col_offset)` and the `(strip, ext)` tuple protocol (`_put_statement`, `_canon_import`/`_canon_from`), and the entry file grew 69 → 99 lines (ext harvesting, cycle reporting, the `_remove_internal_try_except` call, argparse).
 

@@ -46,21 +46,21 @@ or unmigrated inputs). Refine it around three distinct modes.
 ### Modes
 
 1. **Boundary decorator (exceptions).** Reject bad function inputs at
-   explicitly chosen boundaries — not all the time. A decorator wraps a
-   function so its parameters validate on entry. Raises (fail fast, call
-   does not proceed). This is the existing `@schema.validate` shape; keep it.
-   Decorators are opt-in per function by design: only edges the author trusts
-   to receive hostile data pay the cost.
+		explicitly chosen boundaries — not all the time. A decorator wraps a
+		function so its parameters validate on entry. Raises (fail fast, call
+		does not proceed). This is the existing `@schema.validate` shape; keep it.
+		Decorators are opt-in per function by design: only edges the author trusts
+		to receive hostile data pay the cost.
 
 2. **Standalone validator (error list, never throws).** The same types also
-   expose a plain callable: `errors(value, spec) -> list[ValidationError]`
-   (empty = pass). Convenient for validating data that arrived separately
-   from a function boundary (loaded doc, network payload).
+		expose a plain callable: `errors(value, spec) -> list[ValidationError]`
+		(empty = pass). Convenient for validating data that arrived separately
+		from a function boundary (loaded doc, network payload).
 
 3. **Read-then-validate (decoupled).** Reading data from disk/network never
-   involves type errors — load into plain structures (json.load, csv, ...),
-   validate as a separate explicit step afterwards. The library provides the
-   validate step; it does not wrap readers.
+		involves type errors — load into plain structures (json.load, csv, ...),
+		validate as a separate explicit step afterwards. The library provides the
+		validate step; it does not wrap readers.
 
 ### Error collection semantics
 
@@ -91,8 +91,8 @@ validation modes and for command-runner argument metadata.
 ### Sequencing
 
 - Phase 1: error collection (`errors()`), shared traversal, tests for the
-  sibling/stop-point rule.
+	sibling/stop-point rule.
 - Phase 2: decorator (existing `@schema.validate`) kept as mode 1; registry
-  name resolution for spec strings.
+	name resolution for spec strings.
 - Phase 3: read-then-validate example (json/csv), ensuring no type checks
-  leak into the load step.
+	leak into the load step.

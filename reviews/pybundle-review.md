@@ -41,9 +41,9 @@ The `_locate` function in `bundler_impl.py` correctly requires `__init__.py` to 
 
 ```python
 try:
-    m.tree = ast.parse(m.text)
+		m.tree = ast.parse(m.text)
 except SyntaxError:
-    m.tree = None
+		m.tree = None
 ```
 
 If a source file has a syntax error, `m.tree` becomes `None`, and `_analyze` returns early. However, the module is still added to `ctx.mods` and included in the dependency graph. Later, `_rewrite` is called on it, which iterates over `m.tokens` (tokenized successfully) but may produce incorrect output since the AST wasn't available for analysis.
@@ -110,8 +110,8 @@ The `_gather_chain` function (lines 674-684) only follows `NAME . NAME` sequence
 
 ```python
 for i, ch in enumerate(text):
-    if ch == "\n":
-        res.append(i + 1)
+		if ch == "\n":
+				res.append(i + 1)
 ```
 
 This doesn't handle `\r\n` (Windows) or `\r` (old Mac) line endings. If a source file uses `\r\n`, line offsets will be off by one character per line, causing incorrect token position mapping and potentially wrong rewrites.
@@ -168,7 +168,7 @@ Bundled code that uses `__file__`, `__path__`, `importlib.resources`, or `pkguti
 pkg = m.modpath if m.is_pkg else (m.modpath.rsplit(".", 1)[0] if "." in m.modpath else "")
 base = pkg
 for _ in range(node.level - 1):
-    base = base.rsplit(".", 1)[0] if "." in base else ""
+		base = base.rsplit(".", 1)[0] if "." in base else ""
 ```
 
 For a non-package module (most internal modules), `m.modpath` is something like `csv._.csv_tok`. The parent package is `csv._`. But `m.is_pkg` is `False` (not `__init__.py`), so it uses the `rsplit` logic.
@@ -193,9 +193,9 @@ Seems correct, but worth adding tests for deep relative imports.
 
 ```python
 if a.name == "*":
-    ctx.warnings.append("%s:%d star import kept as-is" % (m.modpath or "entry", node.lineno))
-    ext.append(_canon_from(a, base, node))
-    continue
+		ctx.warnings.append("%s:%d star import kept as-is" % (m.modpath or "entry", node.lineno))
+		ext.append(_canon_from(a, base, node))
+		continue
 ```
 
 Star imports are not expanded. This is correct (can't know what `*` exports without executing), but the warning doesn't include the module name, making it hard to locate.
@@ -261,10 +261,10 @@ The test fixtures (`pybundle/test/fixtures/`) don't include a case with an inter
 **Recommendation:** Add a fixture `internal_pkg/` with structure:
 ```
 internal_pkg/
-  main.py              # from ._.internal import func
-  _/
-    __init__.py        # makes _ a package
-    internal.py        # def func(): ...
+	main.py              # from ._.internal import func
+	_/
+		__init__.py        # makes _ a package
+		internal.py        # def func(): ...
 ```
 And verify the bundled output inlines `internal.py` correctly.
 

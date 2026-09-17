@@ -11,9 +11,9 @@ Add a second monitoring pane to the XLib tmux session showing live agent session
 - **Path**: `~/.local/share/opencode/opencode.db` (read-only, URI mode)
 - **Table**: `message`
 - **Relevant columns**:
-  - `session_id` — unique per opencode session
-  - `data` — JSON blob containing: `modelID`, `role`, `time.created`, `tokens.*`, `finish`, `error`, tool calls
-  - `time_created` — milliseconds since epoch
+	- `session_id` — unique per opencode session
+	- `data` — JSON blob containing: `modelID`, `role`, `time.created`, `tokens.*`, `finish`, `error`, tool calls
+	- `time_created` — milliseconds since epoch
 
 ### Session Identification
 Each opencode session corresponds to one agent instance. The session's agent identity is derived from:
@@ -31,21 +31,21 @@ Each opencode session corresponds to one agent instance. The session's agent ide
 ### Required Query
 ```sql
 SELECT session_id,
-       json_extract(data, '$.role') as role,
-       json_extract(data, '$.modelID') as model,
-       json_extract(data, '$.time.created') as msg_time,
-       json_extract(data, '$.tokens.input') as tok_in,
-       json_extract(data, '$.tokens.output') as tok_out,
-       json_extract(data, '$.tokens.total') as tok_total,
-       json_extract(data, '$.finish') as finish,
-       json_extract(data, '$.error.name') as error_name,
-       json_extract(data, '$.error.data.statusCode') as error_status,
-       json_extract(data, '$.toolCalls') as tool_calls,
-       json_extract(data, '$.content') as content,
-       time_created
+				json_extract(data, '$.role') as role,
+				json_extract(data, '$.modelID') as model,
+				json_extract(data, '$.time.created') as msg_time,
+				json_extract(data, '$.tokens.input') as tok_in,
+				json_extract(data, '$.tokens.output') as tok_out,
+				json_extract(data, '$.tokens.total') as tok_total,
+				json_extract(data, '$.finish') as finish,
+				json_extract(data, '$.error.name') as error_name,
+				json_extract(data, '$.error.data.statusCode') as error_status,
+				json_extract(data, '$.toolCalls') as tool_calls,
+				json_extract(data, '$.content') as content,
+				time_created
 FROM message
 WHERE json_extract(data, '$.role') = 'assistant'
-  AND time_created >= ?
+	AND time_created >= ?
 ORDER BY session_id, time_created
 ```
 
@@ -102,24 +102,24 @@ If identity cannot be resolved, display as `Unknown/{session_id[:8]}` with statu
 === Agents (Live) ===
 
 XLib/a1 (XLib)
-  planner      working  2m ago
-  reviewer     question 30s ago
+	planner      working  2m ago
+	reviewer     question 30s ago
 
 XLib/a2 (XLib)
-  programmer   idle     15m ago
+	programmer   idle     15m ago
 
 Agents/a1 (Agents)
-  secretary    working  1m ago
-  mechanic     idle     10m ago
+	secretary    working  1m ago
+	mechanic     idle     10m ago
 ```
 
 ### Formatting Rules
 - **Header**: `=== Agents (Live) ===`
 - **Workspace group**: `{workspace_tag}/{instance_tag} ({workspace_tag})` — blank line before each group
 - **Agent line**: `  {role}-{num}  {status}  {age}`
-  - Role truncated to 12 chars, left-aligned
-  - Status: `working`, `idle`, `question`, `delegating` (10 chars, left-aligned)
-  - Age: right-aligned in remaining space
+	- Role truncated to 12 chars, left-aligned
+	- Status: `working`, `idle`, `question`, `delegating` (10 chars, left-aligned)
+	- Age: right-aligned in remaining space
 - **Sorting**: Workspace tag alphabetical, then role alphabetical, then instance number
 - **Empty state**: `no active agents` if no sessions in window
 

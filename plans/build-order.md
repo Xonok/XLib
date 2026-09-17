@@ -8,12 +8,12 @@ Recommended order = dependencies first, with early work establishing the dev-fol
 xcsv ────────────┐
 file-handling ───┼──> logdb
 typechecking ────┴──┐
-                    ├──> command-runner ──> sessions
+										├──> command-runner ──> sessions
 xconf ──> file-server
 dnd-math ──> loot-tables
 server-framework ──> websocket ─┐
-     └─> file-server ───────────┤
-     └─> js-libraries ──────────┼──> webapp ──> reactive-web
+			└─> file-server ───────────┤
+			└─> js-libraries ──────────┼──> webapp ──> reactive-web
 ```
 
 Foundations first, everything fanning out from them.
@@ -21,9 +21,9 @@ Foundations first, everything fanning out from them.
 ## Phase 0 — release machinery
 
 1. **pybundle** (finish the bundler). **DONE** — `pybundle/pybundle.py` is the
-   public entry; internals live under `pybundle/_/`. Bundler output is xlint-clean,
-   uses per-module canonical import lines, and emits dependency sections before the
-   entry.
+		public entry; internals live under `pybundle/_/`. Bundler output is xlint-clean,
+		uses per-module canonical import lines, and emits dependency sections before the
+		entry.
 2. **release script** — consumes the bundler, produces `xlib/<library>_<major>_<minor>_<revision>.py`. Needs `-minor` / `-major` behavior described in readme.md, and to keep pins consistent (`xlib_pins.py`). **DONE** and validated end-to-end: `xtest` was the first library released through it (`xlib/xtest_1_0_0.py`), importable both unversioned (`from xlib import xtest`) and versioned (`from xlib import xtest_1_0_0`).
 
 Why first: everything below needs a way to become a versioned release, and it validates the whole "dev in a folder → release to xlib" model with trivial inputs.

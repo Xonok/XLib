@@ -14,15 +14,15 @@ to a microservice composition, except the "services" are libraries.
 ## Four kinds of code
 
 - **A — control/connection**: decides what happens, when, in what order, and
-  connects subsystems. Lives near the top (main, init, schedule, tick) and
-  stays small. A connects pipes with bounded fan-out; it doesn't drain them.
+	connects subsystems. Lives near the top (main, init, schedule, tick) and
+	stays small. A connects pipes with bounded fan-out; it doesn't drain them.
 - **B — IO leaf**: moves data in and out (files, network, external systems),
-  has no domain decisions, and is generic enough to reuse.
+	has no domain decisions, and is generic enough to reuse.
 - **C — generic leaf**: purely functional computation with no domain meaning —
-  reusable across projects.
+	reusable across projects.
 - **D — bespoke domain leaf**: purely functional computation with domain
-  meaning, but for one project's world. Still a library, but it lives in the
-  project that uses it, not in shared tooling like XLib.
+	meaning, but for one project's world. Still a library, but it lives in the
+	project that uses it, not in shared tooling like XLib.
 
 ## R1 — Leaves are leaves
 

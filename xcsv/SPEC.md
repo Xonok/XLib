@@ -45,10 +45,10 @@ Each carries context (line number, column, raw line). Writer functions also get 
 **Internal helper** (not public):
 ```python
 def _normalize_schema(schema):
-    """Accept list [col1, col2...] or dict {col: index} → return dict."""
-    if isinstance(schema, list):
-        return {col: i for i, col in enumerate(schema)}
-    return schema
+		"""Accept list [col1, col2...] or dict {col: index} → return dict."""
+		if isinstance(schema, list):
+				return {col: i for i, col in enumerate(schema)}
+		return schema
 ```
 
 ## Staged API Design
@@ -59,20 +59,20 @@ Basic CSV I/O. Tokens = `[val, None, val...]` (`None` for empty fields). Comment
 
 ```python
 def read_line(path: str, offset: int = 0, discard_comments: bool = True, raise_errors: bool = False):
-    """Read one line from byte offset. Returns (tokens, next_offset). Comments return (None, next_offset) if not discarded."""
-    ...
+		"""Read one line from byte offset. Returns (tokens, next_offset). Comments return (None, next_offset) if not discarded."""
+		...
 
 def read_all(path: str, discard_comments: bool = True, raise_errors: bool = False):
-    """Read entire file. Returns [(tokens, line_start, line_end), ...]. Header is just first entry."""
-    ...
+		"""Read entire file. Returns [(tokens, line_start, line_end), ...]. Header is just first entry."""
+		...
 
 def write_line(path: str, tokens: list, raise_errors: bool = False):
-    """Append one line (list of values/None) to file."""
-    ...
+		"""Append one line (list of values/None) to file."""
+		...
 
 def write_all(path: str, lines: list[list], raise_errors: bool = False):
-    """Append multiple lines to file."""
-    ...
+		"""Append multiple lines to file."""
+		...
 ```
 
 ### Stage 2 — Schema-based (header-aware, no reschema)
@@ -81,24 +81,24 @@ Schema = **list of header names** (preferred) or **dict {col: index}** (deprecat
 
 ```python
 def schema_parse(header: str, as_list: bool = False, raise_errors: bool = False):
-    """Header row → schema. as_list=False (default) returns {col: index} dict. as_list=True returns [col1, col2...] list."""
-    ...
+		"""Header row → schema. as_list=False (default) returns {col: index} dict. as_list=True returns [col1, col2...] list."""
+		...
 
 def parse_line(line: str, schema: list[str] | dict, allow_unfinished: bool = False, raise_errors: bool = False):
-    """Parse one line against schema. Returns {col: value}. Raises SchemaError if field count mismatch (unless allow_unfinished). Accepts list or dict schema."""
-    ...
+		"""Parse one line against schema. Returns {col: value}. Raises SchemaError if field count mismatch (unless allow_unfinished). Accepts list or dict schema."""
+		...
 
 def parse_all(path: str, schema: list[str] | dict, allow_unfinished: bool = False, raise_errors: bool = False, reschema: bool = False):
-    """Read all lines, parse each against schema. Returns [entry_dict, ...]. Comments skipped. By default (reschema=False), reschema rows raise ReschemaError. If reschema=True, handles reschema rows and updates schema. Accepts list or dict schema."""
-    ...
+		"""Read all lines, parse each against schema. Returns [entry_dict, ...]. Comments skipped. By default (reschema=False), reschema rows raise ReschemaError. If reschema=True, handles reschema rows and updates schema. Accepts list or dict schema."""
+		...
 
 def write_entry(path: str, schema: list[str] | dict, raise_errors: bool = False, allow_unfinished: bool = False, **data):
-    """Write one entry. Validates all keys in schema. If allow_unfinished, missing keys become empty fields. Accepts list or dict schema."""
-    ...
+		"""Write one entry. Validates all keys in schema. If allow_unfinished, missing keys become empty fields. Accepts list or dict schema."""
+		...
 
 def write_entries(path: str, schema: list[str] | dict, entries: list[dict], raise_errors: bool = False, allow_unfinished: bool = False):
-    """Write multiple entries. Accepts list or dict schema."""
-    ...
+		"""Write multiple entries. Accepts list or dict schema."""
+		...
 ```
 
 **Stage mixing behavior**: Stage 1 ignores `__reschema__` rows — not aware of reschema, treats them as ordinary data rows (does not skip). Stage 2 raises `ReschemaError` on them by default; `parse_all(reschema=False)` option enables reschema handling. Stage 3 handles them.
@@ -109,31 +109,31 @@ Requires exclusive process ownership of the file. Process tracks previous header
 
 ```python
 def file_reader(path: str, schema: list[str] = None, allow_unfinished: bool = False):
-    """
-    Returns a parser object (keeps file open):
-    - `next()` → entry_dict (blocks until new line available)
-    - `schema` property → current schema (updates on reschema)
-    - Handles reschema rows (__reschema__,col1,col2,...) — updates internal schema
-    - No schema pointers; reschema works by tracking previous header position in memory
-    """
-    ...
+		"""
+		Returns a parser object (keeps file open):
+		- `next()` → entry_dict (blocks until new line available)
+		- `schema` property → current schema (updates on reschema)
+		- Handles reschema rows (__reschema__,col1,col2,...) — updates internal schema
+		- No schema pointers; reschema works by tracking previous header position in memory
+		"""
+		...
 
 def file_writer(path: str, schema: list[str], allow_unfinished: bool = False):
-    """
-    Returns a writer object (keeps file open in append mode, exclusive):
-    - `write(entry_dict)`
-    - `reschema(new_schema: list[str])` — writes __reschema__ row, replaces schema entirely (previous schema dropped)
-    - Writer tracks previous header position for potential future use
-    """
-    ...
+		"""
+		Returns a writer object (keeps file open in append mode, exclusive):
+		- `write(entry_dict)`
+		- `reschema(new_schema: list[str])` — writes __reschema__ row, replaces schema entirely (previous schema dropped)
+		- Writer tracks previous header position for potential future use
+		"""
+		...
 
 def file_writer_open(path: str, initial_schema: list[str] = None):
-    """
-    Combined workflow: read existing file fully (via file_reader), then transition to writer.
-    Returns (entries_so_far, writer_object). Schema handling: if file has reschema rows,
-    the reader's final schema becomes the writer's schema.
-    """
-    ...
+		"""
+		Combined workflow: read existing file fully (via file_reader), then transition to writer.
+		Returns (entries_so_far, writer_object). Schema handling: if file has reschema rows,
+		the reader's final schema becomes the writer's schema.
+		"""
+		...
 ```
 
 ## Reschema (Stage 3 only; Stage 2 opt-in)

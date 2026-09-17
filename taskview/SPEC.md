@@ -19,8 +19,8 @@ Replaces the unused shell pane in `tmux-xlib.sh`.
 - `status`: `open` | `done` | `cancelled` (reopen = new `open` row)
 - `title`: task description
 - `due_ts`: Unix epoch seconds (deadline), or empty. Date-only entries are stored
-  at 12:00 noon of the due day — never midnight (see `taskupdate.py parse_due`
-  and `tasks.csv.example`)
+	at 12:00 noon of the due day — never midnight (see `taskupdate.py parse_due`
+	and `tasks.csv.example`)
 - `chg_ts`: Unix epoch seconds (when this record was written) — always present
 - `category`: single primary bucket (work/personal/house/learning/admin) — for display/grouping
 - `tags`: comma-separated cross-cutting concerns (oncall, blocking, someday, critical, emergency, migration) — PRIMARY filter mechanism
@@ -44,8 +44,8 @@ Replaces the unused shell pane in `tmux-xlib.sh`.
 label: "Work Hours"
 tags: ["work", "admin", "oncall", "blocking"]
 limits:
-  upcoming: 5
-  queue_breakdown: true
+	upcoming: 5
+	queue_breakdown: true
 ```
 
 - `label`: human-readable name for UI header
@@ -67,32 +67,32 @@ Narrow tmux pane, top to bottom:
 === Tasks (work) ===
 
 ▸ XLib: Review bundler end-to-end
-  In progress since yesterday. Next: agree review process with a2.
+	In progress since yesterday. Next: agree review process with a2.
 
- UPCOMING
- · Move GitHub folder to second drive          (by Sep 13)
- · Data loss prevention                         (by Sep 20)
- · MaFE public web page                         (this week)
+	UPCOMING
+	· Move GitHub folder to second drive          (by Sep 13)
+	· Data loss prevention                         (by Sep 20)
+	· MaFE public web page                         (this week)
 
- PACE (rolling)
- Day: 3 done, 1 active
- Week: 7 done, 2 active
- Month: 12 done, 5 active
+	PACE (rolling)
+	Day: 3 done, 1 active
+	Week: 7 done, 2 active
+	Month: 12 done, 5 active
 
- QUEUE
- 23 tasks remaining (8 shown, 15 filtered)
+	QUEUE
+	23 tasks remaining (8 shown, 15 filtered)
 ```
 
 - **Header**: `=== Tasks (context-name) ===` — shows active context label
 - **Current task**: Soonest-due `open` task from *filtered* set — overdue tasks
-  have priority, so the most overdue task sits in "now". No-due tasks never jump
-  the queue.
+	have priority, so the most overdue task sits in "now". No-due tasks never jump
+	the queue.
 - **Upcoming**: Next few `open` tasks from *filtered* set, one line each (respects `limits.upcoming`)
 - **Pace**: Rolling counts from *filtered* set
-  - Day: calendar day (midnight → now)
-  - Week: rolling 7 days
-  - Month: rolling 30 days
-  - Counts: `done` tasks by `chg_ts`, `active` = `open` tasks
+	- Day: calendar day (midnight → now)
+	- Week: rolling 7 days
+	- Month: rolling 30 days
+	- Counts: `done` tasks by `chg_ts`, `active` = `open` tasks
 - **Queue**: Total `open` tasks from *filtered* set, broken down by due date horizon (week/month/later)
 - **Filtered indicator**: `(X shown, Y filtered)` in Queue line
 
@@ -123,8 +123,8 @@ Uses ANSI clear-screen (`\033[2J\033[H`) like `skynet.py`.
 - **Folding**: `state[id] = row` in file order; skip comment lines (`//`); ignore rows with missing `id`.
 - **Tag parsing**: `tags` column split by comma, stripped, empty strings filtered → `set[str]`. Missing/empty column = empty set.
 - **Current task selection**: First `open` task in due-date order (open tasks
-  sorted by `due_ts`, then `chg_ts` desc, no-due last) — the most urgent task:
-  most overdue first, else soonest future due. No open tasks → none.
+	sorted by `due_ts`, then `chg_ts` desc, no-due last) — the most urgent task:
+	most overdue first, else soonest future due. No open tasks → none.
 - **Time parsing**: `due_ts` and `chg_ts` are Unix seconds (int). Display formats as relative ("2d", "Sep 13") or absolute.
 - **Dependencies**: None beyond stdlib. `inotify` optional (Linux) — if unavailable, falls back to 1s polling. `yaml` (PyYAML) for filter files. xcsv used by secretary only (writer).
 - **No release** — stays in `taskview/` dev folder. Not versioned.

@@ -8,49 +8,49 @@
 
 ```
 spec (str | type | Type | dict)
-       │
-       ▼
-  parse() ──────────────────► Type instance
-       │                           │
-       │                    +------------------+
-       │                    |                  |
-       ▼                    ▼                  ▼
+				│
+				▼
+	parse() ──────────────────► Type instance
+				│                           │
+				│                    +------------------+
+				│                    |                  |
+				▼                    ▼                  ▼
 Registry              Scalar types         Container types
 (type-id → class)     (Int/Float/Num/      (List, Dict,
-                       Bool/Str)             Composite)
-                                                       │
-                               ┌─────────────────────┘
-                               ▼
-                        validate(value, spec)
-                               │
-                               ▼
-                        Type.check(value, path[])
-                               │
-                               ├── raises ValidationError(path, msg)
-                               │     path → "user.addresses[0].zip"
-                               │
-                               └── returns None (success)
+												Bool/Str)             Composite)
+																												│
+																┌─────────────────────┘
+																▼
+												validate(value, spec)
+																│
+																▼
+												Type.check(value, path[])
+																│
+																├── raises ValidationError(path, msg)
+																│     path → "user.addresses[0].zip"
+																│
+																└── returns None (success)
 ```
 
 **Schema-from-function path:**
 ```
 @schema.validate
 def fn(a: int, b: str = "x"): ...
-       │
-       ▼
+				│
+				▼
 Schema.from_function(fn)  ──► inspect.signature
-       │                          │
-       ▼                          ▼
-  fields dict              annotations + defaults
-  {name: (Type, opt)}           │
-       │                        ▼
-       ▼              internal: _simple_from_annotation / _type_from_default
-  Schema(fn, fields)          │
-       │                        ▼
-       ▼              Type instances + optional flag
-  SchemaDecorator           │
-       │                        │
-       ▼                        ▼
+				│                          │
+				▼                          ▼
+	fields dict              annotations + defaults
+	{name: (Type, opt)}           │
+				│                        ▼
+				▼              internal: _simple_from_annotation / _type_from_default
+	Schema(fn, fields)          │
+				│                        ▼
+				▼              Type instances + optional flag
+	SchemaDecorator           │
+				│                        │
+				▼                        ▼
 wrapped(*args, **kwargs)  bind() → argdict → check() → ValidationError or call
 ```
 

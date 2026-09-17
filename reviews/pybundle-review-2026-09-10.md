@@ -32,20 +32,20 @@ Since my last review, the following fixes have been implemented and verified:
 **Solution (3-part fix):**
 
 1. **`_strip_selfalias` (lines 471-477)**: Registers the alias in `bindmap` when detecting `x = module`:
-   ```python
-   m.bindmap[t.id] = bm  # register alias for module reference via assigned name
-   ```
+		```python
+		m.bindmap[t.id] = bm  # register alias for module reference via assigned name
+		```
 
 2. **`_name_ref` (lines 512-520)**: Simplified — removed the problematic `if store and m.flat:` branch that caused double-prefix. Now all module references get `("M", target)`.
 
 3. **`_fold` (lines 720-738)**: Enhanced to follow module aliases via `bindmap`:
-   ```python
-   if kind == "mod":
-       bm = cur.bindmap.get(seg)
-       if bm and bm[0] == "mod":
-           # Follow the alias to the target module
-           ...
-   ```
+		```python
+		if kind == "mod":
+				bm = cur.bindmap.get(seg)
+				if bm and bm[0] == "mod":
+						# Follow the alias to the target module
+						...
+		```
 
 **Result:** `self_alias` fixture now correctly outputs:
 ```
@@ -62,20 +62,20 @@ print(helper_x)
 **Solution (2-part fix):**
 
 1. **`_locate` (lines 121-151)**: Returns directory path for PEP 420 packages:
-   ```python
-   file_path = os.path.join(dirpath, "__init__.py")
-   if not os.path.isfile(file_path) and os.path.isdir(dirpath):
-       return ".".join(parts), dirpath  # Return directory, not __init__.py
-   ```
+		```python
+		file_path = os.path.join(dirpath, "__init__.py")
+		if not os.path.isfile(file_path) and os.path.isdir(dirpath):
+				return ".".join(parts), dirpath  # Return directory, not __init__.py
+		```
 
 2. **`_ensure` (lines 165-191)**: Creates synthetic empty package module for directories:
-   ```python
-   if os.path.isdir(file):
-       m.text = ""
-       m.line_offsets = []
-       m.tokens = []
-       m.tree = ast.parse("")
-   ```
+		```python
+		if os.path.isdir(file):
+				m.text = ""
+				m.line_offsets = []
+				m.tokens = []
+				m.tree = ast.parse("")
+		```
 
 **Result:** `pep420_implicit` fixture now correctly outputs:
 ```
@@ -143,16 +143,16 @@ print(namespace_mod_x)
 **Single-pass DFS** in `bundler.py:bundle()`:
 ```
 dfs(mod):
-  if emitted: return
-  if visiting: return  # cycle guard
-  visiting.add(mod)
-  _analyze(ctx, mod)           # Analyze (locate → scope → imports → classify)
-  for dep in mod.depmods:      # Recurse dependencies (post-order)
-      dfs(dep)
-  visiting.remove(mod)
-  emitted.add(mod)
-  body = _rewrite(ctx, mod)    # Rewrite with name mangling
-  emit with file header + per-module external imports
+	if emitted: return
+	if visiting: return  # cycle guard
+	visiting.add(mod)
+	_analyze(ctx, mod)           # Analyze (locate → scope → imports → classify)
+	for dep in mod.depmods:      # Recurse dependencies (post-order)
+			dfs(dep)
+	visiting.remove(mod)
+	emitted.add(mod)
+	body = _rewrite(ctx, mod)    # Rewrite with name mangling
+	emit with file header + per-module external imports
 ```
 
 **Key mechanisms:**

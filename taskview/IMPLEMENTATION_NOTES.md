@@ -20,13 +20,13 @@ parser.add_argument("--context", default=None, help="Context name (loads filters
 - Filter directory: `~/.local/share/taskview/filters/`
 - Load YAML file: `<filter_dir>/<context>.yaml`
 - Parse structure:
-  ```yaml
-  label: "Work Hours"
-  tags: ["work", "admin", "oncall", "blocking"]
-  limits:
-    upcoming: 5
-    queue_breakdown: true
-  ```
+	```yaml
+	label: "Work Hours"
+	tags: ["work", "admin", "oncall", "blocking"]
+	limits:
+		upcoming: 5
+		queue_breakdown: true
+	```
 - Cache parsed filter; re-parse on mtime change in `--watch` mode
 
 ### 3. CSV Schema Update (Reading)
@@ -38,16 +38,16 @@ parser.add_argument("--context", default=None, help="Context name (loads filters
 For each open task (after folding), apply in order:
 ```python
 def passes_filter(task_tags: set[str], filter_tags: list[str]) -> bool:
-    # 1. never_show (built-in)
-    if task_tags & {"cancelled", "archived"}:
-        return False
-    # 2. always_show (built-in)
-    if task_tags & {"critical", "emergency"}:
-        return True
-    # 3. context filter (OR logic)
-    if filter_tags and not (task_tags & set(filter_tags)):
-        return False
-    return True
+		# 1. never_show (built-in)
+		if task_tags & {"cancelled", "archived"}:
+				return False
+		# 2. always_show (built-in)
+		if task_tags & {"critical", "emergency"}:
+				return True
+		# 3. context filter (OR logic)
+		if filter_tags and not (task_tags & set(filter_tags)):
+				return False
+		return True
 ```
 
 ### 5. Display Updates

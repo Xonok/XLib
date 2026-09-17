@@ -11,9 +11,9 @@ Small, dependency-free test runner with assert helpers. Complements xlint (style
 - Assert helpers raising `AssertionError` with a useful message: `equal`, `not_equal`, `same` (identity), `true`, `raises`, `contains`, `kind` (isinstance).
 - `@xtest.test` decorator registers a test function into the module-level registry.
 - `run(target=None)` runs tests and returns a nonzero exit code when any fail:
-  - no target → the registered tests
-  - a directory → discovers `test_*.py` files, running their `test_*` functions
-  - a file path → discovers in that file's directory
+	- no target → the registered tests
+	- a directory → discovers `test_*.py` files, running their `test_*` functions
+	- a file path → discovers in that file's directory
 
 ## Discovery and dev-vs-released import modes
 

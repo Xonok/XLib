@@ -15,14 +15,14 @@ wrong guesses: the purpose is declared before the words are read.
 ## Candidate types (to refine)
 
 - **Why / narrative** — intent and background; e.g. header maps and the
-  orchestrator comments in `style/common.md`'s Maps.
+	orchestrator comments in `style/common.md`'s Maps.
 - **Pitfall / warning** — a sharp caution where a future reader will assume
-  the wrong thing.
+	the wrong thing.
 - **Decision rationale** — why X over Y; ties back to the spec's decisions.
 - **Section marker** — structural label for long linear bodies (already
-  sanctioned in `style/python.md`).
+	sanctioned in `style/python.md`).
 - **Non-literal marker** — TODO/FIXME/hack: must look temporary, stand out,
-  and stay greppable.
+	and stay greppable.
 
 ## Keep separate
 
@@ -33,9 +33,9 @@ They stay out of this plan.
 ## Decisions to settle
 
 - How many types get fixed patterns; which live in `style/common.md` vs
-  `style/<language>.md`.
+	`style/<language>.md`.
 - Pattern mechanism: leading keyword (`NOTE:`, `WARN:`), visual shape
-  (alignment, leading marker, indent), or both.
+	(alignment, leading marker, indent), or both.
 - What an AI-followable rule looks like so generated comments follow the set.
 
 ## Status
