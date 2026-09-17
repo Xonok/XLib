@@ -99,10 +99,10 @@ Narrow tmux pane, top to bottom:
 ## Program Behavior
 
 **Modes**:
-- `python3 taskview/taskview.py` — render once, exit
-- `python3 taskview/taskview.py --watch` — watch for changes, redraw on change
-- `python3 taskview/taskview.py --context NAME` — use context `NAME` (loads `filters/NAME.yaml`)
-- `python3 taskview/taskview.py --context NAME --watch` — watch with context
+- `python3 tools/taskview/taskview.py` — render once, exit
+- `python3 tools/taskview/taskview.py --watch` — watch for changes, redraw on change
+- `python3 tools/taskview/taskview.py --context NAME` — use context `NAME` (loads `filters/NAME.yaml`)
+- `python3 tools/taskview/taskview.py --context NAME --watch` — watch with context
 
 **Filter Evaluation** (per open task, in order):
 1. If task has tag `cancelled` or `archived` → exclude (never_show)
@@ -134,7 +134,7 @@ Uses ANSI clear-screen (`\033[2J\033[H`) like `skynet.py`.
 **tmux-xlib.sh** change: replace shell pane command with:
 ```bash
 tmux split-window -h
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 taskview/taskview.py --watch --context ${TASKVIEW_CONTEXT:-default}" Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/taskview/taskview.py --watch --context ${TASKVIEW_CONTEXT:-default}" Enter
 ```
 
 **Secretary agent** (future): Skill/tool that:

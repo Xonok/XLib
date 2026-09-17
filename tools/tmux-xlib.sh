@@ -7,16 +7,16 @@ XLIB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 tmux kill-session -t "$SESSION"
 
 tmux new-session -d -s "$SESSION"
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 xlint/xlint.py --watch ." Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/xlint/xlint.py --watch ." Enter
 
 tmux split-window -h
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 taskview/taskview.py --watch" Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/taskview/taskview.py --watch" Enter
 
 tmux split-window -h
 tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/skynet.py --watch" Enter
 
 tmux split-window -h
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 -m marduk.marduk --watch" Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; PYTHONPATH=tools python3 -m marduk.marduk --watch" Enter
 
 tmux set-option -g mouse on
 tmux select-layout tiled

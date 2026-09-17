@@ -94,7 +94,7 @@ Uses `xcsv.write_entry` with updated schema.
 
 Update the taskview pane command:
 ```bash
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 taskview/taskview.py --watch --context \${TASKVIEW_CONTEXT:-default}" Enter
+tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/taskview/taskview.py --watch --context \${TASKVIEW_CONTEXT:-default}" Enter
 ```
 
 ---
