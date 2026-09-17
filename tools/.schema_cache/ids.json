@@ -1,0 +1,13 @@
+{
+  "read": "read_v94c8f84332d7",
+  "write": "write_vb5eb45b8387e",
+  "edit": "edit_v7e8cdd1c5671",
+  "grep": "grep_v4409d2d60762",
+  "glob": "glob_v02ed1507cb83",
+  "bash": "bash_va25404a70dd7",
+  "task": "task_v9eef79355043",
+  "webfetch": "webfetch_v36532a88733c",
+  "websearch": "websearch_v4ae2a10edbb9",
+  "todowrite": "todowrite_v896f35454185",
+  "skill": "skill_va46f9e21490f"
+}
