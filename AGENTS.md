@@ -65,8 +65,8 @@ The bundler packs a library into one file and prefixes internal function names (
 	from ._.csv_tok import tokenize as _tokenize
 
 	def tokenize(line):
-			"""Split a CSV line (with // comments and quoting) into cells."""
-			return _tokenize(line)
+		"""Split a CSV line (with // comments and quoting) into cells."""
+		return _tokenize(line)
 	```
 - Relative imports between a library's own modules are handled by the bundler.
 

@@ -148,7 +148,7 @@ dfs(mod):
 	visiting.add(mod)
 	_analyze(ctx, mod)           # Analyze (locate → scope → imports → classify)
 	for dep in mod.depmods:      # Recurse dependencies (post-order)
-			dfs(dep)
+		dfs(dep)
 	visiting.remove(mod)
 	emitted.add(mod)
 	body = _rewrite(ctx, mod)    # Rewrite with name mangling

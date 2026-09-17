@@ -222,18 +222,18 @@ Verdict (agent analysis):
 	cycle guard must be an explicit in-progress set, not (only) the cache.
 - **Caveats the single-pass design must absorb:**
 	1. ~~`refdeps`~~ — **RESOLVED: redundant.** See "Agreed issues". A pure
-			import-driven DFS is sufficient; `refdeps` never changes which modules
-			appear. (Initial concern about top-level `a.b` disk-submodule pulls was
-			tested and disproved: the fold's disk-child descent can't classify past
-			a non-`ensure`d module, so it yields an `unresolved chain` warning, not
-			a new module.)
+		import-driven DFS is sufficient; `refdeps` never changes which modules
+		appear. (Initial concern about top-level `a.b` disk-submodule pulls was
+		tested and disproved: the fold's disk-child descent can't classify past
+		a non-`ensure`d module, so it yields an `unresolved chain` warning, not
+		a new module.)
 	2. When a dependency is fully analyzed before the current module is
-			rewritten, cross-module name translation is safe-by-construction
-			(matches user's "every module is resolved by the time I need to
-			translate names coming from it"). Post-order guarantees it.
+		rewritten, cross-module name translation is safe-by-construction
+		(matches user's "every module is resolved by the time I need to
+		translate names coming from it"). Post-order guarantees it.
 	3. Hoisted imports preamble: current design strips imports out of bodies
-			and emits one merged preamble. Single-pass needs a home for stripped
-			imports (per-module inline, or global merge, or dissolve into mangles).
+		and emits one merged preamble. Single-pass needs a home for stripped
+		imports (per-module inline, or global merge, or dissolve into mangles).
 
 ### 2026-09-06 — merge_imports critique
 
