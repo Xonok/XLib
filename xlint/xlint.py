@@ -30,14 +30,14 @@ def is_ignored(path):
 	excluded = {"__pycache__", ".git", "node_modules", "xlib_legacy", "test"}
 	return bool(parts & excluded)
 
-def python_files(paths):
+def lint_files(paths):
 	found = []
 	for entry in paths:
-		if entry.is_file() and entry.suffix == ".py":
+		if entry.is_file() and entry.suffix in (".py", ".md"):
 			found.append(entry)
 		elif entry.is_dir():
-			for path in sorted(entry.rglob("*.py")):
-				if not is_ignored(path):
+			for path in sorted(entry.rglob("*")):
+				if not is_ignored(path) and path.suffix in (".py", ".md"):
 					found.append(path)
 	return found
 
@@ -143,18 +143,22 @@ def check_file(path, args):
 		return []
 	text_lines = [line.rstrip("\n") for line in lines]
 	problems = []
-	if not args.no_double_blank:
-		problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
-	if not args.no_space_indent:
-		problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
-	if not args.no_trailing:
-		problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
-	if not args.no_def_one_line:
-		problems.extend((line, msg) for line, msg in check_def_one_line(text_lines))
-	if not args.no_final_newline:
-		problems.extend((line, msg) for line, msg in check_final_newline(lines))
-	if not args.no_imports:
-		problems.extend((line, msg) for line, msg in check_imports(text_lines))
+	if path.suffix == ".py":
+		if not args.no_double_blank:
+			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
+		if not args.no_space_indent:
+			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
+		if not args.no_trailing:
+			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
+		if not args.no_def_one_line:
+			problems.extend((line, msg) for line, msg in check_def_one_line(text_lines))
+		if not args.no_final_newline:
+			problems.extend((line, msg) for line, msg in check_final_newline(lines))
+		if not args.no_imports:
+			problems.extend((line, msg) for line, msg in check_imports(text_lines))
+	elif path.suffix == ".md":
+		if not args.no_space_indent:
+			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
 	return problems
 
 class _InotifyWatcher:
@@ -216,9 +220,9 @@ class _InotifyWatcher:
 				return [("delete_dir", path)]
 			if mask & (_IN_CREATE | _IN_MOVED_TO):
 				self.add_dir(path)
-				return [("modify", inner) for inner in python_files([path])]
+				return [("modify", inner) for inner in lint_files([path])]
 			return []
-		if path.suffix != ".py":
+		if path.suffix not in (".py", ".md"):
 			return []
 		if mask & (_IN_DELETE | _IN_MOVED_FROM):
 			return [("delete_file", path)]
@@ -227,11 +231,11 @@ class _InotifyWatcher:
 class _PollWatcher:
 	def __init__(self, paths):
 		self.paths = paths
-		self.stamps = {path: stamp(path) for path in python_files(paths)}
+		self.stamps = {path: stamp(path) for path in lint_files(paths)}
 
 	def collect(self):
 		time.sleep(0.2)
-		current = {path: stamp(path) for path in python_files(self.paths)}
+		current = {path: stamp(path) for path in lint_files(self.paths)}
 		events = []
 		for path, value in current.items():
 			if value != self.stamps.get(path):
@@ -259,7 +263,7 @@ def draw(snapshot):
 		print(f"{path}:{line}: {msg}", flush=True)
 
 def watch(paths, args):
-	snapshot = {path: check_file(path, args) for path in python_files(paths)}
+	snapshot = {path: check_file(path, args) for path in lint_files(paths)}
 	watcher = make_watcher(paths)
 	draw(snapshot)
 	while True:
@@ -309,7 +313,7 @@ def main():
 		return 0
 
 	problems = []
-	for path in python_files(args.paths):
+	for path in lint_files(args.paths):
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
 	if not problems:
 		return 0
