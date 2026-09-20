@@ -26,7 +26,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `style/markdown.md` | Markdown formatting (indentation) |
 | `plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps |
 | `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
-| `STATUS.md` | Master status — what exists / is in progress / is done. Claim before editing. |
+| `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). Claim/update the `personal/<person>/...` path; claims resolve symlinks by realpath. |
 
 ## Versioning
 

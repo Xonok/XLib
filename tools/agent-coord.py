@@ -42,6 +42,140 @@ def save(path, data):
 		f.write("\n")
 	os.replace(tmp, path)
 
+# Personal files functions
+
+def resolve_person_id(args_person):
+	"""Resolve person id with precedence: --person, git config, $USER, else error."""
+	if args_person:
+		return args_person
+	try:
+		name = subprocess.check_output(
+			["git", "-C", workspace_root(), "config", "user.name"],
+			stderr=subprocess.DEVNULL, text=True).strip()
+		if name:
+			return name
+	except (subprocess.CalledProcessError, FileNotFoundError):
+		pass
+	name = os.environ.get("USER")
+	if name:
+		return name
+	sys_stderr("no person id found; set --person or configure git config user.name")
+	raise SystemExit(1)
+
+def sanitize_person_id(pid):
+	"""Sanitize person id for path safety: keep [A-Za-z0-9._-], replace other chars with -, strip leading/trailing .- and collapse multiple -."""
+	import re
+	pid = re.sub(r"[^A-Za-z0-9._-]", "-", pid)
+	pid = pid.strip("-._")
+	pid = re.sub(r"-+", "-", pid)
+	return pid
+
+def cmd_personal_whoami(args):
+	person = resolve_person_id(args.person)
+	pid = sanitize_person_id(person)
+	if not pid:
+		sys_stderr("person id resolved to empty after sanitization")
+		raise SystemExit(1)
+	print(pid)
+
+def cmd_personal_path(args):
+	person = resolve_person_id(args.person)
+	pid = sanitize_person_id(person)
+	base = os.path.join("personal", pid)
+	if args.file:
+		print(os.path.join(base, args.file))
+	else:
+		print(base)
+
+def _append_gitignore(ws_root, fn):
+	"""Append /<fn> to .gitignore if not already present."""
+	gitignore_path = os.path.join(ws_root, ".gitignore")
+	line = "/%s" % fn
+	try:
+		with open(gitignore_path, "r") as f:
+			existing = f.read()
+	except OSError:
+		existing = ""
+	if line not in existing.splitlines():
+		with open(gitignore_path, "a") as f:
+			if existing and not existing.endswith("\n"):
+				f.write("\n")
+			f.write(line + "\n")
+
+def cmd_personal_init(args):
+	person = resolve_person_id(args.person)
+	pid = sanitize_person_id(person)
+	if not pid:
+		sys_stderr("person id resolved to empty after sanitization")
+		raise SystemExit(1)
+	files = args.files.split(" ") if isinstance(args.files, str) else args.files
+	ws_root = workspace_root()
+	person_dir = os.path.join("personal", pid)
+	for fname in files:
+		fn = fname.strip(" ")
+		if not fn:
+			continue
+		person_path = os.path.join(person_dir, fn)
+		abs_person_path = os.path.join(ws_root, person_path)
+		root_path = os.path.join(ws_root, fn)
+		# 1. If personal file exists → skip silently, ensure symlink
+		if os.path.isfile(abs_person_path):
+			if os.path.islink(root_path):
+				if os.readlink(root_path) == person_path:
+					print("%s ready (existing)" % person_path)
+					continue
+				sys_stderr("%s exists as symlink to wrong target; refusing to overwrite" % root_path)
+				raise SystemExit(1)
+			if os.path.exists(root_path):
+				sys_stderr("%s exists as real file/directory; refusing to symlink over it (file was not migrated)" % root_path)
+				raise SystemExit(1)
+			os.symlink(person_path, root_path)
+			_append_gitignore(ws_root, fn)
+			print("%s ready (existing, symlinked)" % person_path)
+			continue
+		# 2. Root exists as real file and --seed current → migrate
+		if args.seed == "current" and os.path.isfile(root_path) and not os.path.islink(root_path):
+			os.makedirs(os.path.dirname(abs_person_path), exist_ok=True)
+			try:
+				subprocess.run(["git", "-C", ws_root, "ls-files", "--error-unmatch", fn],
+					check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				# Tracked → git mv (preserves history via rename detection)
+				subprocess.run(["git", "-C", ws_root, "mv", fn, person_path],
+					check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			except subprocess.CalledProcessError:
+				# Not tracked → plain rename + git add
+				os.rename(root_path, abs_person_path)
+				subprocess.run(["git", "-C", ws_root, "add", person_path], check=True)
+			# Create symlink
+			os.symlink(person_path, root_path)
+			_append_gitignore(ws_root, fn)
+			print("%s ready (migrated)" % person_path)
+			continue
+		# 3. Template path
+		os.makedirs(os.path.dirname(abs_person_path), exist_ok=True)
+		subject = os.path.basename(ws_root)
+		basename = os.path.splitext(fn)[0]
+		with open(abs_person_path, "w") as f:
+			f.write("# %s %s — %s\n" % (subject, basename, pid))
+			f.write("\n")
+			f.write("(empty template — edit me. To absorb an existing root file: personal init --seed current)\n")
+		# Create symlink
+		if os.path.islink(root_path):
+			if os.readlink(root_path) != person_path:
+				sys_stderr("%s symlink points to wrong target; refusing to overwrite" % root_path)
+				raise SystemExit(1)
+		elif os.path.exists(root_path):
+			sys_stderr("%s exists as real file/directory; refusing to symlink over it" % root_path)
+			raise SystemExit(1)
+		else:
+			os.symlink(person_path, root_path)
+		_append_gitignore(ws_root, fn)
+		print("%s ready (template)" % person_path)
+
+def cmd_personal(args):
+	{"whoami": cmd_personal_whoami, "path": cmd_personal_path,
+	 "init": cmd_personal_init}[args.personal_cmd](args)
+
 @contextmanager
 def locked():
 	os.makedirs(DIR, exist_ok=True)
@@ -254,7 +388,7 @@ def role_note_path(role, ws_root=None):
 	return os.path.join(ws_root, ".agents", "role-notes-%s.md" % role)
 
 def claim_paths(paths):
-	return [os.path.abspath(p) for p in paths]
+	return [os.path.realpath(os.path.abspath(p)) for p in paths]
 
 def cmd_id(args):
 	print(my_id())
@@ -722,6 +856,20 @@ def main():
 	p.add_argument("--role", default=None, help="role (default: caller's role)")
 	p.add_argument("--workspace", default=None, help="workspace tag (default: caller's workspace)")
 	sub.add_parser("role-status", help="show role note claims")
+	# Per-person operational files
+	p = sub.add_parser("personal", help="manage per-person operational files")
+	cp = p.add_subparsers(dest="personal_cmd", required=True)
+	sp = cp.add_parser("whoami", help="resolve and print person id")
+	sp.add_argument("--person", default=None, help="override person name")
+	sp = cp.add_parser("path", help="print personal file path")
+	sp.add_argument("file", nargs="?", default=None, help="file within personal dir")
+	sp.add_argument("--person", default=None, help="override person name")
+	sp = cp.add_parser("init", help="initialize personal files and root symlinks")
+	sp.add_argument("--person", default=None, help="override person name")
+	sp.add_argument("--seed", choices=["current", "template"], default="template",
+		help="seed from current root file or template (default: template)")
+	sp.add_argument("--files", default="STATUS.md PLAN.md TASKS.md",
+		help="space-separated list of files (default: STATUS.md PLAN.md TASKS.md)")
 	p = sub.add_parser("ctx", help="manage subagent context (task_ids, batch queues)")
 	cp = p.add_subparsers(dest="ctx_cmd", required=True)
 	sp = cp.add_parser("status", help="show subagent context status")
@@ -751,7 +899,7 @@ def main():
 	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch,
 	 "role-note": cmd_role_note, "role-claim": cmd_role_claim,
 	 "role-release": cmd_role_release, "role-status": cmd_role_status,
-	 "ctx": cmd_ctx}[args.command](args)
+	 "personal": cmd_personal, "ctx": cmd_ctx}[args.command](args)
 
 if __name__ == "__main__":
 	main()

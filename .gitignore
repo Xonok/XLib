@@ -4,3 +4,4 @@ agent-notes*.md
 .opencode/agent/
 .opencode/opencode.jsonc
 .opencode/agent
+/STATUS.md
