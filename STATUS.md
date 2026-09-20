@@ -16,7 +16,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - The % done number is **your own estimate of how done you think it is** — rough
 	is fine, stale is not.
 
-## Snapshot (as of 2026-09-16; commits below are from the 09-11 snapshot, only the marduk fix has changed since)
+## Snapshot (as of 2026-09-20; commits below are from the 09-11 snapshot, only the marduk fix has changed since)
 
 - Repo on `master` at `8cb4daf`; since the previous snapshot (`314c158`, 09-09)
 	**14 commits landed**:
@@ -38,6 +38,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - No file claims outstanding.
 - `.opencode/` is a symlink to `/storage/Agents/.opencode/` (git-ignored, not untracked).
 - **Coordinator model switched** to `openrouter/nex-agi/nex-n2.5-pro:free` (from `opencode/ling-3.0-flash-fin-free`). Updated `.opencode/agent/coordinator.md` and `.opencode/agent-common/coordinator.md`. Secretary, 09-11.
+- **`.opencode/agent-common/` removed** (2026-09-20, secretary): orchestration workflow inlined into the six referring agent files (auditor, documenter, mechanic, researcher, secretary, tester); `XLib/.opencode/agent-common` symlink + root `.gitignore` entry dropped. `.opencode/agent` remains the single canonical set (symlinked from global config and `XLib/.opencode/agent`). Line above is historical.
 
 ## In progress
 
