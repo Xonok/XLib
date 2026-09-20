@@ -196,7 +196,7 @@ def watch(window_hours):
 
 def main():
 	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage, refusals, finish reasons")
-	parser.add_argument("--window-hours", type=int, default=7 * 24, help="how far back to look (default 168)")
+	parser.add_argument("--window-hours", type=int, default=28 * 24, help="how far back to look (default 672)")
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw when usage changes")
 	parser.add_argument("--extra", action="store_true", help="show extra columns (Len, Tool, Stop, Unk)")
 	args = parser.parse_args()
