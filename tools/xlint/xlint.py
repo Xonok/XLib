@@ -61,6 +61,65 @@ def check_space_indent(lines):
 			report.append((index, "indented with spaces"))
 	return report
 
+def check_space_indent_exempt(lines, exempt):
+	report = []
+	for index, line in enumerate(lines, start=1):
+		if index in exempt:
+			continue
+		if _SPACE_INDENT_RE.match(line):
+			report.append((index, "indented with spaces"))
+	return report
+
+def _frontmatter_exempt(lines):
+	if not lines or lines[0] != "---":
+		return set()
+	for i in range(1, len(lines)):
+		if lines[i] == "---":
+			return set(range(1, i + 2))
+	return set()
+
+def _fence_exempt(lines):
+	exempt = set()
+	in_fence = False
+	fence_char = None
+	fence_len = 0
+	for i, line in enumerate(lines, start=1):
+		if not line:
+			if in_fence:
+				exempt.add(i)
+			continue
+		if line[0].isspace():
+			if in_fence:
+				exempt.add(i)
+			continue
+		ch = line[0]
+		if ch not in ("`", "~"):
+			if in_fence:
+				exempt.add(i)
+			continue
+		count = 0
+		for c in line:
+			if c == ch:
+				count += 1
+			else:
+				break
+		if count >= 3:
+			if not in_fence:
+				in_fence = True
+				fence_char = ch
+				fence_len = count
+			else:
+				if ch == fence_char and count >= fence_len:
+					in_fence = False
+					fence_char = None
+					fence_len = 0
+				else:
+					exempt.add(i)
+		else:
+			if in_fence:
+				exempt.add(i)
+	return exempt
+
 def check_trailing_whitespace(lines):
 	report = []
 	for index, line in enumerate(lines, start=1):
@@ -158,7 +217,9 @@ def check_file(path, args):
 			problems.extend((line, msg) for line, msg in check_imports(text_lines))
 	elif path.suffix == ".md":
 		if not args.no_space_indent:
-			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
+			exempt = _frontmatter_exempt(text_lines)
+			exempt.update(_fence_exempt(text_lines))
+			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
 	return problems
 
 class _InotifyWatcher:
