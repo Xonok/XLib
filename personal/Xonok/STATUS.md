@@ -51,6 +51,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 | taskview periodic time refresh | — | planned only; noted in taskview SPEC | `plans/taskview-time-refresh.md` |
 | **xAudit tool** | secretary | planned + decided; implementation pending | `plans/xaudit.md` |
 | **xlint + release move to `tools/`** | human-owned | decided; not started (git change, release.py carries uncommitted WIP) | blast radius in `plans/xaudit.md` |
+| **xlint frontmatter/fence skip (A+B)** | — | spec written 2026-09-22 (YAML frontmatter + fenced code blocks exempt from the .md space-indent check); implementation pending, ready for a separate agent | `doc/plans/xlint-frontmatter-fence-skip.md`, taskview #48 |
 
 ## Recently done
 
