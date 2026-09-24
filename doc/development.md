@@ -33,9 +33,9 @@ it. Single source of truth for intent and the conflict authority. Structure:
 
 1. **Goal** — one prose paragraph: why this exists.
 2. **Requirements** — the technical encoding: behaviors, formulas, interfaces,
-   constraints. What tests trace to.
+	constraints. What tests trace to.
 3. **Decisions** — numbered: choice, why, what was rejected. The choices on the
-   way to the goal.
+	way to the goal.
 
 The spec is iterated: the reviewer's pass 1 surfaces flaws, the human fixes the
 spec, and the loop repeats until tests derive cleanly. The finished spec must
@@ -54,7 +54,7 @@ implementation is written on them.
 - One assertion per test.
 - Descriptive names (scenario + expected outcome).
 - **Never invent**: where the spec cannot support a test, that is a spec flaw —
-  reported to the human to fix, never papered over with an assumption.
+	reported to the human to fix, never papered over with an assumption.
 
 Traceability, both directions:
 
@@ -70,7 +70,7 @@ Agents workspace (`plans/done/`).
 
 - Build the tests from the spec.
 - Every place test derivation fails is a spec flaw: report it to the human (the
-  flaw list is the deliverable — not invented test assumptions).
+	flaw list is the deliverable — not invented test assumptions).
 - Traceability, both directions.
 - The loop repeats until the tests build clean and the human signs off.
 
@@ -81,13 +81,13 @@ tests still pass, and the implementation matches what the tests specify.
 ## Rules
 
 - **Conflict rule**: a test that disagrees with the spec is wrong — the spec is
-  intent (the human's), the test is its encoding. Back to the reviewer. The
-  programmer never silently changes a test to fit code; it flags the conflict.
+	intent (the human's), the test is its encoding. Back to the reviewer. The
+	programmer never silently changes a test to fit code; it flags the conflict.
 - **Silence rule**: where tests are silent, the spec decides. Where the spec is
-  also silent, that is a flaw — back to the human, not invented by the
-  implementer.
+	also silent, that is a flaw — back to the human, not invented by the
+	implementer.
 - **Separation**: the reviewer writes tests and the programmer writes
-  implementation — never the same agent doing both, never one combined session.
+	implementation — never the same agent doing both, never one combined session.
 
 ## Handoff (the implementer's contract)
 

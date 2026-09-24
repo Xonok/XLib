@@ -143,3 +143,5 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 - Shared user context: `.agents/shared-notes.md`. Per-agent state: `.agents/agent-notes-<id>.md` (role-scoped going forward).
 - Reviews: `reviews/taskview-2026-09-08-*.md` (3 versions, newest = `87c183`), `reviews/xcsv-dev-review.md` (new, untracked).
 - Code rules: `AGENTS.md` + `style/*.md`; library maps: `<lib>/SPEC.md`.
+## Recently done
+- 2026-09-24: Fixed linter errors in `doc/development.md` (spaces -> tabs per `doc/style/markdown.md`). Tool: `python3 tools/xlint/xlint.py .`. Documented in `.agents/shared-notes.md`. xlint clean.
