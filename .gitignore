@@ -5,3 +5,7 @@ agent-notes*.md
 .opencode/opencode.jsonc
 .opencode/agent
 /STATUS.md
+
+# [epiq]: local hydrated state is never committed
+.epiq/events/
+.epiq/log/
