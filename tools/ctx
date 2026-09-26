@@ -1,0 +1,192 @@
+#!/bin/bash
+# ctx - report opencode context-window usage for the current session.
+#
+# Token accounting comes from opencode's SQLite store
+# (~/.local/share/opencode/opencode.db); the context limit comes from
+# opencode's model cache (~/.cache/opencode/models.json).
+#
+# Usage:
+#   ctx                  current session in $PWD (default)
+#   ctx -a reviewer      only sessions belonging to a given agent
+#   ctx --all            ignore the $OPENCODE_AGENT_ROLE hint
+#   ctx -n 5             show the last 5 completed turns (trend)
+#   ctx --json           machine-readable
+#
+# Inside an oc-agent session OPENCODE_AGENT_ROLE is set, so the default run
+# already scopes to that agent. From a plain shell it falls back to whatever
+# session last wrote in $PWD.
+#
+# Notes:
+#   * Reports the last *completed* assistant turn, so during a long turn the
+#     figure lags by one. In-flight messages land in the db with a null token
+#     total and are skipped rather than reported as 0.
+#   * "fresh" is uncached input; "cache read" is prompt-cache hits. Both
+#     occupy the window, so context = sum of all five components.
+
+set -uo pipefail
+
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/models.json"
+OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+
+usage() { sed -n '3,21p' "$0" | sed 's/^#\{1,\} \{0,1\}//'; }
+
+AGENT="${OPENCODE_AGENT_ROLE:-}"
+NUM=1
+JSON=0
+
+die() { printf 'ctx: %s\n' "$1" >&2; exit "${2:-1}"; }
+
+while (( $# )); do
+	case $1 in
+		-a|--agent) [[ $# -ge 2 ]] || die "$1 needs a value" 2; AGENT=$2; shift 2 ;;
+		-n|--num) [[ $# -ge 2 ]] || die "$1 needs a value" 2; NUM=$2; shift 2 ;;
+		--all) AGENT=""; shift ;;
+		--json) JSON=1; shift ;;
+		-h|--help) usage; exit 0 ;;
+		*) die "unknown argument '$1' (try --help)" 2 ;;
+	esac
+done
+
+[[ $NUM =~ ^[0-9]+$ ]] && (( NUM > 0 )) || die "-n must be a positive integer" 2
+command -v "$OPENCODE_BIN" >/dev/null || die "opencode not found on PATH"
+
+# Locate this session: match sessions rooted at $PWD, at a parent of $PWD, or
+# at $PWD itself, so the script still works from a subdirectory. Uses
+# substr/|| rather than LIKE, so a '_' in a path is not a single-char wildcard.
+sq() { printf '%s' "${1//\'/\'\'}"; }
+HERE=$(sq "$PWD")
+AGENT_CLAUSE=""
+[[ -n $AGENT ]] && AGENT_CLAUSE="AND s.agent = '$(sq "$AGENT")'"
+
+SQL="
+SELECT json_extract(m.data,'\$.modelID')           AS model,
+       m.time_created                              AS ts,
+       json_extract(m.data,'\$.tokens.total')      AS total,
+       COALESCE(json_extract(m.data,'\$.tokens.input'),0)     AS fresh_in,
+       COALESCE(json_extract(m.data,'\$.tokens.cache.read'),0)  AS cache_read,
+       COALESCE(json_extract(m.data,'\$.tokens.cache.write'),0) AS cache_write,
+       COALESCE(json_extract(m.data,'\$.tokens.output'),0)     AS out_tok,
+       COALESCE(json_extract(m.data,'\$.tokens.reasoning'),0)  AS reason
+FROM message m
+JOIN session s ON s.id = m.session_id
+WHERE (s.directory = '$HERE'
+       OR substr('$HERE', 1, length(s.directory) + 1) = s.directory || '/')
+  $AGENT_CLAUSE
+  AND json_extract(m.data,'\$.role') = 'assistant'
+  AND json_extract(m.data,'\$.tokens.total') IS NOT NULL
+ORDER BY m.time_created DESC
+LIMIT $NUM;"
+
+RAW=$("$OPENCODE_BIN" db "$SQL" --format tsv 2>&1) || die "query failed:"$'\n'"$RAW"
+ROWS=${RAW#*$'\n'} # strip the tsv header
+
+if [[ -z ${ROWS//[[:space:]]/} ]]; then
+	hint=""
+	[[ -n $AGENT ]] && hint=" for agent '$AGENT'"
+	if (( JSON )); then
+		jq -n --arg h "$hint" '{error: ("no completed assistant turns" + $h)}'
+	else
+		printf 'ctx: no completed assistant turns%s in %s\n' "$hint" "$PWD"
+		printf '     opencode only stores a turn once it completes - try --all, or -n 5\n'
+	fi
+	exit 0
+fi
+
+limit_of() {
+	[[ -r $CACHE ]] || return 0
+	jq -r --arg m "$1" \
+		'[.[] | (.models // {})[$m].limit.context // empty] | first // empty' \
+		"$CACHE" 2>/dev/null
+}
+maxout_of() {
+	[[ -r $CACHE ]] || return 0
+	jq -r --arg m "$1" \
+		'[.[] | (.models // {})[$m].limit.output // empty] | first // empty' \
+		"$CACHE" 2>/dev/null
+}
+pct_of() { # pct_of <total> <limit>
+	awk -v t="$1" -v l="${2:-0}" \
+		'BEGIN{ if (l > 0) printf "%.1f", t*100/l; else printf "null" }'
+}
+bar() { # bar <percent> [width]
+	local pct=${1%%.*} w=${2:-24} n
+	n=$(( (pct * w + 50) / 100 ))
+	(( n > w )) && n=$w
+	(( n < 1 && pct > 0 )) && n=1 # never render a non-zero load as empty
+	(( n < 0 )) && n=0
+	printf '%*s' "$n" '' | tr ' ' '#'
+}
+k() { printf "%'d" "$1"; }
+at() { date -d "@$(( $1 / 1000 ))" '+%H:%M:%S' 2>/dev/null; }
+
+if (( JSON )); then
+	{
+		printf '{"cwd":%s,"agent_filter":%s,"turns":[' \
+			"$(jq -Rn --arg v "$PWD" '$v')" "$(jq -Rn --arg v "$AGENT" '$v')"
+		sep=""
+		while IFS=$'\t' read -r model ts total fresh_in cache_read cache_write out_tok reason; do
+			[[ -n ${total:-} ]] || continue
+			lim=$(limit_of "$model"); [[ -n $lim ]] || lim=null
+			printf '%s' "$sep"; sep=$','
+			jq -n -c \
+				--arg model "$model" --arg at "$(at "$ts")" \
+				--argjson total "$total" --argjson fresh_in "$fresh_in" \
+				--argjson cache_read "$cache_read" --argjson cache_write "$cache_write" \
+				--argjson output "$out_tok" --argjson reasoning "$reason" \
+				--argjson limit "$lim" --argjson percent "$(pct_of "$total" "${lim:-0}")" \
+				'{model:$model,at:$at,total:$total,limit:$limit,percent:$percent,
+				  fresh_in:$fresh_in,cache_read:$cache_read,cache_write:$cache_write,
+				  output:$output,reasoning:$reasoning}'
+		done <<< "$ROWS"
+		printf ']}\n'
+	} | jq 'if (.turns|length) > 0 then . + {summary: .turns[0]} else . end'
+	exit 0
+fi
+
+printf '\n  cwd      %s\n' "$PWD"
+[[ -n $AGENT ]] && printf '  agent    %s\n' "$AGENT"
+
+n=0
+while IFS=$'\t' read -r model ts total fresh_in cache_read cache_write out_tok reason; do
+	[[ -n ${total:-} ]] || continue
+	n=$(( n + 1 ))
+	lim=$(limit_of "$model")
+	mo=$(maxout_of "$model")
+	pct=$(pct_of "$total" "${lim:-0}")
+
+	printf '\n  model    %s' "$model"
+	[[ -n $lim ]] && printf '   window %s' "$(k "$lim")"
+	[[ -n $mo ]] && printf '   max output %s' "$(k "$mo")"
+	printf '\n'
+
+	printf '  turn     %s' "$(at "$ts")"
+	(( NUM > 1 )) && printf '   (%d of %d, newest first)' "$n" "$NUM"
+	printf '\n'
+
+	if [[ $pct != null ]]; then
+		printf '  context  %s / %s  = %5s%%\n' "$(k "$total")" "$(k "$lim")" "$pct"
+		printf '          [%s]\n' "$(bar "$pct")"
+	else
+		printf '  context  %s / unknown\n' "$(k "$total")"
+	fi
+
+	printf '  tokens   fresh %s | cache read %s | output %s | reasoning %s | cache write %s\n' \
+		"$(k "$fresh_in")" "$(k "$cache_read")" "$(k "$out_tok")" "$(k "$reason")" \
+		"$(k "$cache_write")"
+done <<< "$ROWS"
+
+if (( n > 1 )); then
+	printf '\n  trend, oldest -> newest\n'
+	while IFS=$'\t' read -r model ts total fresh_in cache_read cache_write out_tok reason; do
+		[[ -n ${total:-} ]] || continue
+		lim=$(limit_of "$model")
+		p=$(pct_of "$total" "${lim:-0}")
+		if [[ $p == null ]]; then
+			printf '    %s  %12s\n' "$(at "$ts")" "$(k "$total")"
+		else
+			printf '    %s  %12s  [%s] %5s%%\n' \
+				"$(at "$ts")" "$(k "$total")" "$(bar "$p" 18)" "$p"
+		fi
+	done <<< "$(printf '%s\n' "$ROWS" | tac)"
+fi
+printf '\n'
