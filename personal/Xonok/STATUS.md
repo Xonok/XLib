@@ -52,6 +52,7 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 | **xAudit tool** | secretary | planned + decided; implementation pending | `plans/xaudit.md` |
 | **xlint + release move to `tools/`** | human-owned | decided; not started (git change, release.py carries uncommitted WIP) | blast radius in `plans/xaudit.md` |
 | **xlint frontmatter/fence skip (A+B)** | — | spec written 2026-09-22 (YAML frontmatter + fenced code blocks exempt from the .md space-indent check); implementation pending, ready for a separate agent | `doc/plans/xlint-frontmatter-fence-skip.md`, taskview #48 |
+| **epiq board — pool/model routing tickets** | secretary | 2 of 3 filed 2026-09-27, all in `Todo`, unassigned; first commit + push still blocked (below) | epiq `Q397WZG`, `DY56JS1`, `AZHG0FK` |
 
 ## Recently done
 
@@ -125,8 +126,24 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 	BUG_FIX_SPEC + VERSIONS.md (1_0_0→1_0_3, 09-10/09-11) added; 3 new fixtures
 	(self_alias, pep420_implicit, entry_only_imports; 10 total); 3 review docs in
 	`reviews/` (latest approves). `plans/bundler.md` marks the redesign applied.
-- **agent-coord.py WORKER_MAP** still says `coding → worker-mimo` in the committed
-	version; AGENTS.md (`8cb4daf`) says worker-north-mini-code. Uncommitted diff fixes it.
+- **agent-coord.py WORKER_MAP / AGENTS.md coder dispatch** — **resolved, this bullet
+	is obsolete.** `tools/agent-coord.py:540` now says `coding → worker-north-mini-code`
+	and `AGENTS.md:79` agrees; both committed, working tree clean of it. The remaining
+	half of the same problem is in the **Agents** workspace, not here:
+	`/storage/Agents/AGENTS.md` still routes coding to `worker-mimo` at 4 lines
+	(143, 173, 221, 247) and `worker-mimo.md` pins `mimo-v2.5-free`, which the console
+	no longer lists. epiq `Q397WZG`.
+- **epiq board is local-only; agent writes are uncommitted** (2026-09-27, secretary).
+	The `__epiq_state__` branch has **never been pushed** — `git ls-remote origin` shows
+	only `master`, and the state branch head is `cef330e` from 09-26 21:08. The remote is
+	not the cause: epiq pushes to `origin` (XLib's own remote) and
+	`git push --dry-run origin __epiq_state__` succeeds. Two mechanisms stack:
+	sync commits **only the calling actor's own** event file, and the TUI's 10 s autosync
+	holds the worktree lock, so `epiq_sync` from an MCP session returns `skipped` every
+	time. Anything an agent writes lives in a `~pending.jsonl` in the state worktree and
+	is lost if that worktree is pruned. **Human action:** quit the epiq TUI, then run one
+	sync as the agent actor — the first commit also triggers the first push.
+	epiq `AZHG0FK`.
 - **xlint** return-type-hint check uncommitted; scratch files at repo root
 	(`test_final.py`, `test_return_type_hints.py`, `test_return_type_hints2.py`) —
 	cleanup candidates once the check is settled.
