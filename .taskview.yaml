@@ -1,0 +1,9 @@
+# XLib project filter — shows tasks with category "XLib"
+# Bucket list (uncategorised tasks) excluded by default; use include_bucket: true to include
+label: "XLib"
+categories: ["XLib"]
+tags: []
+include_bucket: false
+limits:
+  upcoming: 5
+  queue_breakdown: true

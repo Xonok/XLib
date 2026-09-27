@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
 taskupdate — Append-only task state updates for taskview.
-Writes to ~/.local/share/taskview/tasks.csv (last-write-wins by id).
+Writes to tasks.csv resolved via R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.csv
 """
 
 import argparse,csv,os,sys,time
 from pathlib import Path
+from tools.taskview.taskview import resolve_data_dir,resolve_csv
 
+# Kept for backwards compatibility with existing tests that mock it
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"
 FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance"]
 
@@ -79,9 +81,25 @@ def parse_due(arg):
 	print(f"Invalid due date: {arg}", file=sys.stderr)
 	sys.exit(1)
 
+def resolve_csv_path(args) -> Path:
+	"""
+	Resolve CSV path per R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.csv (R17/R18).
+	args.csv is the explicit --csv argument (Path or None).
+	"""
+	# R30: explicit --csv wins
+	if args.csv is not None:
+		return args.csv
+	# R30: $TASKVIEW_CSV next
+	if "TASKVIEW_CSV" in os.environ:
+		return Path(os.environ["TASKVIEW_CSV"])
+	# R30: fallback to <data-dir>/tasks.csv per R17/R18
+	data_dir = resolve_data_dir(args.data_dir, os.environ)
+	return resolve_csv(data_dir, None)
+
 def main():
 	parser = argparse.ArgumentParser(description="Update taskview tasks (append-only)")
-	parser.add_argument("--csv", type=Path, default=DEFAULT_CSV)
+	parser.add_argument("--csv", type=Path, default=None, help="Path to tasks.csv (default: resolved via $TASKVIEW_CSV or data dir)")
+	parser.add_argument("--data-dir", type=Path, default=None, help="Data directory (default: $TASKVIEW_DATA_DIR or $XDG_DATA_HOME/taskview or ~/.local/share/taskview)")
 	sub = parser.add_subparsers(dest="cmd", required=True)
 
 	p_add = sub.add_parser("add", help="Add new task")
@@ -110,10 +128,13 @@ def main():
 	args = parser.parse_args()
 	now = int(time.time())
 
+	# Resolve CSV path per R30
+	csv_path = resolve_csv_path(args)
+
 	if args.cmd == "add":
-		task_id = read_last_id(args.csv) + 1
+		task_id = read_last_id(csv_path) + 1
 		due_ts = parse_due(args.due) if args.due else ""
-		append_row(args.csv, task_id, args.status, args.title, due_ts, now, args.category, args.tags, args.importance)
+		append_row(csv_path, task_id, args.status, args.title, due_ts, now, args.category, args.tags, args.importance)
 
 	elif args.cmd == "update":
 		if (args.status is None and args.title is None and args.due is None
@@ -121,7 +142,7 @@ def main():
 			print("Nothing to update", file=sys.stderr)
 			sys.exit(1)
 		current = {}
-		with args.csv.open("r", encoding="utf-8") as f:
+		with csv_path.open("r", encoding="utf-8") as f:
 			reader = csv.reader(f)
 			for row in reader:
 				if not row or row[0].startswith("//") or row[0] == "id":
@@ -145,11 +166,11 @@ def main():
 		category = args.category if args.category is not None else current["category"]
 		tags = args.tags if args.tags is not None else current["tags"]
 		importance = args.importance if args.importance is not None else current["importance"]
-		append_row(args.csv, args.id, status, title, due_ts, now, category, tags, importance)
+		append_row(csv_path, args.id, status, title, due_ts, now, category, tags, importance)
 
 	elif args.cmd == "done":
 		current = {}
-		with args.csv.open("r", encoding="utf-8") as f:
+		with csv_path.open("r", encoding="utf-8") as f:
 			reader = csv.reader(f)
 			for row in reader:
 				if not row or row[0].startswith("//") or row[0] == "id":
@@ -165,11 +186,11 @@ def main():
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(args.csv, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
+		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
 
 	elif args.cmd == "cancel":
 		current = {}
-		with args.csv.open("r", encoding="utf-8") as f:
+		with csv_path.open("r", encoding="utf-8") as f:
 			reader = csv.reader(f)
 			for row in reader:
 				if not row or row[0].startswith("//") or row[0] == "id":
@@ -185,7 +206,8 @@ def main():
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(args.csv, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
+		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
 
 if __name__ == "__main__":
 	main()
+
