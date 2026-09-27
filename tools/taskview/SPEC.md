@@ -328,9 +328,12 @@ Numbered, each with what was rejected.
 	`STATUS.md` are derivatives of it. Reducing the manual upkeep is real work
 	with complications — those files also carry narrative the CSV cannot hold —
 	and is deliberately **not** in this spec.
-15. **The 28 uncategorised open tasks are left alone.** They stay in the bucket
-	list until the human labels them, which is a judgement about their own work.
-	No backfill is part of this change.
+15. **The 28 uncategorised open tasks were not backfilled by this change.**
+	They stay in the bucket list until the human labels them, which is a judgement
+	about their own work. No backfill is part of this change. **Superseded in fact
+	2026-09-27**: the labelling pass has since been done by the human's ruling
+	(Decisions 18–20) and the bucket is empty. The decision stands as a statement
+	about what the *change* did, not about the current state of the data.
 16. **`Maintenance` is a category in its own right** (human delegated this
 	decision, 2026-09-27). *Rejected:* making host upkeep a tag repeated inside
 	every project category. The reasoning: the work is about the machine, not
@@ -353,6 +356,65 @@ Numbered, each with what was rejected.
 	already correct in the data and would have been "fixed" into
 	`Space-Traveller` by anyone assuming the two must agree. *Rejected:* deriving
 	category names from git roots, which couples the taxonomy to the filesystem.
+18. **Category granularity is set by the tracker, not by how many tasks a group
+	has** (human, 2026-09-27). The unit is the set of tasks that would share one
+	tracker. Worked example, the human's: `note_viewer` (a library for
+	mms-frontend), `mms` (the backend) and `mms-frontend` itself are **one**
+	category — `work` — separated by the tags `note-viewer`, `mms-server`,
+	`mms-frontend`, not three categories. Symmetrically, hobby programming is
+	`XLib` (libraries shared by all of them), `Traveller` (a major project using
+	XLib), and a bucket for the rest, until another project becomes major enough
+	to warrant its own tracker. *This overrides the reasoning earlier in this
+	spec*, which proposed subdividing the largest categories by tags: a category
+	is **not** split by tags merely because it has accumulated many tasks. Tag
+	subdivision earns its place by distinguishing members of one tracker (which
+	repository, which project), not by keeping a count down. `Maintenance` (9 open)
+	and `Personal Development` (3) are therefore deliberately left unsplit.
+19. **The category vocabulary is `TASKS.md`'s section structure, adopted into the
+	CSV** (human, 2026-09-27). The labelling pass found the vocabulary was already
+	written: every one of the 28 uncategorised tasks already had a home in a
+	`TASKS.md` section. The CSV's `category` column had been an ad-hoc subset never
+	derived from it, so `TASKS.md` and `tasks.csv` were two taxonomies presenting
+	as one list — which contradicts the decision that the CSV is the single
+	authority and the others are derivatives. *Rejected:* inventing a fresh
+	life-area axis for the CSV, which would have guaranteed the two files never
+	agree. Consequence: a category name that appears in `TASKS.md` is the correct
+	spelling, and renaming a section there is a change to the vocabulary.
+20. **The column had been carrying three different axes simultaneously** (found
+	during the labelling, 2026-09-27). Repository (`XLib`, `Agents`), life area
+	(`Maintenance`, `personal`) and activity (`research`, `ai-docs`) were all in
+	`category`. The activity values are the defect: they name what a task is being
+	done *for*, not what it is about (Decision 17), and nothing in the toolchain
+	rejects a new value, so the vocabulary was widening by accretion — one task at
+	a time, per session, invisible until someone counted. Tracked as epiq
+	`SNXBR23`; those tasks are left unchanged because a live session owns that work.
+
+## Category vocabulary, as applied 2026-09-27
+
+Eleven values, all of them either a project that warrants its own tracker or a
+`TASKS.md` life area. A bucket is no longer needed: every open task is
+categorised. Counts are open tasks as at 2026-09-27, and move as work does —
+`XLib` shows 3 because #56 closed the same day.
+
+| Category | Open | What it is |
+|---|---|---|
+| `Maintenance` | 12 | the machine and self-hosted infrastructure (Decision 16) |
+| `Hobby` | 8 | the bucket for hobby projects without their own tracker |
+| `work` | 3 | employment; repos separated by tag (Decision 18) |
+| `XLib` | 3 | the shared library tooling |
+| `Agents` | 3 | the agent workspace restructure |
+| `Personal Development` | 3 | learning and skills |
+| `Traveller` | 2 | Space-Traveller (Decision 17) |
+| `Business / Career` | 2 | marketing, networking, gamedev community |
+| `research`, `ai-docs`, `personal` | 5 | **off-vocabulary, pending** — epiq `SNXBR23` |
+
+Only `XLib` has a project `.taskview.yaml`; `Agents` holds the unfiltered one.
+The rest have no repository behind them and are reachable only through the
+unfiltered view — the same accepted tension as `Maintenance` (Decision 16).
+`Hobby` is the one name chosen by the secretary rather than taken from
+`TASKS.md`; the human has not confirmed it. Within `work`, the tags are
+`note-viewer`, `mms-frontend` and `career`; within `Hobby` and `Maintenance`
+they are the project or subsystem name.
 
 ## What the human will notice, and should not be surprised by
 
@@ -360,9 +422,13 @@ Recorded here so a change in daily experience is not read as a bug.
 
 - A project pane suddenly shows only that project's tasks. Tasks appearing in it
 	yesterday are not lost — they are in the Agents unfiltered view.
-- With 28 of 37 open tasks uncategorised, a project pane may look nearly empty
-	on day one. That is the labelling pass, not a filter fault. The queue line's
-	"F filtered" count is where the missing tasks are accounted for.
+- Every open task now carries a category (labelling pass, 2026-09-27), so a
+	project pane showing two tasks is the real count, not a filtering failure. Most
+	categories have no repository behind them and are reachable only from the
+	unfiltered view — that is the accepted consequence of `Maintenance` (Decision
+	16) generalised, not a bug. `Hobby` is deliberately one large bucket (Decision
+	18): its members are separated by tag, and a project earns its own category
+	only when it needs its own tracker.
 - `critical` and `emergency` no longer leak across projects (Decision 8).
 - Starting the tool outside any project shows everything, with a header that
 	says so.
@@ -380,17 +446,23 @@ conversation:
 	(Decision 17).
 - ~~**Decision 13** — wide view in this change or its own spec.~~ **Ruled: its own
 	spec, not built here.** Tracked as epiq ticket `E5MH4S2` on the XLib board.
+- ~~**The labelling pass** — 28 open tasks, and whose judgement it is.~~
+	**Done 2026-09-27.** All 28 labelled, plus #58 relabelled `Agents` → `work`.
+	Bucket list empty. Vocabulary recorded in Decisions 18–20.
+- ~~**The remaining category names.**~~ **Ruled and applied** — see the
+	vocabulary table above. Two names remain unconfirmed: `Hobby` (invented by the
+	secretary; `Projects` was the alternative) and whether `Mistlands` should be
+	its own category rather than a tag inside `Hobby`.
 
 **Still open:**
 
-- **The labelling pass** — 28 open tasks, and whose judgement it is. The human
-	ruled 2026-09-27 to start this in a **later session**, once the questions above
-	are settled. Nothing else blocks on it, and the bucket list is a valid
-	interim state.
-- **The remaining category names.** `Maintenance` and `Traveller` are settled;
-	`XLib`, `Agents`, `mms-frontend`, `Mistlands`, `MaFE` are in use in the data
-	without ever having been ruled on. Worth one pass over the whole vocabulary
-	during the labelling, rather than another ruling now.
+- **`/storage/Agents/.taskview.yaml` documents three categories that do not
+	exist** (`mms-frontend`, `Mistlands`, `MaFE` are in zero rows) and omits three
+	that do (`research`, `ai-docs`, `personal`). The human has left the file alone
+	for now. Tracked as epiq `QKRW2Z0`.
+- **Task ids are not shown in the pane.** Referring to a task by number is the
+	natural way to talk about it, and the ids are currently only discoverable by
+	reading the CSV. Raised by the human 2026-09-27; not yet specified.
 
 ## Interfaces
 
