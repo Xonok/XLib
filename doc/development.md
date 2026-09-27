@@ -42,6 +42,35 @@ spec, and the loop repeats until tests derive cleanly. The finished spec must
 let a fresh implementer do a good job from files alone, without further
 guidance.
 
+### Spec authorship — who may rewrite a spec
+
+**Specs are owned by the human.** The consequence is that an agent must be able
+to tell, from the file alone, whether it is allowed to rewrite one. So:
+
+- **An AI-written spec must say so, at the top, in this exact form:**
+
+	```
+	<!-- spec-origin: ai -->
+	> **AI-written spec.** Authored by an AI agent, not by the human.
+	```
+
+	The HTML comment is the machine-readable marker (grep it); the blockquote is
+	what a human reads. Both are required, so a tool can check authorship without
+	parsing prose and a human cannot miss it.
+
+- **A spec with no marker is assumed human-written.** Absence of the marker is
+  the claim, not absence of authorship information.
+- **An AI-written spec may be rewritten by AI** — the human has already accepted
+  that it is an AI interpretation of their intent, so improving it is in scope.
+  Rewriting is not a licence to change the intent: the decisions section still
+  records the human's choices.
+- **A human-written spec may not be edited by an AI at all** without the human
+  asking for that specific edit. Not "while I'm here", not "it's only a typo".
+
+`tools/pybundle/SPEC.md` is the one human-written spec in this repo and carries
+no marker — leave it alone. The other seven specs here were AI-written and have
+been labelled retroactively (2026-09-27).
+
 ## Tests
 
 Built by the reviewer (pass 1) from the spec. Tests are **load-bearing**: the
@@ -88,6 +117,9 @@ tests still pass, and the implementation matches what the tests specify.
 	implementer.
 - **Separation**: the reviewer writes tests and the programmer writes
 	implementation — never the same agent doing both, never one combined session.
+- **Spec ownership**: see *Spec authorship* above. An agent about to edit a spec
+	must check the marker first; an unmarked spec is the human's and is off
+	limits unless the human asked for that edit.
 
 ## Handoff (the implementer's contract)
 
