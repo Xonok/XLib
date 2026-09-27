@@ -351,7 +351,7 @@ def watch(paths, args):
 			draw(snapshot)
 
 def main():
-	parser = argparse.ArgumentParser(description="Check python files against XLib style rules")
+	parser = argparse.ArgumentParser(description="Check Python files against XLib style rules, and Markdown files for space indentation (code fences and frontmatter exempt)")
 	parser.add_argument("paths", nargs="+", type=Path)
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
