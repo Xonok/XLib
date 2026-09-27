@@ -25,13 +25,13 @@ the year belongs to exactly one quarter.
 the span `[start, end]` touches:
 
 1. For each spanned quarter, the days of the span inside it are counted inclusively of
-   both ends.
+	both ends.
 2. A quarter that contributes **at least one day** is included.
 3. Non-final quarters are prorated **by their share of the days in the whole span** — the
-   denominator is the total number of days attributed across all quarters, not the length
-   of any one quarter.
+	denominator is the total number of days attributed across all quarters, not the length
+	of any one quarter.
 4. The final quarter receives the whole remaining amount, so the parts sum to
-   `amount_cents` exactly.
+	`amount_cents` exactly.
 5. If the span touches no quarter at all, the result is `[]`.
 
 ## Rounding

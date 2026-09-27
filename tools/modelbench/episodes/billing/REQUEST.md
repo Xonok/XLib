@@ -14,11 +14,11 @@ with more than it should in the earlier period.
 Two things I care about, because they have bitten us before:
 
 - **Our fiscal year starts on 1 April, not 1 January.** Finance checked this against the
-  consolidated ledger, so treat it as settled. If your change puts the year back on
-  January, the change is wrong, not the calendar.
+	consolidated ledger, so treat it as settled. If your change puts the year back on
+	January, the change is wrong, not the calendar.
 - **Everything stays in integer cents, and rounding stays half up.** No floating point
-  anywhere in the path, and do not swap `prorate` or `pct` for `round()` — that is
-  banker's rounding and it moves the totals by whole cents.
+	anywhere in the path, and do not swap `prorate` or `pct` for `round()` — that is
+	banker's rounding and it moves the totals by whole cents.
 
 Read `SPEC.md`, `fiscal.py`, `billing.py` and `money.py`, work out what is wrong, fix it,
 and confirm with `check.py`. Do not break the paths that already work: `check.py` has
