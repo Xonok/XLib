@@ -1,0 +1,178 @@
+# Model registry — short name → exact provider ID + transport.
+#
+# Measured 2026-09-27, not assumed. Gating on both gateways is undocumented and
+# inconsistent, so it is recorded per model here and re-verified by
+# `python3 bench/transport.py --probe`, never trusted.
+#
+# gating values, all observed 2026-09-27:
+#   open       answers a direct request right now
+#   harness    refuses direct requests: "only available on agentic harnesses" (OpenRouter)
+#              or "OpenCode's free tier can only be used from within OpenCode" (Zen)
+#   upstream   429 from the upstream provider — shared pool exhausted, may recover
+#
+# transport = "http"    direct OpenAI-compatible HTTP. ~0 overhead, sub-second.
+# transport = "harness" only reachable through `opencode run`. ~13,140 prompt tokens and
+#              ~11.5s per call, of which ~13k is opencode's own fixed preamble. It does
+#              not shrink when the agent is stripped of tools. ~87x the cost of http.
+
+["space-bunny"]
+id = "space-bunny-free"
+provider = "zen"
+transport = "http"
+gating = "open"
+endpoint = "https://opencode.ai/zen/v1"
+auth = "none"
+note = "Only console free model that answers unauthenticated HTTP; the other 7 return 403. Cloudflare sits in front and rejects urllib's default User-Agent with error 1010, so any client must send its own UA or every call fails while curl-based probes pass."
+
+["big-pickle"]
+id = "big-pickle"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+note = "Proposed judge. Reachable only through opencode run, so every judgement costs ~13k tokens of preamble. The argument for a cheaper judge is this cost, not model quality."
+
+["inkling"]
+id = "thinkingmachines/inkling:free"
+provider = "openrouter"
+transport = "harness"
+gating = "harness"
+endpoint = "https://openrouter.ai/api/v1"
+note = "OpenRouter routes this through a step literally named 'Gate Free Endpoints by Agentic Harness' and 403s direct calls. The model at the centre of the tier-list dispute is one of the expensive ones to test."
+
+["inkling-small"]
+id = "thinkingmachines/inkling-small:free"
+provider = "openrouter"
+transport = "harness"
+gating = "harness"
+endpoint = "https://openrouter.ai/api/v1"
+note = "Same harness gate as inkling."
+
+["laguna-s"]
+id = "poolside/laguna-s-2.1:free"
+provider = "openrouter"
+transport = "http"
+gating = "upstream"
+endpoint = "https://openrouter.ai/api/v1"
+note = "429 from upstream at probe time. Also documented as flaky through the opencode harness (5/5 empty runs)."
+
+["laguna-xs"]
+id = "poolside/laguna-xs-2.1:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "Answers directly, despite being documented as returning null choices even via curl."
+
+["gemma-4-31b"]
+id = "google/gemma-4-31b-it:free"
+provider = "openrouter"
+transport = "http"
+gating = "upstream"
+endpoint = "https://openrouter.ai/api/v1"
+
+["gemma-4-26b"]
+id = "google/gemma-4-26b-a4b-it:free"
+provider = "openrouter"
+transport = "http"
+gating = "upstream"
+endpoint = "https://openrouter.ai/api/v1"
+note = "429 from Google AI Studio upstream, which shared-notes records as a persistent failure mode for this model."
+
+["north-mini-code"]
+id = "cohere/north-mini-code:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+
+["lfm-2.5-2.6b"]
+id = "liquid/lfm-2.5-2.6b:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "Negative control. Deliberately weak; the suite must score it clearly below the models under consideration or the suite has no discriminative power (plan F13). Needs max_tokens >= 4096 — it reasons before it answers and returns empty content when truncated."
+
+["nemotron-3-super"]
+id = "nvidia/nemotron-3-super-120b-a12b:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+
+["nemotron-ultra"]
+id = "nvidia/nemotron-3-ultra-550b-a55b:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "Distinct from the console opencode/nemotron-ultra-free, which is harness-gated."
+
+["nemotron-nano-omni"]
+id = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+provider = "openrouter"
+transport = "http"
+gating = "upstream"
+endpoint = "https://openrouter.ai/api/v1"
+
+["dots-3-note"]
+id = "dots-studio/dots-3-note-preview:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+
+["qwen3.8-27b"]
+id = "qwen/qwen3.8-27b:free"
+provider = "openrouter"
+transport = "http"
+gating = "upstream"
+endpoint = "https://openrouter.ai/api/v1"
+
+["ling-sante"]
+id = "inclusionai/ling-3.0-flash-sante:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+
+["nemotron-content-safety"]
+id = "nvidia/nemotron-3.5-content-safety:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "Specialised moderation model, not general purpose. Registered for completeness, not as a benchmark subject."
+
+# --- console models: harness-only, verified 403 on direct HTTP ---
+
+["ling-flash-fin"]
+id = "ling-3.0-flash-fin-free"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+
+["mimo-v2.6-flash"]
+id = "mimo-v2.6-flash-free"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+
+["mimo-v2.5"]
+id = "mimo-v2.5-free"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+
+["nemotron-3.5-lightning"]
+id = "nemotron-3.5-lightning-free"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+
+["longcat"]
+id = "longcat-2.5-preview-free"
+provider = "zen"
+transport = "harness"
+gating = "harness"
+
