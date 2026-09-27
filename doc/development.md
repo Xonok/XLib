@@ -59,13 +59,13 @@ to tell, from the file alone, whether it is allowed to rewrite one. So:
 	parsing prose and a human cannot miss it.
 
 - **A spec with no marker is assumed human-written.** Absence of the marker is
-  the claim, not absence of authorship information.
+	the claim, not absence of authorship information.
 - **An AI-written spec may be rewritten by AI** — the human has already accepted
-  that it is an AI interpretation of their intent, so improving it is in scope.
-  Rewriting is not a licence to change the intent: the decisions section still
-  records the human's choices.
+	that it is an AI interpretation of their intent, so improving it is in scope.
+	Rewriting is not a licence to change the intent: the decisions section still
+	records the human's choices.
 - **A human-written spec may not be edited by an AI at all** without the human
-  asking for that specific edit. Not "while I'm here", not "it's only a typo".
+	asking for that specific edit. Not "while I'm here", not "it's only a typo".
 
 `tools/pybundle/SPEC.md` is the one human-written spec in this repo and carries
 no marker — leave it alone. The other seven specs here were AI-written and have
@@ -123,10 +123,21 @@ tests still pass, and the implementation matches what the tests specify.
 
 ## Handoff (the implementer's contract)
 
-The programmer works from these two files, nothing else:
+The programmer works from these inputs, and no others:
 
 1. spec (iterated until it survived test derivation)
 2. tests (edges explicit)
+3. the project guidelines in `doc/style/` — always `architecture.md` and
+	`common.md`, plus the language-specific file for the language in hand
+	(`python.md`, `js.md`, `markdown.md`)
 
-The spec has already absorbed all found flaws as the human's fixes, so it is
-the complete resolution — no third file needed.
+The spec has already absorbed all flaws found during test derivation as the
+human's fixes, so it is the complete resolution *of those* — no third file is
+needed to settle an intent or an edge question.
+
+Style and architecture are not derivation findings and are never absorbed into
+the spec, so they are read directly. `architecture.md` in particular carries
+the rules that decide where code goes (A/B/C/D placement, leaf-module
+boundaries): a spec states what a module does, not how it must be shaped, so
+that cannot be restated per change. This is the same set the pass-2 reviewer
+checks, so the implementer's inputs and the release gate name the same rules.

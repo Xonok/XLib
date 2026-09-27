@@ -10,7 +10,7 @@ Implement a reviewer agent that acts as a release gate — user-invoked, indepen
 - **Release execution**: Reviewer runs `release/release.py` on explicit user permission
 - **Independent gate**: Separate agent from programmer
 - **Bump recommendation**: Reviewer analyzes and recommends bump type (revision/minor/major)
-- **Full rule coverage**: Reviewer checks all applicable rules — style/common.md, style/python.md, style/architecture.md, SPEC.md compliance
+- **Full rule coverage**: Reviewer checks all applicable rules — style/architecture.md, style/common.md, the language-specific style file for the language in hand, SPEC.md compliance
 - **Test execution**: Reviewer runs tests (xtest) as part of review; tests should produce no output on success, only on failure
 
 ## Review Document Format
@@ -51,7 +51,7 @@ Compute hash of `<library>/` folder (all files). If different from `<hash>` in f
 3. If `reviews/<library>-<hash>.md` exists, it's still valid — reviewer can update or note staleness
 4. Reviewer analyzes current state
 5. Reviewer runs tests (xtest) — silent on pass, reports failures
-6. Reviewer checks all rules: SPEC compliance, style/common.md, style/python.md, style/architecture.md
+6. Reviewer checks all rules: SPEC compliance, style/architecture.md, style/common.md, the language-specific style file for the language in hand
 7. Reviewer writes/updates review document to `reviews/<library>-<hash>.md` with bump recommendation
 8. Reviewer presents findings, recommends bump type (rev/minor/major)
 9. User discusses, decides
@@ -59,7 +59,7 @@ Compute hash of `<library>/` folder (all files). If different from `<hash>` in f
 11. Reviewer updates review doc status to `approved` with release version
 
 ## Integration Points
-- **Reads**: Library source in `<library>/` (working tree), release script, SPEC.md, xtest
+- **Reads**: Library source in `<library>/` (working tree), release script, SPEC.md, tests, xtest, and the project guidelines it enforces: always `doc/style/architecture.md` and `doc/style/common.md`, plus the language-specific file for the language in hand — the same inputs the programmer is given (`doc/development.md`, Handoff)
 - **Writes**: Review documents `reviews/<library>-<hash>.md`
 - **Executes**: `release/release.py` on permission; `xtest` during review
 - **Uses**: Content hashing for staleness detection (no git required)
