@@ -1,3 +1,6 @@
+<!-- spec-origin: ai -->
+> **AI-written spec.** Authored by an AI agent, not by the human.
+
 # xschema Spec
 
 ## Overview

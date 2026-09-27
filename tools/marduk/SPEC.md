@@ -1,3 +1,6 @@
+<!-- spec-origin: ai -->
+> **AI-written spec.** Authored by an AI agent, not by the human.
+
 # Marduk — Real-Time Agent Status Monitor
 
 ## Overview

@@ -1,3 +1,13 @@
+<!-- spec-origin: ai -->
+> **AI-written spec.** Authored by an AI agent, not by the human.
+
+> **SUPERSEDED 2026-09-27 — do not implement from this file.** It describes the
+> old model, where a context was a tag list in a fixed per-user filter directory
+> and tags doubled as project membership. The current design makes `category` the
+> membership axis, puts the filter in the project folder, and discovers it from
+> the working directory. See `SPEC.md` in this directory, which is the contract.
+> Kept only as a record of how the filter feature was first built.
+
 # taskview Filter Implementation Notes
 
 ## For the Programmer
