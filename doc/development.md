@@ -67,9 +67,12 @@ to tell, from the file alone, whether it is allowed to rewrite one. So:
 - **A human-written spec may not be edited by an AI at all** without the human
 	asking for that specific edit. Not "while I'm here", not "it's only a typo".
 
-`tools/pybundle/SPEC.md` is the one human-written spec in this repo and carries
-no marker — leave it alone. The other seven specs here were AI-written and have
-been labelled retroactively (2026-09-27).
+As of 2026-09-27 all eight specs in this repo are AI-written and labelled, and
+the human has **no** spec committed here. Do not read git authorship as evidence:
+the human commits everything, so a file carries their name whatever wrote it.
+Only the `spec-origin` marker means anything. The human's own hand-written pybundle
+spec was moved out of the repo during the tool folder move and is deliberately
+absent — if it reappears unlabelled, leave it alone.
 
 ## Tests
 
