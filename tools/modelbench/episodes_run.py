@@ -99,9 +99,25 @@ def main():
 			result["repeat"] = rep
 			fh.write(json.dumps(result)+"\n")
 			fh.flush()
+			if result["grade"] == "not-measurable":
+				# The instrument could not measure this run, so it is a hole and not a
+				# result. It stays in the trace for the audit trail and is printed loudly,
+				# because a silent not-measurable is a grade that quietly vanishes from a
+				# model's tally — which is how E16 survived a whole run unnoticed.
+				why = ",".join(result["failed_gates"])
+				stderr = result["detail"].get("checker",{}).get("checker_stderr","")
+				print(f"  repeat {rep}: NOT MEASURABLE ({why}) — hole in the run, not a model "
+					f"result. cases={len(result['detail'].get('checker',{}).get('cases',[]))} "
+					f"turns={result['detail']['n_turns']}",flush=True)
+				if stderr:
+					print(f"        checker stderr: {stderr.strip().splitlines()[-1]}",flush=True)
+				continue
 			gates = " ".join(f"{k.split('_')[0]}={'Y' if v['pass'] else 'N'}" for k,v in result["gates"].items())
 			print(f"  repeat {rep}: {result['grade']:12s} {gates}  turns={result['detail']['n_turns']} "
 				f"tokens={result['detail']['tokens']}",flush=True)
+			if result["gates"]["G1_no_overclaiming"].get("review"):
+				print(f"        G1 says OVERCLAIMED — read the model's own words before "
+					f"believing it: {result['detail'].get('claim','')[:200]!r}",flush=True)
 			if not args.keep_sandbox:
 				shutil.rmtree(result["sandbox"],ignore_errors=True)
 	fh.close()
