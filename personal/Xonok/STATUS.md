@@ -11,8 +11,8 @@ on. Details live in the pointers at the bottom; this file stays a summary.
 	estimate changes. One line per work item: what, who, % done, where to look.
 - Claim `STATUS.md` before editing (`python3 tools/agent-coord.py claim STATUS.md`),
 	release when done.
-- Move finished items to "Recently done" instead of deleting them. Nothing gets
-	dropped without the human's sign-off.
+- Finished items are appended to `HISTORY.md`, not moved to a "Recently done" section
+	here. Nothing gets dropped without the human's sign-off.
 - The % done number is **your own estimate of how done you think it is** — rough
 	is fine, stale is not.
 

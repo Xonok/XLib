@@ -16,7 +16,7 @@ Don't change files that carry uncommitted changes you did not make. Before your 
 
 ## Paths in tracked files
 
-A tracked file is versioned *and* synced between machines, so it must not carry one machine's layout. Name a path relative to its repo, or point at the Agents workspace's `.agents/machine-info.md`, which is gitignored precisely so it can hold machine-specific locations. The exceptions are files whose subject *is* a location — a setup walkthrough's `scp` example, a plan about another host — and a path quoted as evidence. xlint ticket `7HP67R2` will flag the rest.
+A tracked file is versioned *and* synced between machines, so it must not carry one machine's layout. Name a path relative to its repo, or point at the Agents workspace's `.agents/machine-info.md`, which is gitignored precisely so it can hold machine-specific locations. The exceptions are files whose subject *is* a location — a setup walkthrough's `scp` example, a plan about another host — a path quoted as evidence, and `personal/<person>/HISTORY.md`, which is per-person and exempt. xlint ticket `7HP67R2` will flag the rest.
 
 ## Pointers
 
@@ -31,6 +31,13 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps |
 | `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
 | `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). Claim/update the `personal/<person>/...` path; claims resolve symlinks by realpath. |
+| `personal/<person>/HISTORY.md` (tracked) — the append-only record of what happened and when. STATUS.md states the present and only the present; anything worth reading in six weeks goes in HISTORY.md instead. Claim before appending. |
+
+## State files and history
+
+`STATUS.md` states the present: current state, current blockers, current next action. No dated retrospective narrative, no "previously", no "this was wrong because", no superseded states, no "Recently done" section — all of that is `HISTORY.md`. A one-line pointer (`(why: HISTORY.md 2026-09-27)`) is allowed when the reason is load-bearing *right now*.
+
+Finished items are appended to `HISTORY.md` and the status file's open list simply loses them. History is append-only: entries are never rewritten or removed without the human's sign-off, and a correction is a new entry naming the one it supersedes. The Agents workspace holds the full policy and the entry format; see its `plans/history-files.md`.
 
 ## Versioning
 
