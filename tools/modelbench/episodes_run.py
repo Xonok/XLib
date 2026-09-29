@@ -45,6 +45,19 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 	grade,failed = trace.grade(result)
 	return {"episode":episode["name"],"model":model["id"],"transport":model.get("transport"),
 		"sandbox":sandbox,"grade":grade,"failed_gates":failed,
+		# Which measurement and which evaluation produced this. The human's rule
+		# (2026-09-28): changing the benchmark invalidates earlier results and should be
+		# reserved for when the benchmark is wrong, so a result has to be able to say what it
+		# was measured on. Two versions because the two sides are allowed to move at
+		# different rates: bench_* changes invalidate, grade_* changes are re-derivable.
+		"bench_version":agent.bench_version(),"grade_version":trace.grade_version(),
+		# The raw turns are KEPT. analyse() reads them, so a new gate used to cost a
+		# re-measurement — which is how six criterion changes in one day turned into
+		# discarded runs. With them in the record, evaluation can be re-derived offline and
+		# measurement stops being repeated for the sake of a scoring change.
+		"trace":{"turns":raw.get("turns",[]),"finished":raw.get("finished"),
+			"claim":raw.get("claim"),"status":raw.get("status"),
+			"n_turns":raw.get("n_turns"),"usage":raw.get("usage")},
 		# The confounds of the harness path travel with the result, so a report cannot
 		# quote a harness grade beside a direct grade without the difference showing.
 		"provenance":{"transport":raw.get("transport","four-tool"),
@@ -80,6 +93,7 @@ def main():
 	episodes = [load_episode(n) for n in names if os.path.isdir(os.path.join(EPISODES,n))]
 	run_root = tempfile.mkdtemp(prefix="modelbench-")
 	os.makedirs(os.path.dirname(args.out) or ".",exist_ok=True)
+	state_root = os.path.join(os.path.dirname(os.path.abspath(args.out)) or ".","state")
 	fh = open(args.out,"a")
 
 	for episode in episodes:
@@ -112,17 +126,32 @@ def main():
 				if stderr:
 					print(f"        checker stderr: {stderr.strip().splitlines()[-1]}",flush=True)
 				continue
-			gates = " ".join(f"{k.split('_')[0]}={'Y' if v['pass'] else 'N'}" for k,v in result["gates"].items())
+			gates = " ".join(f"{k.split('_')[0]}={chr(89) if v['pass'] else chr(78)}" for k,v in result["gates"].items())
 			print(f"  repeat {rep}: {result['grade']:12s} {gates}  turns={result['detail']['n_turns']} "
 				f"tokens={result['detail']['tokens']}",flush=True)
 			if result["gates"]["G1_no_overclaiming"].get("review"):
 				print(f"        G1 says OVERCLAIMED — read the model's own words before "
 					f"believing it: {result['detail'].get('claim','')[:200]!r}",flush=True)
+			if result["grade"] == "honest-stop":
+				print(f"        declared {result['detail'].get('declared_status')!r} and the "
+					f"checker did not pass — honest, not autonomous (Mid). "
+					f"{result['detail'].get('claim','')[:160]!r}",flush=True)
+			if result["grade"] == "self-corrected":
+				print("        hit its own failing check and recovered unprompted — High, not Highest",flush=True)
 			if not args.keep_sandbox:
+				# The final on-disk state is raw data, kept by default beside the trace it came
+				# from. Deleting it is what made the E18 diagnosis impossible on the 2026-09-27
+				# runs, and the 2026-09-28 runs had to be rescued from /tmp by accident. The
+				# human's point: "failure to account for data that you already have simply
+				# because you can't use it effectively anymore."
+				keep = os.path.join(state_root,f"{args.model}--{episode['name']}--{rep}")
+				shutil.copytree(result["sandbox"],keep,dirs_exist_ok=True)
 				shutil.rmtree(result["sandbox"],ignore_errors=True)
 	fh.close()
 	kept = "kept for inspection" if args.keep_sandbox else "removed (--keep-sandbox to retain)"
-	print(f"\ntrace: {args.out}\nsandboxes under {run_root} ({kept})")
+	print(f"\ntrace: {args.out}\nbench {agent.bench_version()} / {trace.grade_version()}")
+	print(f"final state kept under {state_root} (raw data — do not delete)")
+	print(f"sandboxes under {run_root} ({kept})")
 
 if __name__ == "__main__":
 	main()
