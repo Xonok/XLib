@@ -46,3 +46,13 @@ output is written to `xlib/` unchanged.
 If the bundled output needs to change, fix the dev library or the bundler instead.
 Historical `xlib/` files are never edited or deleted once released; a bug in a
 released version is fixed by releasing a new revision.
+
+## Never run this to "check" something
+
+`release.py <library>` always writes: it computes `next_version()` from the latest
+release in `xlib/` and writes the bundled output to that new path unconditionally
+— there is no dry-run and no check-only mode (the only flags are `--minor`,
+`--major`, `--force`). A stray verification run therefore leaves a real released
+file behind; that has happened before, and the accidental revision had to be
+deleted again as a test artifact. Inspect the bundler directly instead:
+`python3 tools/pybundle/bundler.py <dev-folder>`.
