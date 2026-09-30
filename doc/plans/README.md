@@ -27,6 +27,7 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [skynet-second-tracker.md](skynet-second-tracker.md) — second agent tracker pane: live sessions with workspace-scoped names and statuses; trim first tracker (drop Active, hide Len/Tool/Stop/Unk).
 - [taskview-time-refresh.md](taskview-time-refresh.md) — periodic time-based refresh for `taskview/taskview.py` tmux task view so relative timestamps update.
 - [tmux-panel-priorities.md](tmux-panel-priorities.md) — repurpose unused tmux panel to show priorities in condensed form.
+- [ai-code-viability.md](ai-code-viability.md) — can AI-heavy development stay viable long-term? Five mechanisms (per-library architectural docs, structural-consistency rules, scenario-oriented tests, a design-review step, subtle-behavior annotations), each to be costed and ranked before any is adopted. Recovered from the git-ignored `.agents/` folder on 2026-09-29, where it had sat untracked since 2026-09-10; human task: `personal/Xonok/TASKS.md` "XLib — how legible can AI code be".
 
 ## Cross-cutting decisions (recorded so far)
 
