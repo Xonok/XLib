@@ -50,8 +50,8 @@ entered on the human's call.
 - **There are two epiq boards, one per repo, and 16 tickets moved between them
 	on 2026-09-30.** The filing rule is that a ticket belongs on the board of the
 	repo where its change lands, because that is the only board whose state
-	branch can see the commit. See Pointers for the full rule and `58MXTGY` for
-	the ref map.
+	branch can see the commit. See `AGENTS.md` under *Working on a ticket* for
+	the rule and `58MXTGY` for the ref map.
 
 ## In progress
 
@@ -153,12 +153,15 @@ Two consequences for anyone reading the workspace:
 	`check-clean` reads the shared index — claims must resolve to the main
 	checkout. Confirmed 2026-10-01: `claim` accepts a worktree path, and
 	`check-clean` then refuses the same path with "paths span multiple repos".
-- **The agent-file zero-stats problem was solved by filing, not by tooling.**
+- **The agent-file zero-stats problem is ruled against, not just fixed.**
 	`.opencode/agent/` is a symlink into the Agents repo, so an agent-file ticket
-	filed on this board reads as zero commits however it is committed. 16 of them
-	were refiled on 2026-09-30, which fixes the 16. What is left is that nothing
-	stops the next agent filing one here again — the open half of `58MXTGY`, and
-	the reason the filing rule is written into Pointers rather than left implicit.
+	filed on this board reads as zero commits however it is committed; 16 were
+	refiled on 2026-09-30, which fixes the 16. The filing rule — file on the board
+	of the repo where the change lands, decided by which repo versions the file —
+	now lives in `AGENTS.md` under *Working on a ticket*, which is read before a
+	ticket is filed rather than after. What it cannot do is catch a ticket filed
+	without it: the choice is made through the epiq MCP, not through a repo tool,
+	so nothing local can intercept it. That is the one rule here left as prose.
 - **Task scheduling**: 4 high-importance tasks have no due date at all (#52, #61,
 	#63, #75), and everything due today has by now gone overdue — 10 open tasks
 	are past due, and that number moves hourly. The store is the record; see
@@ -221,11 +224,10 @@ Two consequences for anyone reading the workspace:
 - Tasks: `TASKS.md` (this workspace), taskview ids in
 	`~/.local/share/taskview/tasks.csv`, epiq refs on either board. A taskview id
 	and an epiq ref look alike and are different things.
-- **Which board a ref sits on decides whether its commit can link.** XLib work →
-	the XLib board. Anything touching `.opencode/agent/`, either `AGENTS.md`,
-	`plans/`, `library/`, `.taskview.yaml` or `personal/` → the Agents board. The
-	two are separate epiq projects with separate state branches, so a ticket
-	cannot be *moved* between them: relocating means close-and-refile, and **the
-	ref changes**. Set 2026-09-30; the full old→new map is on `58MXTGY`.
+- **Which board a ticket goes on is a rule, not state** — `AGENTS.md` under
+	*Working on a ticket*. Short form: a ticket belongs on the board of the repo
+	where its change lands, and relocating between boards means close-and-refile
+	because a ticket cannot be moved across two separate epiq projects. The
+	old→new map for the 2026-09-30 split is on `58MXTGY`.
 - Shared user context and per-agent state: `.agents/` in the Agents workspace.
 - Reviews: `doc/reviews/` (read its README first). Audits: `doc/audits/`.
