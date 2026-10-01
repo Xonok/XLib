@@ -20,12 +20,13 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `49a9ca5` (2026-09-30). xlint clean over the whole repo.
-**Seven branches are open and awaiting the human's review; `master` has not
-moved.** They carry the 2026-09-30 doc and state work, and they are the merge
-queue — see *Awaiting review* below. `doc/development.md` is the canonical
-process document — plan → spec → tests → implementation → review, each stage
-entered on the human's call.
+Basis: `master` at `9ffa237` (2026-10-01). xlint clean over the whole repo.
+**Nine branches are open and awaiting the human's review, and `master` did
+move** — `0J8YBYH` landed the epiq workflow rules after this Snapshot was first
+written, so its own "has not moved" claim was already stale. The branches carry
+the 2026-09-30 doc and state work and are the merge queue — see *Awaiting
+review* below. `doc/development.md` is the canonical process document — plan →
+spec → tests → implementation → review, each stage entered on the human's call.
 
 - Libraries: `dev/` holds xconf, xcsv, xprod, xschema, xtest. `xlib/` holds
 	xconf `1_0_0`, xcsv `1_0_0`/`1_0_1`/`1_1_0`, xschema `1_0_0`, xtest `1_0_0`.
@@ -39,6 +40,11 @@ entered on the human's call.
 	model.
 - Live coordination state: `python3 tools/agent-coord.py status` (claims) /
 	`news` (changed rule files).
+- **There are two epiq boards, one per repo, and 16 tickets moved between them
+	on 2026-09-30.** The filing rule is that a ticket belongs on the board of the
+	repo where its change lands, because that is the only board whose state
+	branch can see the commit. See Pointers for the full rule and `58MXTGY` for
+	the ref map.
 
 ## In progress
 
@@ -46,7 +52,7 @@ entered on the human's call.
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq board** | secretary | 8 Done awaiting the human's review, 42 Todo, 1 In progress; the first commits ever linked to a ticket now resolve | epiq board |
+| **epiq boards** | secretary | XLib 29 open (20 Todo, 9 In progress), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -67,6 +73,8 @@ approved the ticket.
 | `k1mx4tb-library-structure-doc` | `K1MX4TB` | 2 files, +145/−40 | library-structure doc out of AGENTS.md |
 | `wkq371w-status-present-only` | `WKQ371W` | 5 files, +207/−145 | this file, plus the drift rulings |
 | `vg87t14-delete-realized-plans` | `VG87T14` | 12 files, +53/−734 | eight realized plans deleted |
+| `h2nc2a2-closing-after-merge` | `H2NC2A2` | 1 file, +2/−2 | say that leaving Done means closing |
+| `hc1zjk6-dispatch-general-longcat` | `HC1ZJK6` | 3 files, +8/−73 | dispatch `general` to `worker-longcat` |
 
 `gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
 apt source added — and is authenticated against `Xonok` with `repo` scope. An
@@ -112,18 +120,24 @@ Two consequences for anyone reading the workspace:
 - **`tools/tool_schema_cache.py:14`** names this machine's absolute path in a
 	tracked file, which AGENTS.md forbids. The linter check that would catch this
 	is epiq `7HP67R2` (Todo).
-- **epiq `Q397WZG` (Todo) and `9J30DNW` (In progress)** look like the same
-	problem — the coding worker's model pin — filed twice in different lanes.
-	Merge or split them.
+- **The `Q397WZG` / `9J30DNW` duplicate is resolved by relocation, not by a
+	merge.** Both asked which worker the coding route should name, in two
+	different lanes; both are closed and refiled on the Agents board as
+	`G8B6T7V` and `P1H7VM4`, where the work lands. One decision, one board.
 - **epiq pending events**: ~60 events sit in four `~pending.jsonl` files and are
 	committed only when that actor's own process syncs. Accepted risk, closed as
 	`AZHG0FK` on 2026-09-29; the residual loss window is a worktree prune.
-- **Per-ticket branching needs two fixes before agents work in worktrees.**
+- **Per-ticket branching needs one fix before agents work in worktrees.**
 	`.agents/` is gitignored, so a new worktree has no `claims.json` and
 	`check-clean` reads the shared index — claims must resolve to the main
-	checkout. And `.opencode/agent/` is a symlink into the Agents repo, so
-	every agent-file ticket will read as zero commits no matter how it is
-	committed: epiq `58MXTGY`.
+	checkout. Confirmed 2026-10-01: `claim` accepts a worktree path, and
+	`check-clean` then refuses the same path with "paths span multiple repos".
+- **The agent-file zero-stats problem was solved by filing, not by tooling.**
+	`.opencode/agent/` is a symlink into the Agents repo, so an agent-file ticket
+	filed on this board reads as zero commits however it is committed. 16 of them
+	were refiled on 2026-09-30, which fixes the 16. What is left is that nothing
+	stops the next agent filing one here again — the open half of `58MXTGY`, and
+	the reason the filing rule is written into Pointers rather than left implicit.
 - **Task scheduling**: 4 high-importance tasks have no due date at all (#52, #61,
 	#63, #75), and everything due today has by now gone overdue — 10 open tasks
 	are past due, and that number moves hourly. The store is the record; see
@@ -166,7 +180,13 @@ Two consequences for anyone reading the workspace:
 	Library structure and conventions: `doc/library-structure.md`. Library maps:
 	`<library>/SPEC.md`. Plans: `doc/plans/README.md`.
 - Tasks: `TASKS.md` (this workspace), taskview ids in
-	`~/.local/share/taskview/tasks.csv`, epiq refs on the board. A taskview id and
-	an epiq ref look alike and are different things.
+	`~/.local/share/taskview/tasks.csv`, epiq refs on either board. A taskview id
+	and an epiq ref look alike and are different things.
+- **Which board a ref sits on decides whether its commit can link.** XLib work →
+	the XLib board. Anything touching `.opencode/agent/`, either `AGENTS.md`,
+	`plans/`, `library/`, `.taskview.yaml` or `personal/` → the Agents board. The
+	two are separate epiq projects with separate state branches, so a ticket
+	cannot be *moved* between them: relocating means close-and-refile, and **the
+	ref changes**. Set 2026-09-30; the full old→new map is on `58MXTGY`.
 - Shared user context and per-agent state: `.agents/` in the Agents workspace.
 - Reviews: `doc/reviews/` (read its README first). Audits: `doc/audits/`.
