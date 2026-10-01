@@ -6,9 +6,33 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 Multiple agents may work in this repo at once. Coordinate through `tools/agent-coord.py`: claim files before editing, release when done, `status` to see who holds what. Claim fails if the other agent holds the same path.
 
+## Working on a ticket
+
+The epiq board is where work is planned, tracked and reviewed. The lane says what state a piece of work is in:
+
+- **Todo** — pending.
+- **In progress** — the human has ai-ok'd it, meaning it is now clear how to perform.
+- **Done** — the agent finished it: branch pushed, pull request open.
+
+A ticket leaves Done when the human has reviewed the work and approved it. Only then may an agent merge it to master and delete the branch.
+
+This is one point where the epiq skill differs, and the difference is deliberate: the skill puts a ticket in Done when it merges and closes it at release. Here **Done means finished and awaiting approval**, so leaving the lane is the review.
+
+Commit under the repo's configured `user.name` / `user.email` and nothing else — no `Co-Authored-By:` line, no tool footer, no `--author` override. The git user is the sole author of every commit an agent writes; attribution belongs on the board, not in the commit.
+
+Read the ticket's `epiq_issue_stats` before reading its diff. Size, file spread, self-churn (how much the piece spent rewriting its own work) and test lines for one ticket, which is a cheaper thing to judge than a diff is to read.
+
 ## Git access
 
-**Agents use read-only git commands only** (`status`, `log`, `show`, `diff`, `ls-files`, `reflog`, ...). Commands that change the repository — `commit`, `add`, `push`, `pull`, `merge`, `rebase`, etc. — are reserved for the human. If a lasting git change is needed, ask the human.
+Work lands on a **feature branch, one branch per ticket**. Git is where a ticket's change becomes reviewable; the board is what says which ticket.
+
+An agent may `add`, `commit`, `push` a feature branch, and open a pull request for it. An agent may `merge` to master **only after the human has approved that ticket**, and then deletes the branch — as a rebase merge, never a merge commit (`gh pr merge --rebase`), so master stays a flat sequence of ref-prefixed commits and the commit↔ticket link keeps reading.
+
+An agent may amend its own commit on a branch the human has not reviewed yet. It may not rewrite anyone else's commits, and it may not force-push master.
+
+**Every commit subject opens with its ticket ref followed by a space** — `YM7ESHS drop the dead constant`, not `YM7ESHS: drop the dead constant`. epiq links by `subject.startsWith("<REF> ")`; the colon breaks the match and the ticket reads as untouched work. Getting this wrong is invisible, which is the whole reason to know it by reflex. The ref comes off the MCP response's `ref` field, never derived by hand.
+
+A commit only needs to be on a local branch to be linked — the link reads local branches, so pushing is for the human's review and merging is for the record, not for the link.
 
 ## Working tree
 
