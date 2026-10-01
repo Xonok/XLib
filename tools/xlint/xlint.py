@@ -220,6 +220,8 @@ def check_file(path, args):
 			exempt = _frontmatter_exempt(text_lines)
 			exempt.update(_fence_exempt(text_lines))
 			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
+		if not args.no_final_newline:
+			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 	return problems
 
 class _InotifyWatcher:
