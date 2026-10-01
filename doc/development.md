@@ -137,6 +137,10 @@ Traceability, both directions:
 - every test maps to a spec requirement;
 - every requirement has at least one test.
 
+Where they live: a library's tests go in a `test/` folder in its dev folder, not
+`tests/` — the human's ruling, 2026-09-30. `dev/xprod/` already complies; the
+other four dev libraries still use `tests/` and are being renamed (epiq `2VD2XZC`).
+
 Example of the gap discipline in practice: `test-design-2d-space-game.md` in the
 Agents workspace (`plans/done/`).
 
