@@ -9,3 +9,9 @@ agent-notes*.md
 # [epiq]: local hydrated state is never committed
 .epiq/events/
 .epiq/log/
+
+# [.work]: per-ticket worktrees, one per ticket — see AGENTS.md.
+# A worktree is a full checkout with a .git FILE, so `git add .` would stage
+# each as an embedded-repo gitlink: 160 bytes naming one sha, no error, and a
+# clone of master inherits empty directories pointing into nowhere.
+.work/

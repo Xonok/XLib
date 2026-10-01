@@ -26,6 +26,8 @@ Read the ticket's `epiq_issue_stats` before reading its diff. Size, file spread,
 
 Work lands on a **feature branch, one branch per ticket**. Git is where a ticket's change becomes reviewable; the board is what says which ticket.
 
+**Work on that branch in a worktree, not in the root checkout.** `git worktree add .work/<REF>-<slug> <branch>`, one per ticket, and leave the root on `master`. The root checkout is shared, so a parallel session can move it to another branch mid-task and nothing warns you — the work survives if it was committed and pushed, but the session can no longer run its own code, which on 2026-10-01 meant extracting a file to `/tmp` to check anything. `.work/` is gitignored, and it has to be: a worktree's `.git` is a *file*, not a directory, so `git add .` stages each one as an embedded-repo gitlink — 160 bytes naming one sha, no error, and a clone of master inherits empty directories pointing into nowhere. The registration is per-clone, so a fresh clone's `.work/` is empty until an agent creates one; this rule is the convention, not the directory's existence. The epiq skill already said "work in a worktree" and it was still not followed, which is the reason it is written here.
+
 An agent may `add`, `commit`, `push` a feature branch, and open a pull request for it. An agent may `merge` to master **only after the human has approved that ticket**, and then deletes the branch — as a rebase merge, never a merge commit (`gh pr merge --rebase`), so master stays a flat sequence of ref-prefixed commits and the commit↔ticket link keeps reading.
 
 An agent may amend its own commit on a branch the human has not reviewed yet. It may not rewrite anyone else's commits, and it may not force-push master.
