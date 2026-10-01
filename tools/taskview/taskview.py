@@ -333,9 +333,34 @@ def fmt_due(ts: int | None) -> str:
 	return dt.strftime("%m-%d")
 
 def truncate(text: str, width: int) -> str:
+	"""
+	Shorten text to fit width, marking the cut with an ellipsis. Never returns
+	more than width characters, so a caller can subtract a prefix (an id, say)
+	from its budget and rely on the line still fitting.
+	"""
+	if width <= 0:
+		return ""
 	if len(text) <= width:
 		return text
-	return text[: max(0, width - 3)] + "..."
+	if width <= 3:
+		return text[:width]
+	return text[:width - 3] + "..."
+
+def task_label(task: dict, budget: int) -> str:
+	"""
+	R42: the id, then as much of the title as `budget` allows. The id is the
+	handle a task is referred by — `taskupdate.py show <id>` resolves it — so it
+	is shown rather than left implicit, and the title's budget is reduced by the
+	prefix width so the title is not shortened by adding the id.
+
+	A budget too small for the id itself drops the title rather than overflowing
+	the line: a pane wraps badly long before a task becomes unnameable, and an
+	id with no title is still a usable reference.
+	"""
+	prefix = f"#{task['id']} "
+	if len(prefix) > budget:
+		return truncate(prefix.rstrip(), budget)
+	return prefix + truncate(task["title"], budget - len(prefix))
 
 def pick_current(open_tasks: list) -> dict | None:
 	"""Pick the task shown as 'now': the most urgent open task."""
@@ -368,7 +393,7 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	# Current task
 	current = pick_current(open_tasks)
 	if current:
-		lines.append(f"▸ {truncate(current['title'], width - 2)}")
+		lines.append(f"▸ {task_label(current, width - 2)}")
 		due_str = fmt_due(current["due_ts"])
 		chg_str = fmt_time(current["chg_ts"])
 		lines.append(f"  {chg_str}  ·  due: {due_str}")
@@ -386,7 +411,19 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 		upcoming = [t for t in open_tasks if t["id"] != current["id"]]
 		for task in upcoming[:upcoming_limit]:
 			due_str = fmt_due(task["due_ts"])
-			lines.append(f" · {truncate(task['title'], width - 4)}  ({due_str})")
+			# R42: the " · " lead (3) and the "  (due)" tail (len + 4, the two
+			# spaces and two parentheses) come off the width, and the id comes off
+			# the title's share rather than the line's. When what is left cannot
+			# hold a label and a due together, the due is dropped rather than the
+			# line overflowing — a wrapped line in a narrow pane breaks the
+			# alignment of every line under it.
+			tail = len(due_str) + 4
+			with_due = width - 3 - tail
+			label = task_label(task, with_due)
+			if label.strip() and with_due >= len(f"#{task['id']}"):
+				lines.append(f" · {label}  ({due_str})")
+			else:
+				lines.append(f" · {task_label(task, width - 3)}")
 	else:
 		lines.append(" · (none)")
 	lines.append("")
