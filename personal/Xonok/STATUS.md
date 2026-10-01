@@ -68,9 +68,13 @@ approved the ticket.
 | `wkq371w-status-present-only` | `WKQ371W` | 5 files, +207/−145 | this file, plus the drift rulings |
 | `vg87t14-delete-realized-plans` | `VG87T14` | 12 files, +53/−734 | eight realized plans deleted |
 
-`gh` is not installed, so PRs are opened by hand from the URL each push
-prints. `epiq_issue_stats <ref>` gives per-ticket size, self-churn and test
-lines — read it before the diff.
+`gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
+apt source added. **Not authenticated**: SSH git access does not carry over to
+the API, and `gh auth login`'s device flow cannot be completed from an agent
+session because the waiting process is killed with the shell command. Until the
+human runs `gh auth login` in their own terminal, PRs are opened by hand from
+the URL each push prints. `epiq_issue_stats <ref>` gives per-ticket size,
+self-churn and test lines — read it before the diff.
 
 **The subject format is `<REF> ` — ref, then a space.** `REF: ` does not link:
 the matcher is `subject.toUpperCase().startsWith(ref + " ")`. All seven were
@@ -157,8 +161,8 @@ Two consequences for anyone reading the workspace:
 
 1. `dev/xprod/` — SPEC.md + VERSIONS.md, or fold into another library? Parked as
 	your manual work, epiq `DCF9EHW`.
-2. `gh` is not installed, so each branch's PR is opened by hand from the URL
-	the push prints. Install it, or keep opening them by hand?
+2. Run `gh auth login` in your own terminal, so PRs can be opened by an agent
+	instead of by hand. `gh` is installed; only the credential is missing.
 
 ## Pointers
 
