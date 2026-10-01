@@ -1,7 +1,32 @@
 #!/bin/bash
 # Named-agent launcher for opencode. Writes port files to ~/.opencode/ports/.
 AGENT="$1"
-if [ -z "$AGENT" ]; then echo "Usage: oc-agent <agent-name>" >&2; exit 1; fi
+
+# The names `oc-agent <name>` accepts, asked of opencode itself: an agent may
+# come from a file under .opencode/agent/, from a built-in, or from a plugin, so
+# reading one directory would list names the launcher rejects and miss names it
+# takes. Prints nothing if opencode cannot answer, which callers read as "unknown".
+agent_names() {
+	opencode agent list 2>/dev/null | sed -n 's/^\([^ ][^ ]*\) (.*/\1/p' | sort -u
+}
+
+if [ -z "$AGENT" ]; then
+	echo "Available agents:"
+	agent_names
+	echo
+	echo "Usage: oc-agent <agent-name>"
+	exit 0
+fi
+
+# Only refuse a name when opencode actually answered: an empty list means the
+# question could not be asked, and a launcher that refuses every name then is
+# worse than one that lets opencode fall back to its default agent.
+names=$(agent_names)
+if [ -n "$names" ] && ! printf '%s\n' "$names" | grep -qxF -- "$AGENT"; then
+	echo "Unknown agent: $AGENT" >&2
+	echo "Usage: oc-agent <agent-name>   (run oc-agent with no arguments to list them)" >&2
+	exit 1
+fi
 
 STATE="/tmp/oc-agent/$AGENT"
 mkdir -p "$STATE"
