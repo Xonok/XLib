@@ -30,6 +30,10 @@ An agent may `add`, `commit`, `push` a feature branch, and open a pull request f
 
 An agent may amend its own commit on a branch the human has not reviewed yet. It may not rewrite anyone else's commits, and it may not force-push master.
 
+**Never open a stacked pull request.** A PR's base is always `master`. Opening one against another feature branch makes it a claim on that branch's lifetime, and the claim breaks silently: merging the lower PR with `--delete-branch` deletes the base and GitHub auto-closes the upper one — no conflict, no error, nothing said. That happened here to PR #11 (`9R0H6SA`), which was closed as a side effect of merging PR #1 and had to be re-cut and reopened as #12. Worse, the leftover PR then reports `CONFLICTING` / `DIRTY` for a base ref that no longer exists, which reads as a real conflict and sends the next agent to resolve a conflict that is not there.
+
+A ticket that needs another ticket's work re-bases onto master itself: `git rebase origin/master`, resolve, and open its own PR. If the work genuinely cannot be split, branch from master and carry the dependency in a single commit under your own ref — never by stacking, and never by borrowing another ticket's ref.
+
 **Every commit subject opens with its ticket ref followed by a space** — `YM7ESHS drop the dead constant`, not `YM7ESHS: drop the dead constant`. epiq links by `subject.startsWith("<REF> ")`; the colon breaks the match and the ticket reads as untouched work. Getting this wrong is invisible, which is the whole reason to know it by reflex. The ref comes off the MCP response's `ref` field, never derived by hand.
 
 A commit only needs to be on a local branch to be linked — the link reads local branches, so pushing is for the human's review and merging is for the record, not for the link.
