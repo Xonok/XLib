@@ -7,7 +7,6 @@ DIR = os.path.join(ROOT, ".agents")
 LOCK = os.path.join(DIR, "lock")
 IDS = os.path.join(DIR, "ids.json")
 CLAIMS = os.path.join(DIR, "claims.json")
-ROTATION_CURSOR = os.path.join(DIR, "rotation.json")
 RULE_CURSOR = os.path.join(DIR, "rule-cursor.json")
 SUBAGENT_CTX = os.path.join(DIR, "subagent-ctx.json")
 CTX_BUDGET = 8
