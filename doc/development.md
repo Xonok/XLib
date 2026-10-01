@@ -107,7 +107,7 @@ Agents workspace (`plans/done/`).
 - The loop repeats until the tests build clean and the human signs off.
 
 **Pass 2 — implementation review** (release gate). The existing review process
-(see `doc/plans/reviewer-agent.md`): correctness vs spec, style compliance,
+(see the reviewer's agent file): correctness vs spec, style compliance,
 tests still pass, and the implementation matches what the tests specify.
 
 ## Rules
