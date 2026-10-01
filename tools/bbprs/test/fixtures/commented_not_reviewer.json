@@ -1,0 +1,39 @@
+{
+	"_comment": "The real bare-PARTICIPANT case, mms-frontend #71 as merged: the human commented three times on 2026-08-31 but was never added as a reviewer, so Bitbucket records him PARTICIPANT/approved:false. A PARTICIPANT holds no approval right, so nothing he could do would have cleared BLOCKED ON YOU — the tool named a blocker he cannot unblock, for the two and a half weeks until it merged. Not a draft, not his own PR, and another reviewer had already approved.",
+	"id": 71,
+	"title": "SCSS refactor to latest Dart Sass spec",
+	"author": {"nickname": "Raul Taremaa"},
+	"source": {"branch": {"name": "scss-latest-dart-sass"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-08-28T09:00:00.000000+00:00",
+	"updated_on": "2026-08-28T09:00:00.000000+00:00",
+	"state": "MERGED",
+	"comment_count": 13,
+	"participants": [
+		{
+			"user": {"nickname": "Raul Taremaa"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": null
+		},
+		{
+			"user": {"nickname": "Indrek Pertman"},
+			"role": "REVIEWER",
+			"approved": true,
+			"state": "approved"
+		},
+		{
+			"user": {"nickname": "Toomas"},
+			"role": "REVIEWER",
+			"approved": true,
+			"state": "approved"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": null
+		}
+	]
+}

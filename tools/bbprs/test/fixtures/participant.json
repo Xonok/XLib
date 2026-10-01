@@ -1,0 +1,26 @@
+{
+	"_comment": "The human commented (PARTICIPANT) but holds no approval. Carries no `state` key at all — the older/partial shape, which must read the same as the string \"null\" rather than blow up.",
+	"id": 84,
+	"title": "offline_cache_stamp",
+	"author": {"nickname": "Timo Tambet"},
+	"source": {"branch": {"name": "offline-cache-stamp"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-09-29T16:40:00.000000+00:00",
+	"updated_on": "2026-09-29T17:05:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 3,
+	"participants": [
+		{
+			"user": {"nickname": "Timo Tambet"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "PARTICIPANT",
+			"approved": false
+		}
+	]
+}

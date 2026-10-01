@@ -1,0 +1,21 @@
+{
+	"_comment": "The human is not a participant at all. `my_participation` is None and nothing is blocked on him — the shape where _my_record finds nothing.",
+	"id": 88,
+	"title": "soundscape_fade_curve",
+	"author": {"nickname": "Anton Slavin"},
+	"source": {"branch": {"name": "soundscape-fade-curve"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-09-30T11:00:00.000000+00:00",
+	"updated_on": "2026-09-30T11:30:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 0,
+	"participants": [
+		{
+			"user": {"nickname": "Anton Slavin"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		}
+	]
+}

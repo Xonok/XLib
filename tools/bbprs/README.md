@@ -72,7 +72,7 @@ curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/js
   "$URL" | jq .
 ```
 
-## The four traps
+## The six traps
 
 1. **Drafts come back inside `state=OPEN`.** A draft is `state: OPEN` *plus* a
 	separate `draft: true` field, so the list endpoint returns them and you must
@@ -91,6 +91,24 @@ curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/js
 
 4. **`/pullrequests/{id}/commits` has no usable `size` field** — it comes back
 	`null`. Count with `(.values | length)`, not `.size`.
+
+5. **`approved: false` is ambiguous — only `state` tells the two apart.** A
+	reviewer who **requested changes** and a reviewer who **never looked** both
+	arrive as `approved: false`, so reading that boolean alone makes a PR the
+	human has already answered report as `BLOCKED ON YOU` — the inverse of the
+	truth, and a standing instruction to re-review a colleague's PR. Read
+	`state`: `"changes_requested"` means the human has done his part and the
+	ball is with the author. Ticket `3EEXMRK`; the regression is
+	`mms-frontend` #79.
+
+6. **`role` is `REVIEWER` only if explicitly added as a reviewer.** Anyone who
+	interacts with a PR otherwise appears as `PARTICIPANT` — including the
+	author, always. So a bare `PARTICIPANT` for the human means *he commented on
+	a PR he was never asked to review*, and he holds no approval right on it.
+	`mms-frontend` #71: three comments on 2026-08-31, never a reviewer, and the
+	tool reported `BLOCKED ON YOU` until it merged — naming a blocker the human
+	could not unblock by any action available to him. Only a `REVIEWER` can be
+	the blocker. `3EEXMRK`.
 
 ## Read-only, and it stays that way
 
@@ -159,3 +177,17 @@ human has not.
 Report per point: **addressed / partially / missed / rejected-with-reason**,
 each with the file and line evidence, and say plainly if a point is ambiguous.
 Do not post the findings to Bitbucket — hand them to the human.
+
+## Tests
+
+```
+python3 -m unittest tools.bbprs.test.test_bbprs -v
+```
+
+Offline and fixture-based: the triage predicates are pure functions over a
+participant record, so none of this needs the network. The fixtures in
+`test/fixtures/` are shaped like real API responses and go through
+`parse_pr`, the same mapping the live code uses — a test that hand-builds a
+`PullRequest` would prove nothing about what Bitbucket actually sends. Each
+fixture carries a `_comment` saying which case it pins and why.
+

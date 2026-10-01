@@ -1,0 +1,27 @@
+{
+	"_comment": "Regression case, 3EEXMRK. mms-frontend #79 as of 2026-09-30: the human requested changes, so the review is done and the ball is with the author. Must NOT be BLOCKED ON YOU.",
+	"id": 79,
+	"title": "profile_subscription",
+	"author": {"nickname": "Timo Tambet"},
+	"source": {"branch": {"name": "profile-subscription"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-09-29T09:14:00.000000+00:00",
+	"updated_on": "2026-09-30T07:23:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 4,
+	"participants": [
+		{
+			"user": {"nickname": "Timo Tambet"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "REVIEWER",
+			"approved": false,
+			"state": "changes_requested"
+		}
+	]
+}
