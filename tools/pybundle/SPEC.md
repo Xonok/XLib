@@ -14,7 +14,7 @@
 
 ## Pipeline (5 Phases)
 
-The bundler operates in five sequential phases, orchestrated by `bundle(entry)` in `pybundle/bundler.py`. Shared state (`root`, `mods`, `entry`, `warnings`) lives on a `Context` passed as the first argument to every phase helper.
+The bundler operates in five sequential phases, orchestrated by `bundle(entry)` in `tools/pybundle/bundler.py`. Shared state (`root`, `mods`, `entry`, `warnings`) lives on a `Context` passed as the first argument to every phase helper.
 
 ### 1. Locate (`_locate`, `_ensure`, `_ensure_prefixes`)
 
@@ -118,9 +118,9 @@ Reconstruct the source text by walking the token stream and applying replacement
 
 Per AGENTS.md, the public API split is:
 
-- **`pybundle/bundler.py`**: Public API only — `bundle(entry)` and `main()`. No internal classes/functions.
-- **`pybundle/bundler_impl.py`**: All internals — `Context`, `Mod`, `Scope`, and all `_`-prefixed phases (`_analyze`, `_rewrite`, `_topo`, etc.).
-- **`pybundle/__init__.py`** (if it exists): Re-exports `bundler`.
+- **`tools/pybundle/bundler.py`**: Public API only — `bundle(entry)` and `main()`. No internal classes/functions.
+- **`tools/pybundle/bundler_impl.py`**: All internals — `Context`, `Mod`, `Scope`, and all `_`-prefixed phases (`_analyze`, `_rewrite`, `_topo`, etc.).
+- **No `__init__.py`** — AGENTS.md forbids one in a tool folder, and there is none. `tools/` goes on `sys.path` and `pybundle` resolves as a PEP 420 namespace package, so `from pybundle import bundler` works without a re-export.
 
 **Public function signatures:**
 
@@ -136,7 +136,7 @@ def main():
 
 ## Release Integration
 
-The release script (`release/release.py`) calls `bundler.bundle(str(entry))` to produce a versioned file in `xlib/`. The bundled output format matches what the test fixtures expect (module bodies with `############   from file: ...   ############` markers, hoisted imports preamble, mangled name references).
+The release script (`tools/release/release.py`) calls `bundler.bundle(str(entry))` to produce a versioned file in `xlib/`. The bundled output format matches what the test fixtures expect (module bodies with `############   from file: ...   ############` markers, hoisted imports preamble, mangled name references).
 
 ## Test Fixtures
 

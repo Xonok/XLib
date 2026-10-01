@@ -99,7 +99,7 @@ wrapped(*args, **kwargs)  bind() → argdict → check() → ValidationError or 
 
 ## Planned Changes
 
-Per `plans/typechecking.md`:
+Per `doc/plans/typechecking.md`:
 
 1. **Error collection mode** (`errors(value, spec) -> list[ValidationError]`): shared traversal with raise-first `check()`; stops at failed node, continues siblings. Phase 1.
 2. **Read-then-validate examples**: JSON/CSV load → explicit validate step; ensure no type checks leak into load. Phase 3.
