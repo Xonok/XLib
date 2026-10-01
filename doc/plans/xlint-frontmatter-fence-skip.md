@@ -1,7 +1,10 @@
 # xlint: skip YAML frontmatter and fenced code blocks in .md files
 
-Status: spec written 2026-09-22, implementation NOT started.
-Owner: any agent with coding duty (programmer/mechanic). Secretary does NOT implement (human decision).
+Status: **implemented** — `_frontmatter_exempt` and `_fence_exempt` in
+`tools/xlint/xlint.py`; epi `GBNEWPS` closed 2026-09-29 after its own 12-point
+checklist passed. The question the spec left open (should an *indented* code
+fence be a violation?) is parked as epi `QN1N82Y`; this spec says indented
+fences stay a violation.
 
 ## Problem
 
