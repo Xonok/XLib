@@ -55,6 +55,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `doc/style/python.md` | Formatting, imports, naming, type hints, declarative style |
 | `doc/style/js.md` | The same, for JavaScript |
 | `doc/style/markdown.md` | Markdown formatting (indentation) |
+| `doc/style/prose.md` | How to explain technical things so the human can check them |
 | `doc/plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps; index in `doc/plans/README.md` |
 | `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
 | `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). Claim/update the `personal/<person>/...` path; claims resolve symlinks by realpath. |
