@@ -1,0 +1,27 @@
+{
+	"_comment": "The human approved. Handled already, never blocked.",
+	"id": 81,
+	"title": "match_list_keyboard_nav",
+	"author": {"nickname": "Anton Slavin"},
+	"source": {"branch": {"name": "match-list-keyboard-nav"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-09-27T12:00:00.000000+00:00",
+	"updated_on": "2026-09-28T08:00:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 1,
+	"participants": [
+		{
+			"user": {"nickname": "Anton Slavin"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "REVIEWER",
+			"approved": true,
+			"state": "approved"
+		}
+	]
+}

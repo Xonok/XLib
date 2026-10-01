@@ -99,6 +99,18 @@ def _parse_netrc(path: str) -> tuple[str, str]:
 		)
 	return login, password
 
+def _review_state(record: dict) -> str:
+	"""
+	The reviewer's state, normalized: '' when they have not acted yet.
+
+	Bitbucket spells "no state" two ways — JSON null on some records and the
+	*string* "null" on others — so both have to collapse to the same absence.
+	Left as-is, the string is truthy and a reviewer who never looked at a PR
+	reads as one who has.
+	"""
+	state = record.get("state")
+	return "" if state is None or state == "null" else state
+
 @dataclass
 class PullRequest:
 	repo: str
@@ -140,22 +152,44 @@ class PullRequest:
 			for p in self.participants
 			if p.get("role") == "REVIEWER"
 		]
-	def my_participation(self) -> str | None:
-		"""How the human appears on this PR, or None if not involved."""
+	def _my_record(self) -> dict | None:
+		"""The human's own entry in `participants`, or None if not involved."""
 		for p in self.participants:
 			if p.get("user", {}).get("nickname") == HUMAN:
-				role = p.get("role", "?")
-				return f"{role}/{'approved' if p.get('approved') else 'NOT approved'}"
+				return p
 		return None
+	def my_participation(self) -> str | None:
+		"""
+		How the human appears on this PR, or None if not involved.
+
+		`state` is what separates the two not-approved cases: Bitbucket sends
+		`approved: false` both for a reviewer who requested changes and for one
+		who never looked at the PR, and only `state` tells them apart.
+		"""
+		record = self._my_record()
+		if record is None:
+			return None
+		role = record.get("role", "?")
+		if record.get("approved"):
+			return f"{role}/approved"
+		return f"{role}/{_review_state(record) or 'NOT approved'}"
 	def blocks_the_human(self) -> bool:
 		"""
-		True when this is someone else's live PR and the human is a reviewer
-		who has not approved it. This is the 'I might be blocking them' case.
+		True when this is someone else's live PR and the human has neither
+		approved it nor asked for changes. This is the 'I might be blocking
+		them' case.
+
+		Decided from the participant data, never by reading back the rendered
+		`my_participation` string: requesting changes *completes* the review
+		obligation and hands the ball to the author, so reporting it as
+		blocked sends the human to a PR that is not waiting on them.
 		"""
 		if self.is_mine or self.draft:
 			return False
-		part = self.my_participation()
-		return part is not None and part.endswith("/NOT approved")
+		record = self._my_record()
+		if record is None:
+			return False
+		return not (record.get("approved") or _review_state(record) == "changes_requested")
 	def flags(self) -> list[str]:
 		out = []
 		if self.blocks_the_human():
@@ -239,24 +273,32 @@ class Bitbucket:
 			page = self._get(url)
 			for stub in page.get("values", []):
 				full = self._get(f"{API}/repositories/{WORKSPACE}/{repo}/pullrequests/{stub['id']}")
-				out.append(
-					PullRequest(
-						repo=repo,
-						id=full["id"],
-						title=full["title"],
-						author=full["author"]["nickname"],
-						source=full["source"]["branch"]["name"],
-						destination=full["destination"]["branch"]["name"],
-						draft=bool(full.get("draft")),
-						created=datetime.fromisoformat(full["created_on"]),
-						updated=datetime.fromisoformat(full["updated_on"]),
-						state=full["state"],
-						participants=full.get("participants") or [],
-						comment_count=full.get("comment_count", 0),
-					)
-				)
+				out.append(parse_pr(repo, full))
 			url = page.get("next")
 		return out
+
+def parse_pr(repo: str, full: dict) -> PullRequest:
+	"""
+	Build a PullRequest from one API object.
+
+	Its own function, not inline in open_prs, so the test harness can drive
+	the same mapping the live code does. A test that hand-builds a PullRequest
+	proves nothing about what the API actually yields.
+	"""
+	return PullRequest(
+		repo=repo,
+		id=full["id"],
+		title=full["title"],
+		author=full["author"]["nickname"],
+		source=full["source"]["branch"]["name"],
+		destination=full["destination"]["branch"]["name"],
+		draft=bool(full.get("draft")),
+		created=datetime.fromisoformat(full["created_on"]),
+		updated=datetime.fromisoformat(full["updated_on"]),
+		state=full["state"],
+		participants=full.get("participants") or [],
+		comment_count=full.get("comment_count", 0),
+	)
 
 def relevant(prs: list[PullRequest], include_drafts: bool, mine_only: bool) -> list[PullRequest]:
 	"""Apply the human's relevance rule: open PRs, and drafts only if his own."""

@@ -1,0 +1,33 @@
+{
+	"_comment": "The human is a reviewer who has not looked. `state` is the string \"null\", not JSON null — the wart the live API actually sends. This IS blocked on him.",
+	"id": 70,
+	"title": "note-viewer-part-staff-switch",
+	"author": {"nickname": "Timo Tambet"},
+	"source": {"branch": {"name": "note-viewer-part-staff-switch"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": false,
+	"created_on": "2026-09-18T10:00:00.000000+00:00",
+	"updated_on": "2026-09-18T10:00:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 2,
+	"participants": [
+		{
+			"user": {"nickname": "Timo Tambet"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		},
+		{
+			"user": {"nickname": "Anton Slavin"},
+			"role": "REVIEWER",
+			"approved": true,
+			"state": "approved"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "REVIEWER",
+			"approved": false,
+			"state": "null"
+		}
+	]
+}
