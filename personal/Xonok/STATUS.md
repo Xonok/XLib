@@ -55,18 +55,32 @@ entered on the human's call.
 The human's decision of 2026-09-30: every piece of work goes on its own
 feature branch, one commit per ticket, ref-prefixed, and **nothing merges
 before the human reviews it**. Agents move finished tickets to Done themselves;
-an agent may merge to master and delete the branch only after the human has
-approved the ticket.
+after the human has approved a ticket an agent may merge it to master, delete
+the branch, and close the ticket (epiq `H2NC2A2`).
 
-| Branch | Ticket | Size | What |
-|--------|--------|------|------|
-| `ym7eshs-drop-rotation-cursor` | `YM7ESHS` | 1 file, −1 | dead `ROTATION_CURSOR` constant |
-| `9w4yrc6-oc-agent-validate-name` | `9W4YRC6` | 1 file, +26 | `oc-agent` validates the agent name |
-| `j3kk7hd-xlint-plan-status` | `J3KK7HD` | 1 file, +5/−2 | xlint plan status corrected |
-| `tvjcmtf-doc-pointer-repair` | `TVJCMTF` | 4 files, +19/−10 | pointers broken by the `doc/` move |
-| `k1mx4tb-library-structure-doc` | `K1MX4TB` | 2 files, +145/−40 | library-structure doc out of AGENTS.md |
-| `wkq371w-status-present-only` | `WKQ371W` | 5 files, +207/−145 | this file, plus the drift rulings |
-| `vg87t14-delete-realized-plans` | `VG87T14` | 12 files, +53/−734 | eight realized plans deleted |
+`0J8YBYH` — the epiq workflow itself, written into `AGENTS.md` and
+`doc/development.md` — is **merged** (`9ffa237`) and closed. It is the first
+ticket through the whole loop.
+
+Ten open PRs, ten tickets in Done. All pairings verified conflict-free with
+`git merge-tree`, so merge order is free; nothing is at risk from it, because
+every deleted file stays in master's history until its PR merges.
+
+| PR | Branch | Ticket | What |
+|----|--------|--------|------|
+| #2 | `ym7eshs-drop-rotation-cursor` | `YM7ESHS` | dead `ROTATION_CURSOR` constant |
+| #4 | `9w4yrc6-oc-agent-validate-name` | `9W4YRC6` | `oc-agent` validates the agent name |
+| #3 | `j3kk7hd-xlint-plan-status` | `J3KK7HD` | xlint plan status corrected |
+| #7 | `tvjcmtf-doc-pointer-repair` | `TVJCMTF` | pointers broken by the `doc/` move |
+| #5 | `k1mx4tb-library-structure-doc` | `K1MX4TB` | library-structure doc out of AGENTS.md |
+| #1 | `wkq371w-status-present-only` | `WKQ371W` | this file, plus the drift rulings |
+| #3 | `vg87t14-delete-realized-plans` | `VG87T14` | eight realized plans deleted |
+| #9 | `hc1zjk6-dispatch-general-longcat` | `HC1ZJK6` | `general` → `worker-longcat` while ling fails |
+| #10 | `h2nc2a2-closing-after-merge` | `H2NC2A2` | leaving Done means closing |
+| #11 | `9r0h6sa-status-two-board-split` | `9R0H6SA` | two-board split, 16 refiled tickets |
+
+**#9 is the one to merge first.** It is the only open PR holding a *fix* to
+something live — see *Blocked* below.
 
 `gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
 apt source added — and is authenticated against `Xonok` with `repo` scope. An
@@ -77,7 +91,8 @@ diff.
 **The subject format is `<REF> ` — ref, then a space.** `REF: ` does not link:
 the matcher is `subject.toUpperCase().startsWith(ref + " ")`. All seven were
 committed the git way first and read as zero commits; epiq's own skill never
-states the separator.
+states the separator. A rebase merge preserves it; a merge commit would bury
+it under a refless subject.
 
 ### pybundle — read this before trusting the reviews
 
@@ -100,9 +115,26 @@ Two consequences for anyone reading the workspace:
 
 ## Blocked / needs attention
 
+- **`dispatch general` points at a model that is failing.** PR #9 (`HC1ZJK6`)
+  holds the fix — `worker-ling` → `worker-longcat`, because
+  `opencode/ling-3.0-flash-fin-free` was answering "Upstream request failed".
+  **The fix is currently inert.** It arrived as an uncommitted working-tree
+  edit, and moving it onto a branch — which is what the workflow requires —
+  took it out of the checkout. `agent-coord.py dispatch general` returns
+  `worker-ling` again on both master and this branch. Merging #9 restores it.
+  This is the workflow's one sharp edge so far: **work on a branch is not live
+  until it merges**, which is correct for review and wrong for anything
+  repairing a running thing.
+- **139 epiq events are unsynced and machine-local.** Four `~pending.jsonl`
+  files under the state branch worktree. `0J8YBYH` — merged and closed —
+  appears 12 times in a pending file and 0 times in the committed event log.
+  `epiq_sync` returns `skipped: true` and does not publish them; the reason is
+  not understood. Recorded as `AZHG0FK` (accepted risk, 2026-09-29) and it has
+  since grown. **Anything that leans on the board being durable is resting on
+  this** — including the patches-file design in `Z491RDN`.
 - **pybundle agent work is blocked on the human's spec.** Nothing should be
-	started against the current bundler's structure until it lands (why:
-	HISTORY.md 2026-09-30).
+  started against the current bundler's structure until it lands (why:
+  HISTORY.md 2026-09-30).
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
@@ -159,6 +191,18 @@ Two consequences for anyone reading the workspace:
 
 1. `dev/xprod/` — SPEC.md + VERSIONS.md, or fold into another library? Parked as
 	your manual work, epiq `DCF9EHW`.
+2. **`Z491RDN` — is the patches file generated at release or hand-maintained at
+	merge?** Generating it from `git log <prev-tag>..<tag>` cannot drift; a
+	hand-kept file drifts by exactly the amount nobody remembered. Recorded
+	because it is a design decision with reasoning that does not belong only in
+	a conversation. Does Traveller tag releases? Without a boundary the patch
+	notes cannot be sliced.
+3. **Why does `epiq_sync` skip?** 139 events are waiting on an answer nobody
+	has. Until it is understood, treat the board as single-machine.
+4. **PR #1 and PR #11 both rewrite STATUS.md.** They merge clean, but they are
+	both state-file rewrites and one supersedes the other — the two-board split
+	in #11 postdates everything in #1. Worth deciding which lands first rather
+	than discovering it at merge time.
 
 ## Pointers
 
