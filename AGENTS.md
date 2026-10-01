@@ -14,9 +14,9 @@ The epiq board is where work is planned, tracked and reviewed. The lane says wha
 - **In progress** — the human has ai-ok'd it, meaning it is now clear how to perform.
 - **Done** — the agent finished it: branch pushed, pull request open.
 
-A ticket leaves Done when the human has reviewed the work and approved it. Only then may an agent merge it to master and delete the branch.
+A ticket leaves Done when the human has reviewed the work and approved it. Only then may an agent merge it to master, delete the branch, and **close the ticket** — closing is how a ticket leaves the board, and it is the agent's step, not a second approval.
 
-This is one point where the epiq skill differs, and the difference is deliberate: the skill puts a ticket in Done when it merges and closes it at release. Here **Done means finished and awaiting approval**, so leaving the lane is the review.
+This is one point where the epiq skill differs, and the difference is deliberate: the skill puts a ticket in Done when it merges and closes it at release, because Done is the list the next release ships from. Here **Done means finished and awaiting approval**, so leaving the lane is the review and nothing else is. Closed tickets stay readable, so closing loses no record; what the release-list role is replaced by is `Z491RDN`'s patches file.
 
 Commit under the repo's configured `user.name` / `user.email` and nothing else — no `Co-Authored-By:` line, no tool footer, no `--author` override. The git user is the sole author of every commit an agent writes; attribution belongs on the board, not in the commit.
 
