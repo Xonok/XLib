@@ -1,0 +1,27 @@
+{
+	"_comment": "A colleague's draft with the human as an untouched reviewer. The draft early-return must win: an unfinished PR is not a colleague waiting on the human. (The relevance rule hides it anyway — this pins the predicate, not the filter.)",
+	"id": 90,
+	"title": "playback_speed_curve",
+	"author": {"nickname": "Timo Tambet"},
+	"source": {"branch": {"name": "playback-speed-curve"}},
+	"destination": {"branch": {"name": "master"}},
+	"draft": true,
+	"created_on": "2026-09-30T09:00:00.000000+00:00",
+	"updated_on": "2026-09-30T09:45:00.000000+00:00",
+	"state": "OPEN",
+	"comment_count": 0,
+	"participants": [
+		{
+			"user": {"nickname": "Timo Tambet"},
+			"role": "PARTICIPANT",
+			"approved": false,
+			"state": "null"
+		},
+		{
+			"user": {"nickname": "Kaarel Veldre"},
+			"role": "REVIEWER",
+			"approved": false,
+			"state": "null"
+		}
+	]
+}
