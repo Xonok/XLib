@@ -2,8 +2,52 @@
 
 How code gets written and verified in this workspace, end to end. The planner,
 reviewer, and programmer agents follow this; the human drives every stage
-boundary. This is the canonical home of the process — it does not live in
-AGENTS.md (which carries rules for all agents, not just coding ones).
+boundary. This is the canonical home of the **development** process — it does
+not live in AGENTS.md (which carries rules for all agents, not just coding
+ones).
+
+The board mechanics live in AGENTS.md instead, under *Working on a ticket*:
+which lane a ticket is in, and what an agent may do with git. The split is
+deliberate in both directions — this file describes how a piece of work is
+decided and built, AGENTS.md describes how it gets recorded and lands.
+
+## Two tracks
+
+Work reaches the board by one of two routes, and the choice is about size of
+intent, not about importance.
+
+| | Track 1 — the spec pipeline | Track 2 — the ticket is the spec |
+|---|---|---|
+| For | feature work, anything intent-heavy | everything else; **the default** |
+| The spec | its own file, written by the human | the ticket description |
+| Shape | goal → requirements → decisions, as below | same three parts, in the description |
+| Tests | derived by the reviewer before code exists | written by the implementing agent, if the ticket calls for them |
+| Review | pass 2, by the reviewer | the pull request |
+
+**The boundary rule:** if the human would write the spec himself, it is track 1.
+If the goal, scope and acceptance fit in a ticket description, it is track 2.
+
+Track 2 is the default because track 1 costs a human-authored document and a
+second agent per ticket, and that is not worth paying for a fix whose whole
+scope fits in a paragraph. What track 2 gives up is the forcing function — the
+human thinking a design through by writing it down — so the human still
+approves the description before the agent starts, which is the same thinking at
+a smaller size.
+
+Neither track is exempt from the rules below. The conflict rule, the silence
+rule and the style/architecture rules apply to both; track 2 changes where the
+spec lives, not what an agent may decide alone.
+
+## The board
+
+Both tracks are tracked on the epiq board, one ticket per independent piece of
+work, on its own feature branch — see *Working on a ticket* in `AGENTS.md` for
+the lanes and the commit rules. A track-1 piece is usually several tickets,
+one per stage, because a stage that takes days and a stage that takes twenty
+minutes are not the same thing to review.
+
+A track-1 spec may be written by hand as before; an agent moves and tags the
+ticket as the stage progresses. The agent does not write it.
 
 ## Pipeline
 
