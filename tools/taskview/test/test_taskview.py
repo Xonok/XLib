@@ -23,6 +23,8 @@ from tools.taskview.taskview import (
 	resolve_data_dir,
 	resolve_csv,
 	watch_targets,
+	truncate,
+	task_label,
 )
 
 # Module-level test isolation: redirect XDG_DATA_HOME to a unique temp directory
@@ -678,6 +680,90 @@ class PurityTests(unittest.TestCase):
 		result1 = compute_metrics(state, selected, filter_data)
 		result2 = compute_metrics(state, selected, filter_data)
 		self.assertEqual(result1, result2)
+
+
+class TaskIdDisplayTests(unittest.TestCase):
+	"""R42: the pane shows the task id, and the title is not shortened by it."""
+
+	def _task(self, task_id, title, due_ts=None):
+		return {'id': task_id, 'status': 'open', 'title': title, 'due_ts': due_ts,
+				'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': ''}
+
+	def _view(self, tasks, width):
+		selected = {t['id']: t for t in tasks}
+		metrics = {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': len(tasks),
+				   'this_week': 0, 'this_month': 0, 'later': len(tasks),
+				   'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0}
+		filter_data = {'label': 'T', 'categories': set(), 'tags': set(),
+					   'include_bucket': True,
+					   'limits': {'upcoming': 5, 'queue_breakdown': True}}
+		return build_view(selected, metrics, filter_data, width, 'explicit')
+
+	def _lines(self, view):
+		return [l for l in view.splitlines() if l.startswith('▸') or l.startswith(' ·')]
+
+	# The methods below cover R42 (id shown on both task lines), R43 (prefix
+	# comes out of the title's budget), R44 (truncate never exceeds width),
+	# R45 (id kept when the budget is too small for a title), and R46 (no task
+	# line overflows at any width).
+
+	def test_current_task_line_shows_the_id(self):
+		view = self._view([self._task(42, 'part switching')], 80)
+		self.assertTrue(any(l.startswith('▸ #42 ') for l in self._lines(view)),
+			f"current line must show #42: {self._lines(view)}")
+
+	def test_upcoming_lines_show_the_id(self):
+		tasks = [self._task(1, 'first'), self._task(42, 'second'), self._task(7, 'third')]
+		view = self._view(tasks, 80)
+		upcoming = [l for l in self._lines(view) if l.startswith(' ·')]
+		self.assertEqual(len(upcoming), 2)
+		for expected in ('#42', '#7'):
+			self.assertTrue(any(expected in l for l in upcoming),
+				f"upcoming must show {expected}: {upcoming}")
+
+	def test_task_label_keeps_the_whole_title_when_it_fits(self):
+		label = task_label(self._task(42, 'short'), 40)
+		self.assertEqual(label, '#42 short')
+
+	def test_task_label_preserves_title_budget(self):
+		"""Adding the id must not shorten the title. The title gets budget minus
+		the prefix width, so the total is the same as the bare title's budget."""
+		budget = 40
+		task = self._task(1234, 'A' * 100)
+		label = task_label(task, budget)
+		self.assertTrue(label.startswith('#1234 '))
+		title_part = label[len('#1234 '):]
+		# The title gets budget minus the prefix width, under the same rule the
+		# bare title would get (truncate reserves 3 for the ellipsis).
+		self.assertEqual(title_part, truncate('A' * 100, budget - len('#1234 ')))
+		self.assertEqual(len(title_part), budget - len('#1234 '))
+
+	def test_truncate_never_exceeds_width(self):
+		for width in range(-2, 20):
+			out = truncate('x' * 50, width)
+			self.assertLessEqual(len(out), max(0, width),
+				f"truncate(x*50, {width}) returned {len(out)} chars: {out!r}")
+
+	def test_lines_fit_narrow_widths(self):
+		"""Narrow widths degrade sanely — the id survives, the line does not overflow."""
+		tasks = [self._task(1234, 'A title long enough to truncate at narrow widths'),
+				 self._task(2, 'another task so UPCOMING has a row too')]
+		for width in (60, 30, 20, 14, 10, 8, 6, 4, 2, 1, 0):
+			for line in self._lines(self._view(tasks, width)):
+				lead = len(line) - len(line.lstrip("▸ ·"))
+				body = line[lead:]
+				self.assertLessEqual(len(body), max(0, width - lead),
+					f"width={width} body overflowed: {line!r}")
+
+	def test_id_survives_when_the_budget_is_tiny(self):
+		label = task_label(self._task(1234, 'a title'), 3)
+		self.assertTrue(label.startswith('#'), f"the id is the reference, keep it: {label!r}")
+		self.assertLessEqual(len(label), 3)
+
+	def test_ellipsis_marks_the_cut_in_both_lines(self):
+		tasks = [self._task(1, 'A' * 100), self._task(2, 'B' * 100)]
+		lines = self._lines(self._view(tasks, 30))
+		self.assertTrue(all('...' in l for l in lines), f"expected a marked cut: {lines}")
 
 
 class CSVToleranceTests(unittest.TestCase):

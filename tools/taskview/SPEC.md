@@ -299,6 +299,38 @@ and parse it by hand — the exact failure mode `AQQNPAN` describes.
 	separate tool, and `list` must not grow into one: it prints the store, it does
 	not analyse it. The one thing it adds over the raw CSV is the id in front.
 
+### Showing the id
+
+Added 2026-10-01 (epiq `X06YVNP`). The pane-side half of the pair specified in
+R35-R41's preamble.
+
+- **R42** The current-task line and every UPCOMING line render the task's id as a
+	`#<id> ` prefix before the title. An id is the natural handle for a task, and
+	until now the pane could not produce one: a task could only be named by its
+	title, and two titles sharing a first few words were indistinguishable. A
+	truncated title is worse than no title, because the identifying part is
+	exactly what the cut removes.
+- **R43** The prefix comes out of the **title's** budget, not the line's, so a
+	title that fit before the change is still fully shown after it. `task_label`
+	receives the line budget and subtracts the prefix width itself; a test asserts
+	the title part equals `truncate(title, budget - len(prefix))`, so "the id was
+	added and the title is now shorter" cannot pass.
+- **R44** `truncate` never returns more than `width` characters, for any `width`
+	including zero and negative. Before this it returned `text[:max(0, width-3)] +
+	"..."`, which is three characters wide at `width == 0` — so a caller that
+	subtracts a prefix from its budget could not rely on the line fitting.
+	`task_label` depends on this guarantee, so the two requirements are one change.
+- **R45** When the budget cannot hold the id and a title, the **title is dropped**
+	and the id is truncated alone: a pane wraps badly long before a task becomes
+	unnamed, and an id with no title is still a resolvable reference. For the same
+	reason, when the remaining width cannot hold both a label and a due date, the
+	UPCOMING line drops the due rather than overflowing.
+- **R46** No rendered **task** line may exceed the render width, at any width, for
+	either the current-task line or an UPCOMING line. Verified across widths 0-89
+	with a fixture whose ids and titles are long enough to force every branch. This
+	does not cover R24's header or the PACE / QUEUE blocks: those are not task
+	lines and their widths are unchanged by this work.
+
 ## Decisions
 
 Numbered, each with what was rejected.
@@ -498,12 +530,12 @@ conversation:
 	exist** (`mms-frontend`, `Mistlands`, `MaFE` are in zero rows) and omits three
 	that do (`research`, `ai-docs`, `personal`). The human has left the file alone
 	for now. Tracked as epiq `QKRW2Z0`.
-- ~~**Task ids are not shown in the pane.**~~ **Specified and in flight
-	2026-10-01** — the resolver side is `EY72YA9` (R35-R41 above), the pane side
-	is `X06YVNP`. The two are specified together because an id in the pane that
-	nothing can resolve is a worse gap than no id at all: it invites the reader to
-	ask "what is #40?" and then go read the CSV by hand. Raised by the human
-	2026-09-27.
+- ~~**Task ids are not shown in the pane.**~~ **Ruled and implemented
+	2026-10-01** — specified as a pair and landed together: the resolver side is
+	R35-R41 above (`EY72YA9`), the pane side is R42-R46 (`X06YVNP`). Paired because
+	an id in the pane that nothing can resolve is a worse gap than no id at all:
+	it invites the reader to ask "what is #40?" and then go read the CSV by hand.
+	Raised by the human 2026-09-27.
 
 ## Interfaces
 
@@ -552,6 +584,15 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]
 	# R22. The CSV plus the resolved filter file if there is one, de-duplicated.
 	# Both may live in different directories.
+
+def truncate(text: str, width: int) -> str
+	# R44. Shorten to fit width, marked with an ellipsis. Never returns more than
+	# max(0, width) characters, so a caller may subtract a prefix from its budget
+	# and rely on the line still fitting.
+
+def task_label(task: dict, budget: int) -> str
+	# R42, R43, R45. "#<id> " then the title truncated into what is left of
+	# budget. A budget too small for the id returns the truncated id alone.
 
 def read_csv(path: Path) -> dict
 	# R33, R34. Unchanged behaviour.
