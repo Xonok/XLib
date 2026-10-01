@@ -20,16 +20,21 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `2e4efa5` (2026-10-01). xlint reports clean over the whole
-repo, and that claim is narrower than it reads: it skips every directory named
+Basis: `master` at `b7211a2` (2026-10-01). **xlint reports clean over the whole
+repo, and that is narrower than it reads** — it skips every directory named
 `test`, so 109 violations in tool tests are invisible to it (epi `AK633QC`).
-**One ticket awaits review** — `3EEXMRK` (bbprs `BLOCKED ON YOU` false
-positive — both ways it lied, plus the tool's first test suite) on PR #21. The
-twelve tickets of
-the epiq workflow and the 2026-09-30/10-01 doc and state work are on `master`
-as a flat rebase sequence, all closed. `doc/development.md` is the canonical
-process document — plan → spec → tests → implementation → review, each stage
-entered on the human's call.
+**The release script cannot release anything** (`1ZY2Q5Q`) — found 2026-10-01,
+not previously recorded. Read Blocked before trusting a release. **195 epiq
+events were stranded on 2026-10-01, 13 of them issue creations**; the drain ran
+on 2026-10-02 and **1 event remains stranded** (a bare `create.contributor`
+carrying no ticket content), confirmed 2026-10-08 with `tools/epiq-pending.py`.
+**Two tickets await review** — `3EEXMRK` (bbprs `BLOCKED ON YOU` false positive,
+both ways it lied, plus that tool's first test suite) on PR #21, and `FZDMC84` on
+PR #23. Before them, twelve tickets of the epiq workflow and the 2026-09-30/10-01
+doc and state work are on `master` as a flat rebase sequence, all closed, and
+`XRVB0W5` merged as `b7211a2`. `doc/development.md` is the canonical process
+document — plan → spec → tests → implementation → review, each stage entered on
+the human's call.
 
 - **Technical explanations have a rule file.** `doc/style/prose.md` — cite
 	identifiers, trace rather than summarize, mark inference, state what would
@@ -63,7 +68,7 @@ entered on the human's call.
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib 31 open (24 Todo, 1 In progress, 6 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
+| **epiq boards** | secretary | XLib 31 open (28 Todo, 2 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -128,16 +133,53 @@ Two consequences for anyone reading the workspace:
 	a running thing is unfixed for the whole review window**, which is correct
 	for review and wrong for a fix. Worth deciding whether an infra repair may
 	land ahead of review.
-- **139 epiq events are unsynced and machine-local.** Four `~pending.jsonl`
-	files under the state branch worktree. `0J8YBYH` — merged and closed —
-	appears 12 times in a pending file and 0 times in the committed event log.
-	`epiq_sync` returns `skipped: true` and does not publish them; the reason is
-	not understood. Recorded as `AZHG0FK` (accepted risk, 2026-09-29) and it has
-	since grown. **Anything that leans on the board being durable is resting on
-	this** — including the patches-file design in `Z491RDN`.
-- **pybundle agent work is blocked on the human's spec.** Nothing should be
-	started against the current bundler's structure until it lands (why:
-	HISTORY.md 2026-09-30).
+- **195 epiq events are unsynced and machine-local, and the loss is selective.**
+	Measured 2026-10-01: **XLib 454 committed / 60 pending**, **Agents 113 / 135**.
+	`mechanic` and `paul` have **no committed event log at all** — only
+	`~pending` files, last touched 2026-09-29 — so survival depends on which actor
+	authored an event. `epiq_sync` returns success with every flag false, so it
+	reads as done and does nothing. **13 issue creations are stranded** (6 XLib, 7
+	Agents), which means a fresh clone gets lane-moves, comments and tags pointing
+	at tickets that do not exist there. **`FZDMC84`, the ticket about this, is
+	itself stranded.** Mechanism — each actor writes to its own
+	`<actorId>~pending*.jsonl` and only drains when a process running *as that
+	actor* syncs, so an exited actor never drains. `AZHG0FK` closed this as
+	accepted risk on 2026-09-29; the orphan-creation finding is worse than that
+	assumed. **Anything that leans on the board being durable rests on this.**
+- **`.work/` is gitignored now, and the convention travels** — **fixed
+	2026-10-01** as `b7211a2` (epiq `XRVB0W5`, PR #24, merged and closed). Both
+	halves of the finding below are done: `.gitignore` carries `.work/`, so
+	`git add .` no longer stages a worktree as an embedded-repo gitlink, and the
+	rule itself moved from gitignored `.agents/shared-notes.md` into `AGENTS.md`
+	next to the branch-per-ticket rule. **Corrected 2026-10-01**: when this was
+	first written it read *`.work/` is not gitignored, and it holds two live
+	worktrees* — true an hour earlier, and the reason the fix landed inside the
+	same session rather than after it.
+- **`VERSIONS.md` entries should cite the release's epiq ref where one exists**
+	(human, 2026-10-01; epiq `NCPBQ3W`). **Libraries only** — no tool has a
+	`VERSIONS.md`, by standing rule. Forward, not retrofit: no release commit has
+	ever carried a ref, so all six existing entries stay as they are and the first
+	entry that can cite one is the next release. Mechanizable — each released file
+	has exactly one adding commit, so the ref is findable via
+	`git log --diff-filter=A`, and the check should validate against **git rather
+	than the board**, since the board is not durable.
+- **`tools/release/release.py` cannot release anything.** It resolves the dev
+	folder at `ROOT / <library>`; the folders moved under `dev/` in `da1d163`
+	(2026-09-17) and the script was not updated, so every library fails with an
+	error naming a path that does not exist. Found 2026-10-01. All six releases in
+	`xlib/` predate the move, and nothing tests the path. The safe inspection route
+	the README offers in its place is broken too: `bundler.py <dev-folder>` raises
+	`IsADirectoryError`, because `bundle()` takes the entry **file**. Fixing this
+	first is also what gives the pybundle rewrite a path to be tested through
+	(epiq `1ZY2Q5Q`).
+- **pybundle agent work is blocked on the human's spec.** The new spec is being
+	written **outside the repository** and there is no `PLAN.md`, so no step of the
+	process is delegatable yet. The `SPEC.md` in the tree is `<!-- spec-origin:
+	ai -->` and describes the bundler being replaced, not the replacement. The
+	human's reasons for the rewrite — pybundle is a tool and carries no versions;
+	its earlier releases were removed before ever being committed; the last agent
+	on it went in circles on the complexity — are in epiq `6MFX0Z1` (why:
+	HISTORY.md 2026-09-30 for the original block).
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
@@ -151,16 +193,24 @@ Two consequences for anyone reading the workspace:
 	merge.** Both asked which worker the coding route should name, in two
 	different lanes; both are closed and refiled on the Agents board as
 	`G8B6T7V` and `P1H7VM4`, where the work lands. One decision, one board.
-- **epiq pending events**: 49 events sit in four `~pending.jsonl` files under
-	`~/.epiq-global/worktrees/` and are committed only when that actor's own
-	process syncs. Accepted risk, closed as `AZHG0FK` on 2026-09-29; the residual
-	loss window is a worktree prune. The count has been quoted as both ~60 and
-	139; 49 is what the files hold as of 2026-10-01, and it moves with board use.
-- **Per-ticket branching needs one fix before agents work in worktrees.**
-	`.agents/` is gitignored, so a new worktree has no `claims.json` and
-	`check-clean` reads the shared index — claims must resolve to the main
-	checkout. Confirmed 2026-10-01: `claim` accepts a worktree path, and
-	`check-clean` then refuses the same path with "paths span multiple repos".
+- **epiq pending events are drained; `AZHG0FK`'s "accepted risk" ruling is
+	over.** 195 events were stranded on 2026-10-01, 13 of them `add.issue`, so a
+	fresh clone got lane-moves and comments pointing at tickets that did not exist
+	there. The drain ran on 2026-10-02; `tools/epiq-pending.py` reports **1 event
+	still stranded** as of 2026-10-08 (a bare `create.contributor` carrying no
+	ticket content). `AZHG0FK` assumed the loss window was a worktree prune — a
+	missing creation with committed events referencing it is more severe than
+	that. Draining another actor needs a session running as that actor, which
+	`epiq_actor_assume` refuses unless the server was launched with that name.
+- **Two worktree hazards, both reproduced 2026-10-08.** `check-clean` answers
+	`clean` for a dirty file in a worktree — a worktree's `.git` is a *file*, so
+	`nearest_git` walks past it to the parent repo and reads the wrong status
+	(`8FVW49J`). And `.agents/` is gitignored, so a fresh worktree has no
+	`claims.json` and claims resolve to the main checkout only. **Corrected
+	2026-10-08**: an earlier line here said `check-clean` *refuses* worktree paths
+	with "paths span multiple repos". It does not; that error needs two different
+	repos in one call, and `.opencode/agent/` never triggers it because `abspath`
+	does not follow the symlink.
 - **The agent-file zero-stats problem is ruled against, not just fixed.**
 	`.opencode/agent/` is a symlink into the Agents repo, so an agent-file ticket
 	filed on this board reads as zero commits however it is committed; 16 were
@@ -211,19 +261,29 @@ Two consequences for anyone reading the workspace:
 - **The four `doc/reviews/pybundle-*.md` files and the empty `tools/pybundle/_/`
 	stay.** The facts are written down in `doc/reviews/README.md` and here; the
 	ruling was to note them and leave the files in place.
+- **pybundle's missing versions are a ruling, not an oversight** (human,
+	2026-10-01). pybundle is an XLib tool, is not meant to have versions, and
+	**did have releases that were deliberately removed before ever being
+	committed**. So `doc/reviews/pybundle-23efebb3.md` §14 reading the
+	`1_0_0`–`1_0_3` entries in the old `VERSIONS.md` as "fiction" drew the wrong
+	inference from a right observation — the releases were real, then removed. The
+	review files stay as they are; what was corrected is the reading of them, now
+	in epiq `6MFX0Z1`.
 
 ## Open questions for the human
 
 1. `dev/xprod/` — SPEC.md + VERSIONS.md, or fold into another library? Parked as
 	your manual work, epiq `DCF9EHW`.
-2. **`Z491RDN` — is the patches file generated at release or hand-maintained at
-	merge?** Generating it from `git log <prev-tag>..<tag>` cannot drift; a
-	hand-kept file drifts by exactly the amount nobody remembered. Recorded
-	because it is a design decision with reasoning that does not belong only in
-	a conversation. Does Traveller tag releases? Without a boundary the patch
-	notes cannot be sliced.
-3. **Why does `epiq_sync` skip?** 139 events are waiting on an answer nobody
-	has. Until it is understood, treat the board as single-machine.
+2. **Drain the 195 stranded epiq events before anything leans on the board.**
+	The mechanism is understood as of 2026-10-01 — each actor drains only its own
+	log, so an exited actor's writes never land — but the drain itself is not done,
+	and `FZDMC84` is itself one of the stranded tickets. Asked 2026-10-01; the
+	human's answer pending.
+3. **Should `release.py` tag or commit a release?** It currently does neither,
+	there are zero tags in the repo, and the README's scope section may mean that
+	is deliberate. If deliberate it should be written down; if not it belongs in
+	`1ZY2Q5Q`. Related: `Z491RDN`'s "entry written when the change reaches master"
+	has no tooling behind it.
 4. **PR #1 and PR #11 both rewrite STATUS.md.** They merge clean, but they are
 	both state-file rewrites and one supersedes the other — the two-board split
 	in #11 postdates everything in #1. Worth deciding which lands first rather
@@ -250,3 +310,4 @@ Two consequences for anyone reading the workspace:
 	old→new map for the 2026-09-30 split is on `58MXTGY`.
 - Shared user context and per-agent state: `.agents/` in the Agents workspace.
 - Reviews: `doc/reviews/` (read its README first). Audits: `doc/audits/`.
+dirty-test
