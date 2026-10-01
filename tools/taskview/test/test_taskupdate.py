@@ -575,6 +575,144 @@ class TestReadLastId(unittest.TestCase):
 		self.assertNotIn(1, ids, "Must not reuse low ids")
 
 
+class TestShowCommand(unittest.TestCase):
+	"""EY72YA9: `show <id>` resolves a task reference, and `list` prints id first."""
+
+	def setUp(self):
+		self.tmpdir = tempfile.TemporaryDirectory()
+		self.csv_path = Path(self.tmpdir.name) / "tasks.csv"
+
+	def tearDown(self):
+		self.tmpdir.cleanup()
+
+	def run_cli(self, *args, expect_exit=None):
+		"""Run taskupdate.main with argv, capturing stdout. Returns (out, err, code)."""
+		import io
+		import contextlib
+		argv = ["taskupdate", "--csv", str(self.csv_path)] + list(args)
+		old_argv = sys.argv
+		old_out, old_err = sys.stdout, sys.stderr
+		sys.argv = argv
+		out, err = io.StringIO(), io.StringIO()
+		code = 0
+		try:
+			with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+				taskupdate.main()
+		except SystemExit as e:
+			code = e.code or 0
+		finally:
+			sys.argv = old_argv
+			sys.stdout, sys.stderr = old_out, old_err
+		if expect_exit is not None:
+			self.assertEqual(code, expect_exit,
+				f"argv={argv} expected exit {expect_exit}, got {code}; stderr={err.getvalue()!r}")
+		return out.getvalue(), err.getvalue(), code
+
+	def write_rows(self, text):
+		self.csv_path.write_text(text, encoding="utf-8")
+
+	def test_show_on_known_id_prints_every_field(self):
+		self.write_rows(
+			"// tasks.csv\nid,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,part switching,1791277200,1790746026,work,mms-frontend,medium\n")
+		out, _, _ = self.run_cli("show", "1", expect_exit=0)
+		for expected in ("#1", "open", "part switching", "work", "mms-frontend", "medium"):
+			self.assertIn(expected, out, f"show must report {expected!r}, got {out!r}")
+
+	def test_show_on_unknown_id_exits_nonzero_with_clear_message(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,only task,,,,,\n")
+		_, err, code = self.run_cli("show", "99")
+		self.assertEqual(code, 1, "an unresolvable id must not exit 0")
+		self.assertIn("99", err, "the message must name the id that was not found")
+
+	def test_show_on_id_with_mixed_width_history_takes_the_last_row(self):
+		# A legacy 5-field row and a later 8-field row share an id. R33: the short
+		# row's missing columns read as empty, and last-write-wins by id (R34).
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts\n"
+			"7,open,legacy five field row,1791277200,1790746026\n"
+			"7,open,legacy title updated,1791277200,1790746100\n")
+		out, _, _ = self.run_cli("show", "7", expect_exit=0)
+		self.assertIn("legacy title updated", out, f"last row must win, got {out!r}")
+		self.assertNotIn("legacy five field row", out)
+
+	def test_show_on_never_widened_row_reports_empty_optional_fields(self):
+		# R33: a row that only ever had 5 fields is uncategorised, not an error.
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts\n"
+			"9,open,only ever five fields,1791277200,1790746026\n")
+		out, _, _ = self.run_cli("show", "9", expect_exit=0)
+		self.assertIn("only ever five fields", out)
+		self.assertIn("(none)", out, f"missing columns must read as empty, got {out!r}")
+
+	def test_show_field_prints_one_value_only(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,part switching,1791277200,1790746026,work,mms-frontend,medium\n")
+		out, _, _ = self.run_cli("show", "1", "--field", "category", expect_exit=0)
+		self.assertEqual(out.strip(), "work", "--field must print just that value")
+
+	def test_show_field_due_ts_prints_the_stored_value(self):
+		# The field names are the CSV columns, so --field gives back what is
+		# stored — an agent resolving a field usually wants to pass it to update.
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,t,1791277200,1790746026,work,,medium\n")
+		out, _, _ = self.run_cli("show", "1", "--field", "due_ts", expect_exit=0)
+		self.assertEqual(out.strip(), "1791277200")
+
+	def test_show_unknown_field_exits_nonzero_and_lists_the_valid_ones(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,t,1791277200,1790746026,work,,medium\n")
+		_, err, code = self.run_cli("show", "1", "--field", "nope")
+		self.assertEqual(code, 1)
+		self.assertIn("category", err, "the error should list the valid field names")
+
+	def test_list_prints_id_first(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"3,open,third,1791277200,1790746026,XLib,,low\n"
+			"1,open,first,1791277200,1790746026,XLib,,low\n")
+		out, _, _ = self.run_cli("list", expect_exit=0)
+		lines = [l for l in out.strip().splitlines() if l.strip()]
+		self.assertTrue(lines[0].startswith("#1"), f"list must start at the lowest id, got {lines[0]!r}")
+		self.assertTrue(lines[1].startswith("#3"))
+
+	def test_list_filters_by_category(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,xlib task,1791277200,1790746026,XLib,,low\n"
+			"2,open,work task,1791277200,1790746026,work,,low\n")
+		out, _, _ = self.run_cli("list", "--category", "work", expect_exit=0)
+		self.assertIn("work task", out)
+		self.assertNotIn("xlib task", out)
+
+	def test_list_with_no_matches_exits_nonzero(self):
+		self.write_rows(
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,t,1791277200,1790746026,XLib,,low\n")
+		_, err, code = self.run_cli("list", "--category", "nonexistent")
+		self.assertEqual(code, 1, "an empty result is not a success")
+		self.assertIn("No matching tasks", err)
+
+	def test_list_on_missing_csv_exits_nonzero_without_traceback(self):
+		_, err, code = self.run_cli("list")
+		self.assertEqual(code, 1)
+		self.assertNotIn("Traceback", err)
+
+	def test_show_ignores_comment_and_header_rows(self):
+		self.write_rows(
+			"// tasks.csv — append-only\n"
+			"// Schema: id,status,title\n"
+			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
+			"1,open,real task,,,,,\n")
+		out, _, _ = self.run_cli("show", "1", expect_exit=0)
+		self.assertIn("real task", out)
+
+
 class TestIsolationGuard(unittest.TestCase):
 	"""R17, R19, R30: Verify the test suite cannot touch the real data directory."""
 

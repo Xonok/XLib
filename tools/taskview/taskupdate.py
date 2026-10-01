@@ -4,7 +4,7 @@ taskupdate — Append-only task state updates for taskview.
 Writes to tasks.csv resolved via R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.csv
 """
 
-import argparse,csv,os,sys,time
+import argparse,csv,datetime,os,sys,time
 from pathlib import Path
 from tools.taskview.taskview import resolve_data_dir,resolve_csv
 
@@ -44,6 +44,70 @@ def append_row(path, task_id, status, title, due_ts, chg_ts, category="", tags="
 		writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
 		writer.writerow([task_id, status, title or "", due_ts or "", chg_ts, category or "", tags or "", importance or ""])
 	print(f"Appended: id={task_id} status={status} title={title}")
+
+def read_task(path, task_id):
+	"""
+	Return the last row for task_id as a dict, or None if there is no such row.
+	Short rows read as empty (R33), so a legacy 5-column row has no category.
+	"""
+	current = {}
+	with path.open("r", encoding="utf-8") as f:
+		reader = csv.reader(f)
+		for row in reader:
+			if not row or row[0].startswith("//") or row[0] == "id":
+				continue
+			if len(row) >= 2 and row[0].isdigit() and int(row[0]) == task_id:
+				current = {
+					"id": int(row[0]), "status": row[1],
+					"title": row[2] if len(row) > 2 else "",
+					"due_ts": row[3] if len(row) > 3 else "",
+					"chg_ts": row[4] if len(row) > 4 else "",
+					"category": row[5] if len(row) > 5 else "",
+					"tags": row[6] if len(row) > 6 else "",
+					"importance": row[7] if len(row) > 7 else "",
+				}
+	return current or None
+
+def read_all(path):
+	"""
+	Every task by id, last row per id winning (R34). Same row shape as read_task.
+	"""
+	state = {}
+	with path.open("r", encoding="utf-8") as f:
+		reader = csv.reader(f)
+		for row in reader:
+			if not row or row[0].startswith("//") or row[0] == "id":
+				continue
+			if len(row) >= 2 and row[0].isdigit():
+				state[int(row[0])] = {
+					"id": int(row[0]), "status": row[1],
+					"title": row[2] if len(row) > 2 else "",
+					"due_ts": row[3] if len(row) > 3 else "",
+					"chg_ts": row[4] if len(row) > 4 else "",
+					"category": row[5] if len(row) > 5 else "",
+					"tags": row[6] if len(row) > 6 else "",
+					"importance": row[7] if len(row) > 7 else "",
+				}
+	return state
+
+def fmt_due(ts):
+	"""Human form of a due timestamp, matching taskview's pane wording."""
+	if not ts:
+		return "no due"
+	try:
+		due_date = datetime.datetime.fromtimestamp(int(ts)).date()
+	except (ValueError, OSError, OverflowError):
+		return f"unparseable due ({ts})"
+	day_diff = (due_date - datetime.date.today()).days
+	if day_diff < 0:
+		return f"overdue {abs(day_diff)}d"
+	if day_diff == 0:
+		return "today"
+	if day_diff == 1:
+		return "tomorrow"
+	if day_diff < 7:
+		return f"{day_diff}d"
+	return due_date.strftime("%Y-%m-%d")
 
 def parse_due(arg):
 	if not arg or arg.lower() == "none":
@@ -125,6 +189,14 @@ def main():
 	p_cancel = sub.add_parser("cancel", help="Mark task cancelled")
 	p_cancel.add_argument("id", type=int)
 
+	p_show = sub.add_parser("show", help="Show one task by id")
+	p_show.add_argument("id", type=int)
+	p_show.add_argument("--field", help="Print just this field (id, status, title, due_ts, chg_ts, category, tags, importance)")
+
+	p_list = sub.add_parser("list", help="List tasks, id first")
+	p_list.add_argument("--status", help="Only tasks with this status (default: all)")
+	p_list.add_argument("--category", help="Only tasks in this category")
+
 	args = parser.parse_args()
 	now = int(time.time())
 
@@ -141,22 +213,7 @@ def main():
 			and args.category is None and args.tags is None and args.importance is None):
 			print("Nothing to update", file=sys.stderr)
 			sys.exit(1)
-		current = {}
-		with csv_path.open("r", encoding="utf-8") as f:
-			reader = csv.reader(f)
-			for row in reader:
-				if not row or row[0].startswith("//") or row[0] == "id":
-					continue
-				if len(row) >= 2 and row[0].isdigit() and int(row[0]) == args.id:
-					current = {
-						"id": int(row[0]), "status": row[1],
-						"title": row[2] if len(row) > 2 else "",
-						"due_ts": row[3] if len(row) > 3 else "",
-						"chg_ts": row[4] if len(row) > 4 else "",
-						"category": row[5] if len(row) > 5 else "",
-						"tags": row[6] if len(row) > 6 else "",
-						"importance": row[7] if len(row) > 7 else "",
-					}
+		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
@@ -169,44 +226,58 @@ def main():
 		append_row(csv_path, args.id, status, title, due_ts, now, category, tags, importance)
 
 	elif args.cmd == "done":
-		current = {}
-		with csv_path.open("r", encoding="utf-8") as f:
-			reader = csv.reader(f)
-			for row in reader:
-				if not row or row[0].startswith("//") or row[0] == "id":
-					continue
-				if len(row) >= 2 and row[0].isdigit() and int(row[0]) == args.id:
-					current = {
-						"title": row[2] if len(row) > 2 else "",
-						"due_ts": row[3] if len(row) > 3 else "",
-						"category": row[5] if len(row) > 5 else "",
-						"tags": row[6] if len(row) > 6 else "",
-						"importance": row[7] if len(row) > 7 else "",
-					}
+		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
 		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
 
 	elif args.cmd == "cancel":
-		current = {}
-		with csv_path.open("r", encoding="utf-8") as f:
-			reader = csv.reader(f)
-			for row in reader:
-				if not row or row[0].startswith("//") or row[0] == "id":
-					continue
-				if len(row) >= 2 and row[0].isdigit() and int(row[0]) == args.id:
-					current = {
-						"title": row[2] if len(row) > 2 else "",
-						"due_ts": row[3] if len(row) > 3 else "",
-						"category": row[5] if len(row) > 5 else "",
-						"tags": row[6] if len(row) > 6 else "",
-						"importance": row[7] if len(row) > 7 else "",
-					}
+		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
 		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
+
+	elif args.cmd == "show":
+		current = read_task(csv_path, args.id)
+		if not current:
+			print(f"Task {args.id} not found", file=sys.stderr)
+			sys.exit(1)
+		if args.field:
+			# Field names are the CSV columns, so --field prints what is stored.
+			# The human-readable due form is in the full view, not here: an agent
+			# resolving a field usually wants the value it can pass back to update.
+			if args.field not in current:
+				print(f"Unknown field: {args.field}. Choose from: {', '.join(sorted(current))}", file=sys.stderr)
+				sys.exit(1)
+			print(current[args.field])
+		else:
+			print(f"#{current['id']}  {current['status']}")
+			print(f"  title:       {current['title']}")
+			print(f"  due:         {fmt_due(current['due_ts']) if current['due_ts'] else 'no due'}")
+			if current["due_ts"]:
+				print(f"  due_ts:      {current['due_ts']}")
+			print(f"  category:    {current['category'] or '(none)'}")
+			print(f"  tags:        {current['tags'] or '(none)'}")
+			print(f"  importance:  {current['importance'] or '(none)'}")
+
+	elif args.cmd == "list":
+		state = read_all(csv_path) if csv_path.exists() else {}
+		rows_out = []
+		for task_id in sorted(state):
+			t = state[task_id]
+			if args.status and t["status"] != args.status:
+				continue
+			if args.category and t["category"] != args.category:
+				continue
+			rows_out.append(t)
+		if not rows_out:
+			print("No matching tasks", file=sys.stderr)
+			sys.exit(1)
+		for t in rows_out:
+			due = fmt_due(t["due_ts"]) if t["due_ts"] else "no due"
+			print(f"#{t['id']}  {t['status']:<9}  {due:<12}  {t['title']}")
 
 if __name__ == "__main__":
 	main()

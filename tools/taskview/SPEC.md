@@ -261,6 +261,44 @@ passing suite does not validate anything the spec merely describes in prose.
 	integer, is skipped rather than aborting the read. Fold order is file order,
 	last row per id wins.
 
+### Resolving a task reference
+
+Added 2026-10-01 (epiq `EY72YA9`), alongside the pane-side id prefix
+(`X06YVNP`). A task id is only useful as a reference if something can resolve
+it; before this, the only way to answer "what is #40?" was to open `tasks.csv`
+and parse it by hand — the exact failure mode `AQQNPAN` describes.
+
+- **R35** `taskupdate.py show <id>` prints that task's last row as id / status /
+	title / due / due_ts / category / tags / importance. An empty optional field
+	prints `(none)` rather than a blank label, so an empty column is visibly empty
+	rather than absent.
+- **R36** `show` on an id with no row exits **1** with a message naming the id. It
+	must not exit 0 on a task it could not resolve.
+- **R37** `show --field <name>` prints only that field's stored value and nothing
+	else. `--field` names are the CSV column names (`id`, `status`, `title`,
+	`due_ts`, `chg_ts`, `category`, `tags`, `importance`); the value printed is
+	**what is stored**, not a formatted form, because the usual caller is an agent
+	that wants to hand the value back to `update`. An unknown `--field` exits 1
+	listing the valid names. The human-readable due form (`overdue 3d`, `today`)
+	belongs to the full `show` view and to `list`, **not** to `--field due_ts` —
+	a formatted string there could not be passed back to `--due`.
+- **R38** `show` and `list` read through the same last-row-wins fold as `update`,
+	so R33 and R34 apply to them: a legacy 5-column row resolves with empty
+	category / tags / importance, and an id whose rows are mixed-width resolves to
+	its last row however wide the earlier rows were.
+- **R39** `taskupdate.py list` prints one line per task with the **id first**,
+	ascending by id, so a task can be named without reading the CSV. `--status`
+	and `--category` narrow the set. No matching task exits 1 with a message on
+	stderr — an empty result is not a success, and a missing CSV exits 1 without a
+	traceback.
+- **R40** `show` and `list` are read-only: neither appends a row, creates the
+	CSV, nor writes anywhere. R30's resolution order applies unchanged, and
+	`--csv` / `$TASKVIEW_CSV` / `<data-dir>/tasks.csv` are honoured as they are by
+	every write path.
+- **R41** `list` is **not** the wide multi-axis view. That is `E5MH4S2`, a
+	separate tool, and `list` must not grow into one: it prints the store, it does
+	not analyse it. The one thing it adds over the raw CSV is the id in front.
+
 ## Decisions
 
 Numbered, each with what was rejected.
@@ -460,9 +498,12 @@ conversation:
 	exist** (`mms-frontend`, `Mistlands`, `MaFE` are in zero rows) and omits three
 	that do (`research`, `ai-docs`, `personal`). The human has left the file alone
 	for now. Tracked as epiq `QKRW2Z0`.
-- **Task ids are not shown in the pane.** Referring to a task by number is the
-	natural way to talk about it, and the ids are currently only discoverable by
-	reading the CSV. Raised by the human 2026-09-27; not yet specified.
+- ~~**Task ids are not shown in the pane.**~~ **Specified and in flight
+	2026-10-01** — the resolver side is `EY72YA9` (R35-R41 above), the pane side
+	is `X06YVNP`. The two are specified together because an id in the pane that
+	nothing can resolve is a worse gap than no id at all: it invites the reader to
+	ask "what is #40?" and then go read the CSV by hand. Raised by the human
+	2026-09-27.
 
 ## Interfaces
 
@@ -518,6 +559,25 @@ def read_csv(path: Path) -> dict
 
 `taskupdate.py` keeps its CLI shape. `parse_due` and `read_last_id` are
 unchanged; the resolution of the target CSV follows R30.
+
+`taskupdate.py` additionally exposes:
+
+```python
+def read_task(path: Path, task_id: int) -> dict | None
+	# R38. Last row for task_id as an 8-key dict, or None when there is no such
+	# row. Short rows read as empty (R33). This is the reader `update`, `done` and
+	# `cancel` use, so all four resolve a task the same way.
+
+def read_all(path: Path) -> dict
+	# R38, R39. Every task by id, last row per id winning. `read_task` is this
+	# fold restricted to one id.
+
+def fmt_due(ts: str | int) -> str
+	# Human due wording, matching taskview's pane: "no due", "overdue Nd",
+	# "today", "tomorrow", "Nd", else YYYY-MM-DD. An unparseable timestamp returns
+	# "unparseable due (<value>)" rather than raising — a bad value in the store is
+	# a display problem, not a reason to lose the whole row.
+```
 
 `FilterError` is a new exception type raised only by `load_filter`.
 
