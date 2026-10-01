@@ -116,25 +116,25 @@ Two consequences for anyone reading the workspace:
 ## Blocked / needs attention
 
 - **`dispatch general` points at a model that is failing.** PR #9 (`HC1ZJK6`)
-  holds the fix — `worker-ling` → `worker-longcat`, because
-  `opencode/ling-3.0-flash-fin-free` was answering "Upstream request failed".
-  **The fix is currently inert.** It arrived as an uncommitted working-tree
-  edit, and moving it onto a branch — which is what the workflow requires —
-  took it out of the checkout. `agent-coord.py dispatch general` returns
-  `worker-ling` again on both master and this branch. Merging #9 restores it.
-  This is the workflow's one sharp edge so far: **work on a branch is not live
-  until it merges**, which is correct for review and wrong for anything
-  repairing a running thing.
+	holds the fix — `worker-ling` → `worker-longcat`, because
+	`opencode/ling-3.0-flash-fin-free` was answering "Upstream request failed".
+	**The fix is currently inert.** It arrived as an uncommitted working-tree
+	edit, and moving it onto a branch — which is what the workflow requires —
+	took it out of the checkout. `agent-coord.py dispatch general` returns
+	`worker-ling` again on both master and this branch. Merging #9 restores it.
+	This is the workflow's one sharp edge so far: **work on a branch is not live
+	until it merges**, which is correct for review and wrong for anything
+	repairing a running thing.
 - **139 epiq events are unsynced and machine-local.** Four `~pending.jsonl`
-  files under the state branch worktree. `0J8YBYH` — merged and closed —
-  appears 12 times in a pending file and 0 times in the committed event log.
-  `epiq_sync` returns `skipped: true` and does not publish them; the reason is
-  not understood. Recorded as `AZHG0FK` (accepted risk, 2026-09-29) and it has
-  since grown. **Anything that leans on the board being durable is resting on
-  this** — including the patches-file design in `Z491RDN`.
+	files under the state branch worktree. `0J8YBYH` — merged and closed —
+	appears 12 times in a pending file and 0 times in the committed event log.
+	`epiq_sync` returns `skipped: true` and does not publish them; the reason is
+	not understood. Recorded as `AZHG0FK` (accepted risk, 2026-09-29) and it has
+	since grown. **Anything that leans on the board being durable is resting on
+	this** — including the patches-file design in `Z491RDN`.
 - **pybundle agent work is blocked on the human's spec.** Nothing should be
-  started against the current bundler's structure until it lands (why:
-  HISTORY.md 2026-09-30).
+	started against the current bundler's structure until it lands (why:
+	HISTORY.md 2026-09-30).
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
