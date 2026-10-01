@@ -72,7 +72,7 @@ curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/js
   "$URL" | jq .
 ```
 
-## The five traps
+## The six traps
 
 1. **Drafts come back inside `state=OPEN`.** A draft is `state: OPEN` *plus* a
 	separate `draft: true` field, so the list endpoint returns them and you must
@@ -98,10 +98,17 @@ curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/js
 	human has already answered report as `BLOCKED ON YOU` — the inverse of the
 	truth, and a standing instruction to re-review a colleague's PR. Read
 	`state`: `"changes_requested"` means the human has done his part and the
-	ball is with the author. Worse, Bitbucket spells "no state" as JSON `null`
-	*and* as the string `"null"` on different records; the string is truthy, so
-	normalize it before comparing. Ticket `3EEXMRK`; the regression is
+	ball is with the author. Ticket `3EEXMRK`; the regression is
 	`mms-frontend` #79.
+
+6. **`role` is `REVIEWER` only if explicitly added as a reviewer.** Anyone who
+	interacts with a PR otherwise appears as `PARTICIPANT` — including the
+	author, always. So a bare `PARTICIPANT` for the human means *he commented on
+	a PR he was never asked to review*, and he holds no approval right on it.
+	`mms-frontend` #71: three comments on 2026-08-31, never a reviewer, and the
+	tool reported `BLOCKED ON YOU` until it merged — naming a blocker the human
+	could not unblock by any action available to him. Only a `REVIEWER` can be
+	the blocker. `3EEXMRK`.
 
 ## Read-only, and it stays that way
 

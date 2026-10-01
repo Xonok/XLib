@@ -67,12 +67,25 @@ class TestBlocksTheHuman(unittest.TestCase):
 	def test_untouched_reviewer_blocks(self):
 		self.assertBlocks("reviewer_never_participated", True)
 
-	def test_participant_blocks(self):
-		# A commenter without approval rights counts as un-acted-on, as it did
-		# before this ticket. See the note in the ticket's follow-up question:
-		# whether a bare PARTICIPANT should block at all is still open, and is
-		# deliberately *not* decided here.
-		self.assertBlocks("participant", True)
+	def test_participant_does_not_block(self):
+		# Commenting on a PR you were never added to review is not blocking it.
+		# A PARTICIPANT has no approval right, so there is no action of the
+		# human's that could clear the flag.
+		self.assertBlocks("participant", False)
+
+	def test_commented_but_never_a_reviewer_does_not_block(self):
+		# The real case: mms-frontend #71, reported BLOCKED ON YOU for the two
+		# and a half weeks it was open. Two other reviewers had approved; the
+		# human had only commented.
+		pr = load("commented_not_reviewer")
+		self.assertEqual(pr.my_participation(), "PARTICIPANT/NOT approved")
+		self.assertFalse(pr.blocks_the_human())
+		self.assertNotIn("BLOCKED ON YOU", pr.flags())
+
+	def test_reviewer_who_also_commented_still_blocks(self):
+		# The role check must key on the *current* role, not on ever having
+		# commented: an untouched REVIEWER is still a blocker.
+		self.assertBlocks("reviewer_never_participated", True)
 
 	def test_absent_does_not_block(self):
 		self.assertBlocks("human_absent", False)
@@ -87,11 +100,19 @@ class TestBlocksTheHuman(unittest.TestCase):
 		own.author = bbprs.HUMAN
 		self.assertFalse(own.blocks_the_human())
 
-class TestStringNullIsNotAState(unittest.TestCase):
+class TestAbsentStateIsNormalized(unittest.TestCase):
 	"""
-	Bitbucket spells "no state" as JSON null on some records and the *string*
-	"null" on others. The string is truthy, so reading it as a state would
-	make an untouched reviewer look as if he had acted.
+	Insurance, not an observed bug. An earlier version of this ticket claimed
+	Bitbucket sends "no state" as the *string* "null" and that reading it naively
+	would leave --check permanently 0. That was not checked before it was
+	asserted: across 175 open and merged PRs in mms-frontend and mms (scanned
+	2026-10-01), `state` is always JSON null and the string never appears.
+
+	The API documentation's own participant example does show `"state": "null"`
+	as a string, so `_review_state()` keeps handling it — two lines, no cost,
+	and a truthy "null" would silently mean "handled". What these tests pin is
+	that the normalizer treats every spelling of absence identically. They do
+	not claim the string form occurs.
 	"""
 
 	def test_string_null_normalizes_to_absent(self):
@@ -109,8 +130,8 @@ class TestStringNullIsNotAState(unittest.TestCase):
 		self.assertEqual(bbprs._review_state(record), "changes_requested")
 
 	def test_string_null_does_not_register_as_a_review(self):
-		# What the string form costs us when read naively: this PR would be
-		# treated as handled, and the human would never be told he is blocking.
+		# A truthy "null" must not read as "the human has acted", or an
+		# untouched reviewer would never be reported.
 		pr = load("reviewer_never_participated")
 		self.assertNotEqual(bbprs._review_state(pr._my_record()), "changes_requested")
 		self.assertTrue(pr.blocks_the_human())
