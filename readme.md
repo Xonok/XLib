@@ -26,7 +26,7 @@ Could then just run a script on the list to go through all their files and look 
 That way it would be possible to definitively know whether deprecated code can be removed.  
 
 **Not done**  
-Release script - bundles a dev folder into a versioned file in `xlib/` (`tools/release/release.py`, planned in `doc/plans/release-script.md`).  
+Release script - bundles a dev folder into a versioned file in `xlib/` (`tools/release/release.py`; its decisions are recorded in `tools/release/README.md`).  
 Export script - same as the release script, but also folds in any xlib libraries used, for use outside the walled garden. Future work.  
 
 **Legacy**  
