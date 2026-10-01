@@ -8,7 +8,15 @@ Multiple agents may work in this repo at once. Coordinate through `tools/agent-c
 
 ## Working on a ticket
 
-The epiq board is where work is planned, tracked and reviewed. The lane says what state a piece of work is in:
+The epiq board is where work is planned, tracked and reviewed. There are two boards, one per repo, so the first decision is *which* board a ticket goes on.
+
+**File a ticket on the board of the repo where its change lands.** Each board's state branch lives in its own repo, and epiq links a commit by matching its subject's ref against commits reachable from there — so a ticket on the wrong board reads as **zero commits however it is committed**. `epiq_issue_stats` reporting 0 is the symptom of a misplaced ticket, not evidence that no work happened.
+
+Decide by *which repo versions the file*, not by what the path looks like, because three names are tracked in both repos and mean whichever one is being edited: `AGENTS.md`, `.taskview.yaml` and `personal/`. The fourth collision is `.opencode/` — it exists here too, but only as a symlink into the Agents workspace, so every `agent/*.md` reached through it lands in that repo, along with its `library/`, `plans/`, `audits/` and `setup.sh`. This repo's `AGENTS.md`, `doc/`, `dev/`, `xlib/`, `tools/` and `personal/` land here. A ticket that genuinely spans both repos goes where the bulk of the change lands and says so in its description.
+
+**Relocating between boards means close-and-refile, never move.** They are separate epiq projects — different `projectId`, one `__epiq_state__` branch each — and `epiq_issue_move` writes only into the repo `repoRoot` names, so a ticket cannot cross. **The ref changes on every relocation** and an old ref cited in a commit or a comment does not follow; the closed original stays readable with a pointer to the new one. Set 2026-09-30; the old→new map is on `58MXTGY`.
+
+The lane says what state a piece of work is in:
 
 - **Todo** — pending.
 - **In progress** — the human has ai-ok'd it, meaning it is now clear how to perform.
