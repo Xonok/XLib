@@ -186,3 +186,13 @@ Not a CSV concern. User-level patterns achieve the same:
 - Indices, random access by line number (logdb)
 - Automatic encoding detection (assume UTF-8)
 - Concurrent writer support (exclusive ownership assumed)
+
+## Open questions
+
+Carried from `doc/plans/xcsv.md`, deleted 2026-09-30. Neither is settled; both are
+tokenizer semantics that a future release has to pick.
+
+- **Multiline quoted fields, or strictly line-based?** Line-based keeps the "a log
+	is human-readable" property, which is the leaning, not a ruling.
+- **A comment line inside a quoted row** must be data, not a comment. The
+	semantics of that case are undecided.
