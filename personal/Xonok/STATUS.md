@@ -24,7 +24,8 @@ Basis: `master` at `2e4efa5` (2026-10-01). xlint reports clean over the whole
 repo, and that claim is narrower than it reads: it skips every directory named
 `test`, so 109 violations in tool tests are invisible to it (epi `AK633QC`).
 **One ticket awaits review** — `3EEXMRK` (bbprs `BLOCKED ON YOU` false
-positive, plus the tool's first test suite) on PR #21. The twelve tickets of
+positive — both ways it lied, plus the tool's first test suite) on PR #21. The
+twelve tickets of
 the epiq workflow and the 2026-09-30/10-01 doc and state work are on `master`
 as a flat rebase sequence, all closed. `doc/development.md` is the canonical
 process document — plan → spec → tests → implementation → review, each stage
@@ -75,7 +76,9 @@ after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
 **One ticket is waiting on review.** `3EEXMRK` — the bbprs `BLOCKED ON YOU`
-false positive and that tool's first test suite — is on PR #21, branch
+false positive (both the way it lied: `changes_requested` read as un-reviewed,
+and a bare `PARTICIPANT` read as a blocker the human cannot unblock) and that
+tool's first test suite — is on PR #21, branch
 `3eexmrk-bbprs-review-state`, commit `3f2fac7`, in Done. Before it, twelve
 tickets went through the whole loop and `master` carries them as a flat rebase
 sequence with no merge commits — `0J8YBYH` (the workflow itself), `KDX7KWJ`

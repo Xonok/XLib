@@ -103,10 +103,11 @@ def _review_state(record: dict) -> str:
 	"""
 	The reviewer's state, normalized: '' when they have not acted yet.
 
-	Bitbucket spells "no state" two ways — JSON null on some records and the
-	*string* "null" on others — so both have to collapse to the same absence.
-	Left as-is, the string is truthy and a reviewer who never looked at a PR
-	reads as one who has.
+	Live data (175 open and merged PRs, 2026-10-01) always sends JSON null, so
+	this is insurance rather than a fix for something observed: the API
+	documentation's own participant example shows `"state": "null"` as a
+	*string*, and that string is truthy. A truthy "null" would read as "the
+	human has acted" and no PR would ever be reported.
 	"""
 	state = record.get("state")
 	return "" if state is None or state == "null" else state
@@ -175,19 +176,27 @@ class PullRequest:
 		return f"{role}/{_review_state(record) or 'NOT approved'}"
 	def blocks_the_human(self) -> bool:
 		"""
-		True when this is someone else's live PR and the human has neither
-		approved it nor asked for changes. This is the 'I might be blocking
-		them' case.
+		True when this is someone else's live PR and the human is a *reviewer*
+		who has neither approved it nor asked for changes. This is the 'I
+		might be blocking them' case.
 
 		Decided from the participant data, never by reading back the rendered
 		`my_participation` string: requesting changes *completes* the review
 		obligation and hands the ball to the author, so reporting it as
 		blocked sends the human to a PR that is not waiting on them.
+
+		`role` must be REVIEWER. Bitbucket records anyone who interacts with a
+		PR as a PARTICIPANT, so commenting on a colleague's PR you were never
+		added to review yields PARTICIPANT with approved:false — and a
+		PARTICIPANT holds no approval right, so there is no action of the
+		human's that could ever clear the flag. Confirmed on mms-frontend #71
+		(2026-08-31, three comments, never a reviewer): it reported
+		BLOCKED ON YOU for the two and a half weeks until it merged.
 		"""
 		if self.is_mine or self.draft:
 			return False
 		record = self._my_record()
-		if record is None:
+		if record is None or record.get("role") != "REVIEWER":
 			return False
 		return not (record.get("approved") or _review_state(record) == "changes_requested")
 	def flags(self) -> list[str]:
