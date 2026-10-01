@@ -81,3 +81,5 @@ Each helper formats a readable message:
 ## Planned Changes
 
 None currently. The library is intentionally minimal. If richer features are needed (fixtures, parametrization, async, parallel), they would be a separate library or a major version with breaking changes.
+
+One residue from `doc/plans/testing.md` (deleted 2026-09-30) is still open: **xlint integration is not wired**. `run()` returns a nonzero code rather than exiting, so a caller has to `sys.exit` on it; the reviewer pipeline and `tmux-xlib.sh` do that by hand rather than through xtest. Fixtures and setup/teardown are deliberately deferred — v1 is plain test functions.

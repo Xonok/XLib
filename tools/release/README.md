@@ -27,7 +27,7 @@ latest existing release in `xlib/`.
 
 ## How it works
 
-It calls the bundler (`pybundle/bundler.py`) to pack the dev folder's modules into
+It calls the bundler (`tools/pybundle/bundler.py`) to pack the dev folder's modules into
 a single file. The bundler inlines internal modules (e.g. `csv_tok.py`) and renames
 their functions with a module prefix (e.g. `tokenize` becomes `csv_tok_tokenize`).
 
@@ -56,3 +56,22 @@ release in `xlib/` and writes the bundled output to that new path unconditionall
 file behind; that has happened before, and the accidental revision had to be
 deleted again as a test artifact. Inspect the bundler directly instead:
 `python3 tools/pybundle/bundler.py <dev-folder>`.
+
+## Future work
+
+Carried over from `doc/plans/release-script.md` when the plan was deleted on
+2026-09-30 (the work landed; the residue did not, so it lives here).
+
+- **Export** function: folds in any `xlib` libraries used, for use outside the
+	walled garden (the readme's "Export script"). Offered by the script, not
+	implemented.
+- **Publish-dependencies** script: each project runs one to publish its
+	dependencies for `xlib` to use. What makes it knowable when an old release can
+	be dropped out of `xlib/` and moved elsewhere — releases are generally not
+	deleted, for legacy reasons.
+- **Bundler code reuse**: the bundler's import-walking, inlining and path
+	resolution could split out into a library other things use. This script is the
+	first consumer that forces an API surface, so it becomes a real option now
+	that the script exists.
+- **Folder layout**: reorganize if the number of per-tool folders makes the tree
+	cluttered.
