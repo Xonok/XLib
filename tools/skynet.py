@@ -110,9 +110,12 @@ def aggregate(rows, now):
 def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None):
 	if not by_model:
 		return "no agents active"
-	models = sorted(by_model, key=lambda m: -by_model[m]["total"])
+	models = sorted((m for m in by_model if by_model[m]["msgs"] > 0),
+					key=lambda m: -by_model[m]["total"])
 	if max_models is not None:
 		models = models[:max_models]
+	if not models:
+		return "no agents active"
 	if col_w is None:
 		col_w = max(len(m) for m in models)
 	ref_w = 12
@@ -124,8 +127,6 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 	lines = [hdr, sep]
 	for model in models:
 		s = by_model[model]
-		if s["total"] == 0:
-			continue
 		ref = str(s["refusals"])
 		if s["last_refusal"]:
 			ref += f"({human_age(now - s['last_refusal'])})"
