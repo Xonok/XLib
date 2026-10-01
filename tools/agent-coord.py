@@ -540,7 +540,10 @@ WORKER_MAP = {
 	"coding": "worker-north-mini-code",
 	"reasoning": "worker-nemotron-ultra",
 	"bulk": "worker-nemotron-lightning",
-	"general": "worker-ling",
+	# provisional 2026-10-01: ling-3.0-flash-fin-free fails upstream ("Upstream request
+	# failed") while longcat-2.5-preview-free answers; both are console models, so this
+	# costs no extra pool budget. Revert to worker-ling once it recovers.
+	"general": "worker-longcat",
 }
 
 def cmd_dispatch(args):
