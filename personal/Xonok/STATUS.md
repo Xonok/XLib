@@ -20,10 +20,12 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `49a9ca5` (2026-09-30). xlint clean over the whole repo. The
-pointer and state-file fixes made on 2026-09-30 are still uncommitted, human
-commit pending. `doc/development.md` is the canonical process document — plan →
-spec → tests → implementation → review, each stage entered on the human's call.
+Basis: `master` at `49a9ca5` (2026-09-30). xlint clean over the whole repo.
+**Seven branches are open and awaiting the human's review; `master` has not
+moved.** They carry the 2026-09-30 doc and state work, and they are the merge
+queue — see *Awaiting review* below. `doc/development.md` is the canonical
+process document — plan → spec → tests → implementation → review, each stage
+entered on the human's call.
 
 - Libraries: `dev/` holds xconf, xcsv, xprod, xschema, xtest. `xlib/` holds
 	xconf `1_0_0`, xcsv `1_0_0`/`1_0_1`/`1_1_0`, xschema `1_0_0`, xtest `1_0_0`.
@@ -44,9 +46,36 @@ spec → tests → implementation → review, each stage entered on the human's 
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq board** | secretary | 43 tickets open (34 Todo, 9 In progress), **0 assigned**; filing and hygiene done, implementation not started | epiq board |
+| **epiq board** | secretary | 8 Done awaiting the human's review, 42 Todo, 1 In progress; the first commits ever linked to a ticket now resolve | epiq board |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
+
+### Awaiting review — the merge queue
+
+The human's decision of 2026-09-30: every piece of work goes on its own
+feature branch, one commit per ticket, ref-prefixed, and **nothing merges
+before the human reviews it**. Agents move finished tickets to Done themselves;
+an agent may merge to master and delete the branch only after the human has
+approved the ticket.
+
+| Branch | Ticket | Size | What |
+|--------|--------|------|------|
+| `ym7eshs-drop-rotation-cursor` | `YM7ESHS` | 1 file, −1 | dead `ROTATION_CURSOR` constant |
+| `9w4yrc6-oc-agent-validate-name` | `9W4YRC6` | 1 file, +26 | `oc-agent` validates the agent name |
+| `j3kk7hd-xlint-plan-status` | `J3KK7HD` | 1 file, +5/−2 | xlint plan status corrected |
+| `tvjcmtf-doc-pointer-repair` | `TVJCMTF` | 4 files, +19/−10 | pointers broken by the `doc/` move |
+| `k1mx4tb-library-structure-doc` | `K1MX4TB` | 2 files, +145/−40 | library-structure doc out of AGENTS.md |
+| `wkq371w-status-present-only` | `WKQ371W` | 5 files, +207/−145 | this file, plus the drift rulings |
+| `vg87t14-delete-realized-plans` | `VG87T14` | 12 files, +53/−734 | eight realized plans deleted |
+
+`gh` is not installed, so PRs are opened by hand from the URL each push
+prints. `epiq_issue_stats <ref>` gives per-ticket size, self-churn and test
+lines — read it before the diff.
+
+**The subject format is `<REF> ` — ref, then a space.** `REF: ` does not link:
+the matcher is `subject.toUpperCase().startsWith(ref + " ")`. All seven were
+committed the git way first and read as zero commits; epiq's own skill never
+states the separator.
 
 ### pybundle — read this before trusting the reviews
 
@@ -87,6 +116,12 @@ Two consequences for anyone reading the workspace:
 - **epiq pending events**: ~60 events sit in four `~pending.jsonl` files and are
 	committed only when that actor's own process syncs. Accepted risk, closed as
 	`AZHG0FK` on 2026-09-29; the residual loss window is a worktree prune.
+- **Per-ticket branching needs two fixes before agents work in worktrees.**
+	`.agents/` is gitignored, so a new worktree has no `claims.json` and
+	`check-clean` reads the shared index — claims must resolve to the main
+	checkout. And `.opencode/agent/` is a symlink into the Agents repo, so
+	every agent-file ticket will read as zero commits no matter how it is
+	committed: epiq `58MXTGY`.
 - **Task scheduling**: 4 high-importance tasks have no due date at all (#52, #61,
 	#63, #75), and everything due today has by now gone overdue — 10 open tasks
 	are past due, and that number moves hourly. The store is the record; see
@@ -94,6 +129,19 @@ Two consequences for anyone reading the workspace:
 
 ## Settled — not to be reopened without cause
 
+- **The board is the unit of work.** The human's ruling, 2026-09-30: one ticket
+	per independent piece, its own feature branch, one commit per ticket,
+	subject opening with the ticket ref. **Todo** is pending, **In progress**
+	means the human has ai-ok'd it, **Done** means the agent finished it. Agents
+	move their own tickets to Done. A ticket leaves Done when the human reviews
+	and approves it — only then may an agent merge it to master and delete the
+	branch. This overrides the epiq skill on two points: Done is not "merged",
+	and the merge is the agent's action once approval is given.
+- **Two tracks for development** (human, 2026-09-30). Feature work keeps the
+	spec pipeline; anything whose goal, scope and acceptance fit in a ticket
+	description runs as a ticket-is-the-spec, which is the default. The spec
+	pipeline is not abolished — it is pipelined through epiq as separate commits
+	and tickets. Neither track is written into `AGENTS.md` yet: epiq `0J8YBYH`.
 - **`tools/tmux-xlib.sh` killing the session is intended**, on start and on exit.
 	The problem it will cause is known and recorded: once the launcher works from
 	more than one repo, the default session name and the kill can no longer be the
@@ -109,6 +157,8 @@ Two consequences for anyone reading the workspace:
 
 1. `dev/xprod/` — SPEC.md + VERSIONS.md, or fold into another library? Parked as
 	your manual work, epiq `DCF9EHW`.
+2. `gh` is not installed, so each branch's PR is opened by hand from the URL
+	the push prints. Install it, or keep opening them by hand?
 
 ## Pointers
 
