@@ -20,12 +20,20 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `7d0e8e7` (2026-10-01). xlint clean over the whole repo.
-**The merge queue is empty** — the eleven tickets of the epiq workflow and the
-2026-09-30 doc/state work are on `master` as a flat rebase sequence, all closed.
-Nothing is awaiting review. `doc/development.md` is the canonical process
-document — plan → spec → tests → implementation → review, each stage entered on
-the human's call.
+Basis: `master` at `531a8eb` (2026-10-01). xlint clean over the whole repo.
+**The merge queue is empty** — twelve tickets of the epiq workflow and the
+2026-09-30/10-01 doc and state work are on `master` as a flat rebase sequence,
+all closed. Nothing is awaiting review. `doc/development.md` is the canonical
+process document — plan → spec → tests → implementation → review, each stage
+entered on the human's call.
+
+- **Technical explanations have a rule file.** `doc/style/prose.md` — cite
+	identifiers, trace rather than summarize, mark inference, state what would
+	falsify the answer. Landed as `KDX7KWJ` because ordinary AI prose reads fine
+	but a technical one loses the chain and comes back as word salad; the rules
+	make the explanation checkable against the artifact instead. Explanation work
+	goes to a step-by-step reasoning model — the small workers narrate a
+	conclusion rather than deriving one.
 
 - Libraries: `dev/` holds xconf, xcsv, xprod, xschema, xtest. `xlib/` holds
 	xconf `1_0_0`, xcsv `1_0_0`/`1_0_1`/`1_1_0`, xschema `1_0_0`, xtest `1_0_0`.
@@ -63,11 +71,12 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**The queue is empty.** Eleven tickets have been through the whole loop and
+**The queue is empty.** Twelve tickets have been through the whole loop and
 `master` carries them as a flat rebase sequence with no merge commits —
-`0J8YBYH` (the workflow itself) plus the 2026-09-30 doc and state work. Every
-commit subject opens with its ticket ref, which is what keeps the commit↔ticket
-linking readable (why: `HISTORY.md` 2026-10-01, the `9R0H6SA` entry).
+`0J8YBYH` (the workflow itself), `KDX7KWJ` (prose rules), plus the 2026-09-30
+doc and state work. Every commit subject opens with its ticket ref, which is what
+keeps the commit↔ticket linking readable (why: `HISTORY.md` 2026-10-01, the
+`9R0H6SA` entry).
 
 `gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
 apt source added — and is authenticated against `Xonok` with `repo` scope. An
@@ -197,6 +206,12 @@ Two consequences for anyone reading the workspace:
 	both state-file rewrites and one supersedes the other — the two-board split
 	in #11 postdates everything in #1. Worth deciding which lands first rather
 	than discovering it at merge time.
+5. **Should `doc/style/prose.md` bind dispatched workers too?** The rule file
+	is reachable through `AGENTS.md`, which every agent reads, but a subagent
+	runs from its own prompt in `.opencode/agent/` and does not necessarily get
+	`AGENTS.md` in context. If the prose rules are meant to apply to worker
+	output too, that needs a mechanism; today they bind the agents that read the
+	repo rules. `KDX7KWJ` closed without deciding it.
 
 ## Pointers
 
