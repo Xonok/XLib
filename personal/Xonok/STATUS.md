@@ -20,10 +20,13 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `531a8eb` (2026-10-01). xlint clean over the whole repo.
-**The merge queue is empty** — twelve tickets of the epiq workflow and the
-2026-09-30/10-01 doc and state work are on `master` as a flat rebase sequence,
-all closed. Nothing is awaiting review. `doc/development.md` is the canonical
+Basis: `master` at `2e4efa5` (2026-10-01). xlint reports clean over the whole
+repo, and that claim is narrower than it reads: it skips every directory named
+`test`, so 109 violations in tool tests are invisible to it (epi `AK633QC`).
+**One ticket awaits review** — `3EEXMRK` (bbprs `BLOCKED ON YOU` false
+positive, plus the tool's first test suite) on PR #21. The twelve tickets of
+the epiq workflow and the 2026-09-30/10-01 doc and state work are on `master`
+as a flat rebase sequence, all closed. `doc/development.md` is the canonical
 process document — plan → spec → tests → implementation → review, each stage
 entered on the human's call.
 
@@ -59,7 +62,7 @@ entered on the human's call.
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib 30 open (22 Todo, 7 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
+| **epiq boards** | secretary | XLib 31 open (24 Todo, 1 In progress, 6 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -71,12 +74,14 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**The queue is empty.** Twelve tickets have been through the whole loop and
-`master` carries them as a flat rebase sequence with no merge commits —
-`0J8YBYH` (the workflow itself), `KDX7KWJ` (prose rules), plus the 2026-09-30
-doc and state work. Every commit subject opens with its ticket ref, which is what
-keeps the commit↔ticket linking readable (why: `HISTORY.md` 2026-10-01, the
-`9R0H6SA` entry).
+**One ticket is waiting on review.** `3EEXMRK` — the bbprs `BLOCKED ON YOU`
+false positive and that tool's first test suite — is on PR #21, branch
+`3eexmrk-bbprs-review-state`, commit `3f2fac7`, in Done. Before it, twelve
+tickets went through the whole loop and `master` carries them as a flat rebase
+sequence with no merge commits — `0J8YBYH` (the workflow itself), `KDX7KWJ`
+(prose rules), plus the 2026-09-30 doc and state work. Every commit subject
+opens with its ticket ref, which is what keeps the commit↔ticket linking
+readable (why: `HISTORY.md` 2026-10-01, the `9R0H6SA` entry).
 
 `gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
 apt source added — and is authenticated against `Xonok` with `repo` scope. An
@@ -159,6 +164,15 @@ Two consequences for anyone reading the workspace:
 	were refiled on 2026-09-30, which fixes the 16. What is left is that nothing
 	stops the next agent filing one here again — the open half of `58MXTGY`, and
 	the reason the filing rule is written into Pointers rather than left implicit.
+- **xlint does not lint tests, and the house rule for test folder names is
+	inverted relative to it.** `is_ignored` (`tools/xlint/xlint.py:28`) excludes any
+	path part named `test` — the repo's own convention, so `xlint .` skips every
+	test file and reports 0 while 109 violations sit in `tools/taskview/test/`
+	(103), `tools/pybundle/test/` (5) and `dev/xprod/test/` (1). `tests/` — the name
+	the rules call wrong — is *not* excluded, so `2VD2XZC`'s rename would move
+	four linted libraries out of coverage. Needs a decision: narrow the
+	exclusion to foreign test data, or write down that tests are exempt.
+	`AK633QC`; `XCKN0AT`'s pre-commit hook inherits it verbatim.
 - **Task scheduling**: 4 high-importance tasks have no due date at all (#52, #61,
 	#63, #75), and everything due today has by now gone overdue — 10 open tasks
 	are past due, and that number moves hourly. The store is the record; see
