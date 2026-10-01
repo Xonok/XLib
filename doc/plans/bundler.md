@@ -1,14 +1,23 @@
-# Bundler review notes (pybundle/bundler.py)
+# Bundler review notes (tools/pybundle/bundler.py)
 
 Living notes for the review + redesign discussion of the pybundle bundler
-(`pybundle/bundler.py`, AI-generated). The human reviewed roughly the first
+(`tools/pybundle/bundler.py`, AI-generated). The human reviewed roughly the first
 third, annotating with `#X:` and `%category` markers; those annotations were
 moved here and stripped from the source (2026-09-06). This file is the shared
 brain for that discussion.
 
 Status: annotation cleanup done; agreed issues fixed (drop refdeps, fold
 disk-child bail, class→free-function, API/internal file split) with
-byte-identical output; the single-pass redesign remains open for discussion.
+byte-identical output.
+
+**The single-pass redesign in this file's discussion is abandoned.** It was
+attempted and stalled on the complexity of the existing code, so the notes
+below stop at "what the redesign should have been". The human is writing a new
+pybundle spec from scratch — epi `6MFX0Z1`, with the stdout constraint in
+`YEBP3QB`. Treat the redesign section as a record of the attempt, not as a
+pending design. The bundler in the tree is unchanged and is described by
+`tools/pybundle/SPEC.md`; the reviews in `doc/reviews/pybundle-*.md` describe
+files that were never committed.
 
 ## What the bundler does (one sentence)
 
