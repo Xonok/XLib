@@ -64,6 +64,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 |------|---------------|
 | `doc/development.md` | The process: plan → spec → tests → implementation → review, and who owns each stage |
 | `doc/library-structure.md` | Reference: library layout, release naming, import resolution, bundler name prefixing |
+| `doc/tool-schema-cache.md` | Reference: the per-turn tool-schema cache in `tools/tool_schema_cache.py` — unwired, so it is a proposal rather than behaviour |
 | `doc/style/architecture.md` | A/B/C/D placement, leaf modules, fork control, handed-in IO |
 | `doc/style/common.md` | Maps, guard-first failures, return docs, single-pass, compatibility |
 | `doc/style/python.md` | Formatting, imports, naming, type hints, declarative style |
