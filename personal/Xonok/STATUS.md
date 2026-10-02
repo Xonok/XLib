@@ -20,12 +20,14 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `531a8eb` (2026-10-01). xlint clean over the whole repo.
-**The merge queue is empty** — twelve tickets of the epiq workflow and the
-2026-09-30/10-01 doc and state work are on `master` as a flat rebase sequence,
-all closed. Nothing is awaiting review. `doc/development.md` is the canonical
-process document — plan → spec → tests → implementation → review, each stage
-entered on the human's call.
+Basis: `master` at `cec9231` (2026-10-02). xlint clean over the whole repo,
+including the `.md` final-newline check `PMRBFR3` added and swept.
+**Six approved tickets merged on 2026-10-02** and closed: `58MXTGY`, `EY72YA9`,
+`X06YVNP`, `CMGDFZF`, `0ZSB1DP`, `PMRBFR3`. `master` is a flat rebase sequence
+with no merge commits. **Two pull requests await review and neither is
+approved:** `3EEXMRK` (#21, bbprs review state) and `FZDMC84` (#23, stranded
+epiq events). `doc/development.md` is the canonical process document — plan →
+spec → tests → implementation → review, each stage entered on the human's call.
 
 - **Technical explanations have a rule file.** `doc/style/prose.md` — cite
 	identifiers, trace rather than summarize, mark inference, state what would
@@ -59,7 +61,7 @@ entered on the human's call.
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib 30 open (22 Todo, 7 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
+| **epiq boards** | secretary | XLib 26 open (24 Todo, 1 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -71,12 +73,15 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**The queue is empty.** Twelve tickets have been through the whole loop and
-`master` carries them as a flat rebase sequence with no merge commits —
-`0J8YBYH` (the workflow itself), `KDX7KWJ` (prose rules), plus the 2026-09-30
-doc and state work. Every commit subject opens with its ticket ref, which is what
-keeps the commit↔ticket linking readable (why: `HISTORY.md` 2026-10-01, the
-`9R0H6SA` entry).
+**The queue held six and is now empty again.** They merged as a flat rebase
+sequence, in dependency order and not in approval order: `58MXTGY` (the filing
+rule, so it governs the rest), then `EY72YA9` before `X06YVNP` — the pane-side
+id prefix was rebased onto the resolver-side commit, because `X06YVNP`'s own
+ticket says an id in the pane that nothing can resolve is worse than no id —
+then `CMGDFZF` and `0ZSB1DP`, which are independent, then `PMRBFR3` last so the
+stricter `.md` rule landed on top of everything the other five wrote. Every
+commit subject opens with its ticket ref, which is what keeps the commit↔ticket
+linking readable (why: `HISTORY.md` 2026-10-01, the `9R0H6SA` entry).
 
 `gh` 2.102.0 is installed at `/usr/local/bin/gh` — official release binary, no
 apt source added — and is authenticated against `Xonok` with `repo` scope. An
@@ -120,13 +125,21 @@ Two consequences for anyone reading the workspace:
 	a running thing is unfixed for the whole review window**, which is correct
 	for review and wrong for a fix. Worth deciding whether an infra repair may
 	land ahead of review.
-- **139 epiq events are unsynced and machine-local.** Four `~pending.jsonl`
-	files under the state branch worktree. `0J8YBYH` — merged and closed —
-	appears 12 times in a pending file and 0 times in the committed event log.
-	`epiq_sync` returns `skipped: true` and does not publish them; the reason is
-	not understood. Recorded as `AZHG0FK` (accepted risk, 2026-09-29) and it has
-	since grown. **Anything that leans on the board being durable is resting on
-	this** — including the patches-file design in `Z491RDN`.
+- **32 epiq events are stranded and only this machine can see them.** The
+	mechanism is per-actor, not per-repo: each actor writes to
+	`.epiq/events/<actorId>~pending*.jsonl`, which `.gitignore` deliberately never
+	commits, and `epiq_sync` only ever drains **the calling actor's** log. An
+	actor whose process has exited therefore never drains, and
+	`epiq_actor_assume` refuses any name its server was not launched with — so no
+	live session can drain another actor's events. A drain run on 2026-10-02
+	landed the two mechanic logs (9 events) and **left all 31 `opencode/paul`
+	events stranded**, which is the half that matters. `0J8YBYH` is 17 in the
+	committed log and 0 in pending — **not** 12 and 0. The `AZHG0FK` accepted-risk
+	ruling (2026-09-29) assumed a worktree prune as the loss window; a missing
+	`add.issue` with committed events referencing it is a higher severity than
+	that ruling covered. **Anything that leans on the board being durable is
+	resting on this** — including the patches-file design in `Z491RDN`. Detector
+	and current numbers: epiq `FZDMC84`.
 - **pybundle agent work is blocked on the human's spec.** Nothing should be
 	started against the current bundler's structure until it lands (why:
 	HISTORY.md 2026-09-30).
@@ -143,11 +156,14 @@ Two consequences for anyone reading the workspace:
 	merge.** Both asked which worker the coding route should name, in two
 	different lanes; both are closed and refiled on the Agents board as
 	`G8B6T7V` and `P1H7VM4`, where the work lands. One decision, one board.
-- **epiq pending events**: 49 events sit in four `~pending.jsonl` files under
-	`~/.epiq-global/worktrees/` and are committed only when that actor's own
-	process syncs. Accepted risk, closed as `AZHG0FK` on 2026-09-29; the residual
-	loss window is a worktree prune. The count has been quoted as both ~60 and
-	139; 49 is what the files hold as of 2026-10-01, and it moves with board use.
+- **A stranded event is invisible on the machine holding it, which is why this
+	went unnoticed for three days.** `epiq_issue_get` returns `GBNEWPS` as closed
+	with a `Solution:` comment, and `QN1N82Y` as a filed ticket in Todo — both
+	sourced from the on-disk pending file, **neither in any committed log**. A
+	fresh clone therefore has no `QN1N82Y` at all, and has `GBNEWPS` open in Todo
+	with no `Solution:` comment: an implemented, spec-backed xlint rule reading as
+	work never started. The detector in `FZDMC84` compares pending against
+	committed but cannot tell "this machine can see it" from "this is durable".
 - **Per-ticket branching needs one fix before agents work in worktrees.**
 	`.agents/` is gitignored, so a new worktree has no `claims.json` and
 	`check-clean` reads the shared index — claims must resolve to the main
@@ -203,12 +219,18 @@ Two consequences for anyone reading the workspace:
 	because it is a design decision with reasoning that does not belong only in
 	a conversation. Does Traveller tag releases? Without a boundary the patch
 	notes cannot be sliced.
-3. **Why does `epiq_sync` skip?** 139 events are waiting on an answer nobody
-	has. Until it is understood, treat the board as single-machine.
-4. **PR #1 and PR #11 both rewrite STATUS.md.** They merge clean, but they are
-	both state-file rewrites and one supersedes the other — the two-board split
-	in #11 postdates everything in #1. Worth deciding which lands first rather
-	than discovering it at merge time.
+3. **How is the `paul` half of the epiq drain going to be finished?** The
+	mechanism is now understood — per-actor logs, and `epiq_actor_assume` refuses
+	a name its server was not launched with — so this is no longer a mystery but
+	a decision: one session per stranded actor, which means the human launching
+	them, or a change to epiq itself. 32 events are still stranded. This also
+	bounds question 2 above: `Z491RDN`'s patches file cannot be generated from
+	board history until the state branch is durable per-actor.
+4. **`FZDMC84` is in In progress with PR #23 open, which the lane rule says is
+	Done.** Left as it is rather than moved: the rule puts a pushed branch with an
+	open PR in Done, but this ticket also has an open defect found 2026-10-02 —
+	the detector cannot distinguish "this machine can see it" from "this is
+	durable" — so moving it would claim it is awaiting review when it is not.
 5. **Should `doc/style/prose.md` bind dispatched workers too?** The rule file
 	is reachable through `AGENTS.md`, which every agent reads, but a subagent
 	runs from its own prompt in `.opencode/agent/` and does not necessarily get
