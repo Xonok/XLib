@@ -125,21 +125,19 @@ Two consequences for anyone reading the workspace:
 	a running thing is unfixed for the whole review window**, which is correct
 	for review and wrong for a fix. Worth deciding whether an infra repair may
 	land ahead of review.
-- **32 epiq events are stranded and only this machine can see them.** The
-	mechanism is per-actor, not per-repo: each actor writes to
-	`.epiq/events/<actorId>~pending*.jsonl`, which `.gitignore` deliberately never
-	commits, and `epiq_sync` only ever drains **the calling actor's** log. An
-	actor whose process has exited therefore never drains, and
-	`epiq_actor_assume` refuses any name its server was not launched with — so no
-	live session can drain another actor's events. A drain run on 2026-10-02
-	landed the two mechanic logs (9 events) and **left all 31 `opencode/paul`
-	events stranded**, which is the half that matters. `0J8YBYH` is 17 in the
-	committed log and 0 in pending — **not** 12 and 0. The `AZHG0FK` accepted-risk
-	ruling (2026-09-29) assumed a worktree prune as the loss window; a missing
-	`add.issue` with committed events referencing it is a higher severity than
-	that ruling covered. **Anything that leans on the board being durable is
-	resting on this** — including the patches-file design in `Z491RDN`. Detector
-	and current numbers: epiq `FZDMC84`.
+- **Stranded epiq events are the board's durability problem, and the mechanism is
+	per-actor.** Each actor writes to `.epiq/events/<actorId>~pending*.jsonl`,
+	which `.gitignore` deliberately never commits, and `epiq_sync` only ever
+	drains **the calling actor's** log. An actor whose process has exited
+	therefore never drains, and `epiq_actor_assume` refuses any name its server
+	was not launched with — so no live session can drain another actor's events,
+	only one launched as that actor. `0J8YBYH` is 17 in the committed log and 0
+	in pending — **not** 12 and 0. The `AZHG0FK` accepted-risk ruling (2026-09-29)
+	assumed a worktree prune as the loss window; a missing `add.issue` with
+	committed events referencing it is a higher severity than that ruling
+	covered. **Anything that leans on the board being durable is resting on
+	this** — including the patches-file design in `Z491RDN`. Detector and
+	current numbers: epiq `FZDMC84`, and the two bullets below.
 - **pybundle agent work is blocked on the human's spec.** Nothing should be
 	started against the current bundler's structure until it lands (why:
 	HISTORY.md 2026-09-30).
@@ -164,6 +162,18 @@ Two consequences for anyone reading the workspace:
 	with no `Solution:` comment: an implemented, spec-backed xlint rule reading as
 	work never started. The detector in `FZDMC84` compares pending against
 	committed but cannot tell "this machine can see it" from "this is durable".
+- **epiq pending events are drained; `AZHG0FK`'s "accepted risk" ruling is
+	over.** Each actor's writes commit only when a process running as that actor
+	syncs, so a dead actor's events sat uncommitted: 41 stranded across three
+	actors, including the `add.issue` creations for `CMGDFZF`, `VTJVHMY` and
+	`QN1N82Y` — a fresh clone had committed comments and lane-moves pointing at
+	tickets that did not exist there. All three orphans are resolved as of
+	2026-10-02; 1 event remains stranded (a bare `create.contributor` for an
+	actor that registered and stopped, carrying no ticket content). `AZHG0FK`
+	closed this as accepted risk on 2026-09-29, which assumed the loss window was
+	a worktree prune; a missing creation with committed events referencing it is
+	more severe than that. Tracked as `FZDMC84` (In progress), which also owns
+	the detector that makes this loud instead of silent.
 - **Per-ticket branching needs one fix before agents work in worktrees.**
 	`.agents/` is gitignored, so a new worktree has no `claims.json` and
 	`check-clean` reads the shared index — claims must resolve to the main
