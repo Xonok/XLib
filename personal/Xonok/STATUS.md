@@ -182,10 +182,12 @@ Two consequences for anyone reading the workspace:
 	description runs as a ticket-is-the-spec, which is the default. The spec
 	pipeline is not abolished — it is pipelined through epiq as separate commits
 	and tickets. Neither track is written into `AGENTS.md` yet: epiq `0J8YBYH`.
-- **`tools/tmux-xlib.sh` killing the session is intended**, on start and on exit.
-	The problem it will cause is known and recorded: once the launcher works from
-	more than one repo, the default session name and the kill can no longer be the
-	same string. Constraint and a suggested shape are on epiq `8VX1HVE`.
+- **`tools/tmux-xlib.sh` killing the session is intended**, on start and on exit —
+	the panel takes down everything it started, so nothing is left running in the
+	background. What it needs to be safe is a session name that means something: the
+	name is derived from the target repo's path, so one repo's launch cannot kill
+	another's panel. epiq `5DZ8NB1`. The live session named `xlib` predates that and
+	is not what the XLib launcher opens any more.
 - **Versionless imports in dev-folder tests are correct** — a test imports the
 	code being developed. AGENTS.md says so explicitly now; the old wording read
 	as a blanket ban.
