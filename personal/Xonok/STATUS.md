@@ -199,14 +199,19 @@ Two consequences for anyone reading the workspace:
 	over.** 195 events were stranded on 2026-10-01 — XLib 454 committed / 60
 	pending, Agents 113 / 135, with `mechanic` and `paul` holding *no* committed
 	log at all — and 13 of them were `add.issue`, so a fresh clone got lane-moves
-	and comments pointing at tickets that did not exist there. `epiq_sync` returns
-	success with every flag false, so it reads as done and does nothing. The drain
-	ran on 2026-10-02; `tools/epiq-pending.py` reports **1 event still stranded**
-	as of 2026-10-08 (a bare `create.contributor` carrying no ticket content).
+	and comments pointing at tickets that did not exist there. The named
+	orphans were `CMGDFZF`, `VTJVHMY` and `QN1N82Y`, all three resolved
+	2026-10-02. `epiq_sync` returns success with every flag false, so it reads as
+	done and does nothing. The drain ran on 2026-10-02;
+	`tools/epiq-pending.py` reports **1 event still stranded** as of 2026-10-08
+	(a bare `create.contributor` carrying no ticket content).
 	`AZHG0FK` assumed the loss window was a worktree prune — a missing creation
 	with committed events referencing it is more severe than that. Draining
 	another actor needs a session running as that actor, which `epiq_actor_assume`
-	refuses unless the server was launched with that name.
+	refuses unless the server was launched with that name. The mechanism is
+	per-actor and has no fix: each actor writes to
+	`.epiq/events/<actorId>~pending*.jsonl`, which `.gitignore` deliberately never
+	commits, and `epiq_sync` only ever drains the calling actor's own log.
 - **Two worktree hazards, both reproduced 2026-10-08.** `check-clean` answers
 	`clean` for a dirty file in a worktree — a worktree's `.git` is a *file*, so
 	`nearest_git` walks past it to the parent repo and reads the wrong status
