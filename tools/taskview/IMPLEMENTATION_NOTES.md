@@ -102,10 +102,18 @@ Uses `xcsv.write_entry` with updated schema.
 
 ## Integration: `tmux-xlib.sh`
 
-Update the taskview pane command:
+`tools/tmux-xlib.sh` opens the panel against a target repository, and the
+taskview pane runs in that repository rather than in XLib — the cwd is what
+picks the filter, because discovery walks up from the working directory. No
+flag, no `--context`:
+
 ```bash
-tmux send-keys -t "$SESSION" "cd $XLIB_DIR ; python3 tools/taskview/taskview.py --watch --context \${TASKVIEW_CONTEXT:-default}" Enter
+tmux split-window -d -P -F '#{pane_id}' -c "$TARGET" -t "$SESSION:0.0"
+tmux send-keys -t "$PANE" "python3 $(q "$TASKVIEW") --watch" Enter
 ```
+
+With no filter in the repository, or anywhere above it, the pane still comes
+up: it shows everything and says `no filter found` in its header.
 
 ---
 
