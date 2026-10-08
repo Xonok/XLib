@@ -517,6 +517,10 @@ Recorded here so a change in daily experience is not read as a bug.
 - `critical` and `emergency` no longer leak across projects (Decision 8).
 - Starting the tool outside any project shows everything, with a header that
 	says so.
+- **Descriptions are expected to be concise (3–4 lines max).** The detail view
+	shows 2 tasks in full; a long description consumes vertical space and pushes
+	the UPCOMING list down. This is a human/agent preference, not enforced by
+	code. (Ref: `0P2TVAM`)
 
 ## Open, for the human
 

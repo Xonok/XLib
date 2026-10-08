@@ -133,3 +133,7 @@ If the human is wrong about a fact, assumption, or direction, say so directly.
 ## Rule-change news
 
 Run `python3 tools/agent-coord.py news` at session start and before first subagent dispatch. It reports changed rule files and marks them seen. Prefer to mechanize rules (tool checks, bundle-time checks) over prose; use news for changes you can't mechanize.
+
+## Houserules
+
+- **taskview descriptions:** Keep task descriptions to **3 lines, at most 4**. The detail view shows 2 tasks in full; long descriptions consume vertical space and push the UPCOMING list out of view. This is a preference for agents and the human, not a mechanized limit in the code. (Ref: `0P2TVAM`)
