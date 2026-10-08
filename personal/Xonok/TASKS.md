@@ -22,6 +22,13 @@ needed when there is no due date.
 	Five mechanisms to cost and rank, and not one checklist box is ticked. Also
 	on the board as epiq `E98CRYM` (human-input-needed). (why: HISTORY.md
 	2026-09-30)
+- [ ] **#96 — taskview: a description field, and 2 tasks in full detail** (by
+	2026-10-08) — four rulings on 2026-10-08: a separate description column on
+	`tasks.csv`; exactly 2 tasks rendered in full detail with the remaining space
+	going to the condensed list; and the 2 always being the most urgent by due
+	date, overdue first, regardless of day. Blocked on `AQQNPAN` (the CSV header
+	still declares 5 columns against 8-field rows) and on every other open
+	taskview ticket by the human's ruling. Board: epiq `XNTVCEE` (Todo).
 
 ## Done
 

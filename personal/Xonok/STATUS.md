@@ -177,6 +177,15 @@ Two consequences for anyone reading the workspace:
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
+- **taskview #96 is ruled and blocked.** The human settled four things on
+	2026-10-08: a separate `description` column on `tasks.csv`; exactly 2 tasks in
+	full detail with the remaining pane space going to the condensed list; and
+	the 2 always being the most urgent by due date (overdue first), regardless of
+	day. Blocked on `AQQNPAN` — the CSV header declares 5 columns against 8-field
+	rows, so a 9-column writer would land on a file whose header lies — and on
+	the human's ruling that every other open taskview ticket lands first. Board:
+	epiq `XNTVCEE` (Todo). The `description` field also collides with `E5MH4S2`'s
+	open `priority`-column question; both grow the same file.
 - **`dev/xconf/`, `dev/xcsv/`, `dev/xschema/`, `dev/xtest/` use `tests/`.** The
 	ruling is `test/`, recorded in `doc/development.md`; the rename is epiq
 	`2VD2XZC`.

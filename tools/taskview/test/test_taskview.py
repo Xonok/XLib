@@ -112,9 +112,9 @@ class InterfaceTests(unittest.TestCase):
 			self.assertIn(key, result)
 
 	def test_build_view_exists_and_returns_str(self):  # Interfaces
-		selected = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': '', 'tags': set(), 'importance': ''}}
+		selected = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': '', 'tags': set(), 'importance': '', 'description': ''}}
 		metrics = {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': 1, 'this_week': 0, 'this_month': 0, 'later': 1, 'open_tasks': list(selected.values()), 'shown': 1, 'filtered_total': 0}
-		result = build_view(selected, metrics, None, 80, 'none')
+		result = build_view(selected, metrics, None, 80, 24, 'none')
 		self.assertIsInstance(result, str)
 
 	def test_read_csv_exists_and_returns_dict(self):  # Interfaces
@@ -597,23 +597,24 @@ class HeaderStatesTests(unittest.TestCase):
 	"""R24: three exact header strings, mutually distinguishable."""
 
 	def _make_selected(self, count=1):
-		return {i: {'id': i, 'status': 'open', 'title': f'Task {i}', 'due_ts': None, 'chg_ts': 1000+i, 'category': '', 'tags': set(), 'importance': ''} for i in range(1, count+1)}
+		return {i: {'id': i, 'status': 'open', 'title': f'Task {i}', 'due_ts': None, 'chg_ts': 1000+i, 'category': '', 'tags': set(), 'importance': '', 'description': ''} for i in range(1, count+1)}
 
 	def _make_metrics(self, shown=1, filtered=0):
-		return {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': shown, 'this_week': 0, 'this_month': 0, 'later': shown, 'open_tasks': [], 'shown': shown, 'filtered_total': filtered}
+		open_tasks = list(self._make_selected(shown).values())
+		return {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': shown, 'this_week': 0, 'this_month': 0, 'later': shown, 'open_tasks': open_tasks, 'shown': shown, 'filtered_total': filtered}
 
 	def test_filter_found_header(self):  # R24
 		filter_data = {'label': 'MyProject', 'categories': set(), 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics()
-		view = build_view(selected, metrics, filter_data, 80, 'explicit')
+		view = build_view(selected, metrics, filter_data, 80, 24, 'explicit')
 		self.assertIn('=== Tasks (MyProject) ===', view)
 
 	def test_no_filter_found_header(self):  # R24, R12
 		filter_data = None
 		selected = self._make_selected()
 		metrics = self._make_metrics()
-		view = build_view(selected, metrics, filter_data, 80, 'none')
+		view = build_view(selected, metrics, filter_data, 80, 24, 'none')
 		self.assertIn('=== Tasks (no filter found \u2014 showing all) ===', view)
 
 	def test_no_filter_flag_header(self):  # R24, R13
@@ -622,16 +623,16 @@ class HeaderStatesTests(unittest.TestCase):
 		filter_data = None
 		selected = self._make_selected()
 		metrics = self._make_metrics()
-		view = build_view(selected, metrics, filter_data, 80, 'flag')
+		view = build_view(selected, metrics, filter_data, 80, 24, 'flag')
 		self.assertIn('=== Tasks (no filter) ===', view)
 
 	def test_three_headers_are_mutually_distinguishable(self):  # R24
 		filter_data1 = {'label': 'X', 'categories': set(), 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics()
-		view1 = build_view(selected, metrics, filter_data1, 80, 'explicit')
-		view2 = build_view(selected, metrics, None, 80, 'none')
-		view3 = build_view(selected, metrics, None, 80, 'flag')
+		view1 = build_view(selected, metrics, filter_data1, 80, 24, 'explicit')
+		view2 = build_view(selected, metrics, None, 80, 24, 'none')
+		view3 = build_view(selected, metrics, None, 80, 24, 'flag')
 		self.assertNotEqual(view1.split('\n')[0], view2.split('\n')[0])
 		self.assertNotEqual(view2.split('\n')[0], view3.split('\n')[0])
 		self.assertNotEqual(view1.split('\n')[0], view3.split('\n')[0])
@@ -641,7 +642,7 @@ class PurityTests(unittest.TestCase):
 	"""R20, R27: pure functions, deterministic output, --width honoured."""
 
 	def _make_selected(self):
-		return {1: {'id': 1, 'status': 'open', 'title': 'Test Task', 'due_ts': None, 'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': ''}}
+		return {1: {'id': 1, 'status': 'open', 'title': 'Test Task', 'due_ts': None, 'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': '', 'description': ''}}
 
 	def _make_metrics(self, selected=None):
 		"""Return a metrics dict. If selected is given, populate open_tasks from it."""
@@ -652,16 +653,16 @@ class PurityTests(unittest.TestCase):
 		filter_data = {'label': 'Test', 'categories': {'X'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics(selected)
-		view1 = build_view(selected, metrics, filter_data, 80, 'explicit')
-		view2 = build_view(selected, metrics, filter_data, 80, 'explicit')
+		view1 = build_view(selected, metrics, filter_data, 80, 24, 'explicit')
+		view2 = build_view(selected, metrics, filter_data, 80, 24, 'explicit')
 		self.assertEqual(view1, view2)
 
 	def test_build_view_width_parameter_honoured(self):  # R20, R27
 		filter_data = {'label': 'Test', 'categories': {'X'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
-		selected = {1: {'id': 1, 'status': 'open', 'title': 'A' * 100, 'due_ts': None, 'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': ''}}
+		selected = {1: {'id': 1, 'status': 'open', 'title': 'A' * 100, 'due_ts': None, 'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': '', 'description': ''}}
 		metrics = self._make_metrics(selected)
-		view_narrow = build_view(selected, metrics, filter_data, 20, 'explicit')
-		view_wide = build_view(selected, metrics, filter_data, 200, 'explicit')
+		view_narrow = build_view(selected, metrics, filter_data, 20, 24, 'explicit')
+		view_wide = build_view(selected, metrics, filter_data, 200, 24, 'explicit')
 		# Narrow should truncate, wide should not
 		self.assertIn('...', view_narrow)
 		self.assertNotIn('...', view_wide)
@@ -687,7 +688,7 @@ class TaskIdDisplayTests(unittest.TestCase):
 
 	def _task(self, task_id, title, due_ts=None):
 		return {'id': task_id, 'status': 'open', 'title': title, 'due_ts': due_ts,
-				'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': ''}
+				'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': '', 'description': ''}
 
 	def _view(self, tasks, width):
 		selected = {t['id']: t for t in tasks}
@@ -697,7 +698,7 @@ class TaskIdDisplayTests(unittest.TestCase):
 		filter_data = {'label': 'T', 'categories': set(), 'tags': set(),
 					   'include_bucket': True,
 					   'limits': {'upcoming': 5, 'queue_breakdown': True}}
-		return build_view(selected, metrics, filter_data, width, 'explicit')
+		return build_view(selected, metrics, filter_data, width, 24, 'explicit')
 
 	def _lines(self, view):
 		return [l for l in view.splitlines() if l.startswith('▸') or l.startswith(' ·')]
@@ -713,11 +714,12 @@ class TaskIdDisplayTests(unittest.TestCase):
 			f"current line must show #42: {self._lines(view)}")
 
 	def test_upcoming_lines_show_the_id(self):
-		tasks = [self._task(1, 'first'), self._task(42, 'second'), self._task(7, 'third')]
+		# With 4 tasks, 2 go to detail, 2 to upcoming
+		tasks = [self._task(1, 'first'), self._task(42, 'second'), self._task(7, 'third'), self._task(99, 'fourth')]
 		view = self._view(tasks, 80)
 		upcoming = [l for l in self._lines(view) if l.startswith(' ·')]
 		self.assertEqual(len(upcoming), 2)
-		for expected in ('#42', '#7'):
+		for expected in ('#7', '#99'):
 			self.assertTrue(any(expected in l for l in upcoming),
 				f"upcoming must show {expected}: {upcoming}")
 
@@ -760,10 +762,14 @@ class TaskIdDisplayTests(unittest.TestCase):
 		self.assertTrue(label.startswith('#'), f"the id is the reference, keep it: {label!r}")
 		self.assertLessEqual(len(label), 3)
 
-	def test_ellipsis_marks_the_cut_in_both_lines(self):
-		tasks = [self._task(1, 'A' * 100), self._task(2, 'B' * 100)]
-		lines = self._lines(self._view(tasks, 30))
-		self.assertTrue(all('...' in l for l in lines), f"expected a marked cut: {lines}")
+	def test_ellipsis_marks_the_cut_in_both_detail_lines(self):
+		# With 2 detail tasks, both detail lines should show ellipsis when truncated
+		tasks = [self._task(1, 'A' * 100), self._task(2, 'B' * 100), self._task(3, 'C' * 100)]
+		view = self._view(tasks, 30)
+		# Find detail lines (start with ▸)
+		detail_lines = [l for l in view.splitlines() if l.startswith('▸')]
+		self.assertEqual(len(detail_lines), 2, f"expected 2 detail lines: {detail_lines}")
+		self.assertTrue(all('...' in l for l in detail_lines), f"expected marked cut in both detail lines: {detail_lines}")
 
 
 class CSVToleranceTests(unittest.TestCase):

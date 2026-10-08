@@ -10,15 +10,15 @@ from tools.taskview.taskview import resolve_data_dir,resolve_csv
 
 # Kept for backwards compatibility with existing tests that mock it
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"
-FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance"]
+FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance", "description"]
 
 def ensure_csv(path):
 	path.parent.mkdir(parents=True, exist_ok=True)
 	if not path.exists():
 		with path.open("w", encoding="utf-8", newline="") as f:
 			f.write("// tasks.csv — append-only, last-write-wins by id\n")
-			f.write("// Schema: id,status,title,due_ts,chg_ts,category,tags,importance\n")
-			f.write("id,status,title,due_ts,chg_ts,category,tags,importance\n")
+			f.write("// Schema: id,status,title,due_ts,chg_ts,category,tags,importance,description\n")
+			f.write("id,status,title,due_ts,chg_ts,category,tags,importance,description\n")
 
 def read_last_id(path):
 	if not path.exists():
@@ -38,11 +38,19 @@ def read_last_id(path):
 		pass
 	return last_id
 
-def append_row(path, task_id, status, title, due_ts, chg_ts, category="", tags="", importance=""):
+def escape_description(text: str) -> str:
+	"""Escape newlines in description for CSV storage."""
+	return text.replace("\n", "\\n")
+
+def unescape_description(text: str) -> str:
+	"""Unescape newlines in description from CSV storage."""
+	return text.replace("\\n", "\n")
+
+def append_row(path, task_id, status, title, due_ts, chg_ts, category="", tags="", importance="", description=""):
 	ensure_csv(path)
 	with path.open("a", encoding="utf-8", newline="") as f:
 		writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
-		writer.writerow([task_id, status, title or "", due_ts or "", chg_ts, category or "", tags or "", importance or ""])
+		writer.writerow([task_id, status, title or "", due_ts or "", chg_ts, category or "", tags or "", importance or "", escape_description(description or "")])
 	print(f"Appended: id={task_id} status={status} title={title}")
 
 def read_task(path, task_id):
@@ -65,6 +73,7 @@ def read_task(path, task_id):
 					"category": row[5] if len(row) > 5 else "",
 					"tags": row[6] if len(row) > 6 else "",
 					"importance": row[7] if len(row) > 7 else "",
+					"description": unescape_description(row[8] if len(row) > 8 else ""),
 				}
 	return current or None
 
@@ -87,6 +96,7 @@ def read_all(path):
 					"category": row[5] if len(row) > 5 else "",
 					"tags": row[6] if len(row) > 6 else "",
 					"importance": row[7] if len(row) > 7 else "",
+					"description": unescape_description(row[8] if len(row) > 8 else ""),
 				}
 	return state
 
@@ -173,6 +183,7 @@ def main():
 	p_add.add_argument("--category", default=None)
 	p_add.add_argument("--tags", default=None)
 	p_add.add_argument("--importance", default=None, choices=["low", "medium", "high", ""])
+	p_add.add_argument("--description", default=None)
 
 	p_upd = sub.add_parser("update", help="Update existing task (by id)")
 	p_upd.add_argument("id", type=int)
@@ -182,6 +193,7 @@ def main():
 	p_upd.add_argument("--category", default=None)
 	p_upd.add_argument("--tags", default=None)
 	p_upd.add_argument("--importance", default=None, choices=["low", "medium", "high", ""])
+	p_upd.add_argument("--description", default=None)
 
 	p_done = sub.add_parser("done", help="Mark task done")
 	p_done.add_argument("id", type=int)
@@ -206,11 +218,11 @@ def main():
 	if args.cmd == "add":
 		task_id = read_last_id(csv_path) + 1
 		due_ts = parse_due(args.due) if args.due else ""
-		append_row(csv_path, task_id, args.status, args.title, due_ts, now, args.category, args.tags, args.importance)
+		append_row(csv_path, task_id, args.status, args.title, due_ts, now, args.category, args.tags, args.importance, args.description)
 
 	elif args.cmd == "update":
 		if (args.status is None and args.title is None and args.due is None
-			and args.category is None and args.tags is None and args.importance is None):
+			and args.category is None and args.tags is None and args.importance is None and args.description is None):
 			print("Nothing to update", file=sys.stderr)
 			sys.exit(1)
 		current = read_task(csv_path, args.id)
@@ -223,21 +235,22 @@ def main():
 		category = args.category if args.category is not None else current["category"]
 		tags = args.tags if args.tags is not None else current["tags"]
 		importance = args.importance if args.importance is not None else current["importance"]
-		append_row(csv_path, args.id, status, title, due_ts, now, category, tags, importance)
+		description = args.description if args.description is not None else current["description"]
+		append_row(csv_path, args.id, status, title, due_ts, now, category, tags, importance, description)
 
 	elif args.cmd == "done":
 		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
+		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"])
 
 	elif args.cmd == "cancel":
 		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"])
+		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"])
 
 	elif args.cmd == "show":
 		current = read_task(csv_path, args.id)
@@ -261,6 +274,7 @@ def main():
 			print(f"  category:    {current['category'] or '(none)'}")
 			print(f"  tags:        {current['tags'] or '(none)'}")
 			print(f"  importance:  {current['importance'] or '(none)'}")
+			print(f"  description: {current['description'] or '(none)'}")
 
 	elif args.cmd == "list":
 		state = read_all(csv_path) if csv_path.exists() else {}

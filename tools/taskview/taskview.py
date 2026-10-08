@@ -12,6 +12,7 @@ Watch modes: inotify (primary) → poll (fallback)
 import argparse,csv,os,signal,sys,time,yaml
 from datetime import datetime,timedelta
 from pathlib import Path
+import shutil
 
 try:
 	import inotify.adapters
@@ -332,6 +333,26 @@ def fmt_due(ts: int | None) -> str:
 		return f"{day_diff}d"
 	return dt.strftime("%m-%d")
 
+def get_terminal_size(width_override: int | None = None) -> tuple[int, int]:
+	"""
+	R20: Terminal width is read at render time, and --width N overrides it.
+	Height is also read at render time for the condensed list sizing.
+	Returns (width, height). Falls back to 80x24 if unavailable.
+	"""
+	if width_override is not None:
+		width = width_override
+	else:
+		width = 80
+	height = 24
+	try:
+		size = shutil.get_terminal_size()
+		if width_override is None:
+			width = size.columns
+		height = size.lines
+	except OSError:
+		pass
+	return (width, height)
+
 def truncate(text: str, width: int) -> str:
 	"""
 	Shorten text to fit width, marking the cut with an ellipsis. Never returns
@@ -368,10 +389,15 @@ def pick_current(open_tasks: list) -> dict | None:
 		return None
 	return open_tasks[0]
 
-def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, source: str) -> str:
+def pick_detail_tasks(open_tasks: list, count: int = 2) -> list:
+	"""Pick the N most urgent open tasks for full detail view."""
+	return open_tasks[:count]
+
+def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str:
 	"""
 	R24, R26, R26a, R27: Pure render function.
 	Header chosen by source: explicit/discovered → label, none → "no filter found", flag → "no filter".
+	Shows 2 most urgent tasks in full detail; remaining height for condensed UPCOMING list.
 	"""
 	lines = []
 
@@ -390,26 +416,47 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 
 	open_tasks = metrics["open_tasks"]
 
-	# Current task
-	current = pick_current(open_tasks)
-	if current:
-		lines.append(f"▸ {task_label(current, width - 2)}")
-		due_str = fmt_due(current["due_ts"])
-		chg_str = fmt_time(current["chg_ts"])
+	# Detail tasks: 2 most urgent
+	detail_tasks = pick_detail_tasks(open_tasks, 2)
+	detail_line_count = 0
+
+	for i, task in enumerate(detail_tasks):
+		if i > 0:
+			lines.append("")  # blank line between detail blocks
+		lines.append(f"▸ {task_label(task, width - 2)}")
+		due_str = fmt_due(task["due_ts"])
+		chg_str = fmt_time(task["chg_ts"])
 		lines.append(f"  {chg_str}  ·  due: {due_str}")
-		lines.append("")
-	else:
+		if task.get("description"):
+			# Show description, wrapped to width - 4 (indent)
+			desc_lines = wrap_text(task["description"], width - 4)
+			for dl in desc_lines:
+				lines.append(f"  {dl}")
+		detail_line_count += 4 + (len(desc_lines) if task.get("description") else 0) + (1 if i > 0 else 0)
+
+	if not detail_tasks:
 		lines.append("▸ (no open tasks)")
 		lines.append("")
+		detail_line_count = 2
+	else:
+		# Blank line after detail tasks before UPCOMING
+		lines.append("")
 
-	# Upcoming
+	# Calculate remaining height for UPCOMING list
+	# Reserve lines for: PACE (5 lines), QUEUE (2-3 lines), header (2 lines already counted)
+	# and 1 blank line before UPCOMING
+	reserved_after_upcoming = 8  # PACE (4) + blank + QUEUE (2-3) ≈ 8
+	upcoming_header_lines = 2  # "UPCOMING" + blank line after
+	available_for_upcoming = height - len(lines) - reserved_after_upcoming - upcoming_header_lines
+	upcoming_limit = max(0, available_for_upcoming)
+
 	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}
-	upcoming_limit = limits["upcoming"]
+	upcoming_limit = min(upcoming_limit, limits["upcoming"])
 
 	lines.append("UPCOMING")
-	if len(open_tasks) > 1:
-		upcoming = [t for t in open_tasks if t["id"] != current["id"]]
-		for task in upcoming[:upcoming_limit]:
+	remaining_tasks = [t for t in open_tasks if t not in detail_tasks]
+	if remaining_tasks:
+		for task in remaining_tasks[:upcoming_limit]:
 			due_str = fmt_due(task["due_ts"])
 			# R42: the " · " lead (3) and the "  (due)" tail (len + 4, the two
 			# spaces and two parentheses) come off the width, and the id comes off
@@ -425,7 +472,10 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 			else:
 				lines.append(f" · {task_label(task, width - 3)}")
 	else:
-		lines.append(" · (none)")
+		none_text = " · (none)"
+		if len(none_text) > width:
+			none_text = truncate(none_text, width)
+		lines.append(none_text)
 	lines.append("")
 
 	# PACE
@@ -452,6 +502,35 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 
 	return "\n".join(lines)
 
+def wrap_text(text: str, width: int) -> list[str]:
+	"""Wrap text to fit within width, returning list of lines.
+	Preserves explicit newlines as paragraph breaks; wraps long lines.
+	"""
+	if width <= 0:
+		return [text]
+	# Split on actual newlines first to preserve paragraph structure
+	paragraphs = text.split('\n')
+	lines = []
+	for para in paragraphs:
+		if not para:
+			# Empty paragraph → blank line
+			lines.append("")
+			continue
+		words = para.split()
+		if not words:
+			lines.append("")
+			continue
+		current = ""
+		for word in words:
+			if len(current) + len(word) + (1 if current else 0) <= width:
+				current = (current + " " + word) if current else word
+			else:
+				lines.append(current)
+				current = word
+		if current:
+			lines.append(current)
+	return lines
+
 def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]:
 	"""R22: The CSV plus the resolved filter file if there is one, de-duplicated."""
 	targets = [csv_path]
@@ -459,6 +538,10 @@ def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]:
 		if filter_path not in targets:
 			targets.append(filter_path)
 	return targets
+
+def unescape_description(text: str) -> str:
+	"""Unescape newlines in description from CSV storage."""
+	return text.replace("\\n", "\n")
 
 def read_csv(path: Path) -> dict:
 	"""
@@ -494,6 +577,7 @@ def read_csv(path: Path) -> dict:
 				category = row[5] if len(row) > 5 and row[5] else ""
 				tags_str = row[6] if len(row) > 6 and row[6] else ""
 				importance = row[7] if len(row) > 7 and row[7] else ""
+				description = unescape_description(row[8] if len(row) > 8 and row[8] else "")
 
 				# Parse tags column: comma-separated, stripped, filtered empty
 				tags = set()
@@ -512,6 +596,7 @@ def read_csv(path: Path) -> dict:
 					"category": category,
 					"tags": tags,
 					"importance": importance,
+					"description": description,
 				}
 	except OSError as e:
 		sys.stderr.write(f"taskview: failed to read {path}: {e}\n")
@@ -593,7 +678,8 @@ def main() -> int:
 
 		selected = select_tasks(state, current_filter_data)
 		metrics = compute_metrics(state, selected, current_filter_data)
-		view = build_view(selected, metrics, current_filter_data, args.width or 80, current_source)
+		width, height = get_terminal_size(args.width)
+		view = build_view(selected, metrics, current_filter_data, width, height, current_source)
 		draw(view)
 
 	render()

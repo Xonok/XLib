@@ -28,7 +28,7 @@ them.
 
 ## Data model
 
-Unchanged. The CSV layout stays 8 columns and no column is added, moved, or
+Unchanged. The CSV layout stays 9 columns and no column is added, moved, or
 removed.
 
 | Pos | Field | Meaning under this spec |
@@ -41,6 +41,7 @@ removed.
 | 5 | `category` | **the project this task belongs to — exactly one, free text, may be empty** |
 | 6 | `tags` | **subdivision within a category — no longer a membership axis** |
 | 7 | `importance` | unchanged |
+| 8 | `description` | **free-text description of the task; may be empty** |
 
 ## Requirements
 
@@ -223,41 +224,55 @@ passing suite does not validate anything the spec merely describes in prose.
 	unchanged code, not "reimplemented to the same effect".
 - **R26a** The header, the PACE block and the queue breakdown are not subject to
 	R26: the header is specified by R24 and the queue's filtered count by R25.
-- **R27** All rendering is pure: same (state, filter, width, source) in, same
+- **R27** All rendering is pure: same (state, filter, width, height, source) in, same
 	text out. No clock reads, no environment reads, no filesystem access inside
 	the render path.
+- **R28** The detail view shows the **2 most urgent open tasks** (overdue first,
+	then current day, then upcoming, until 2 are found) in full detail. Each
+	detail block shows the task id, title, due date, last change time, and
+	description (if present). A blank line separates the two detail blocks.
+- **R29** The UPCOMING list is condensed and sized to fit the **remaining terminal
+	height** after the detail blocks, header, PACE, and QUEUE sections. The
+	`limits.upcoming` value from the filter file acts as a ceiling; the actual
+	number shown is `min(limits.upcoming, available_height)`. When remaining
+	height is insufficient, the UPCOMING section shows only its header and
+	` · (none)`.
+- **R30** Terminal height is read at render time (via `shutil.get_terminal_size()`),
+	and `--width N` overrides width only. Height has no CLI override. A test must
+	be able to obtain deterministic output without a tty by passing explicit
+	width/height to the render function.
 
 ### Writer
 
-- **R28** `taskupdate.py` must continue to accept `--category` and `--tags` on
+- **R31** `taskupdate.py` must continue to accept `--category`, `--tags`, and `--description` on
 	`add` and `update`. No writer interface is removed.
-- **R29** Every write path (`add`, `update`, `done`, `cancel`) must write all 8
+- **R32** Every write path (`add`, `update`, `done`, `cancel`) must write all 9
 	columns, carrying forward the current values of every field it does not
-	change. A completed task keeps its category and tags. This is a **regression
+	change. A completed task keeps its category, tags, and description. This is a **regression
 	guard**: the current code satisfies it, and the point is that adding a field
 	later must not be possible to forget here.
-- **R30** `taskupdate.py` resolves its CSV as `--csv PATH`, else
+- **R33** `taskupdate.py` resolves its CSV as `--csv PATH`, else
 	`$TASKVIEW_CSV`, else `<data-dir>/tasks.csv` under R17's resolution. It
 	must not write outside the resolved path.
 
 ### Removed
 
-- **R31** `--context` and `$TASKVIEW_CONTEXT` are **removed**, not deprecated.
+- **R34** `--context` and `$TASKVIEW_CONTEXT` are **removed**, not deprecated.
 	Verified: nothing on this machine passes either — the only references are in
 	the tool itself and in documentation. The legacy filter directory
 	`~/.local/share/taskview/filters/` becomes unused; its five files are the
 	human's data and are left on disk untouched, but no code reads them.
-- **R32** The `*.yaml.example` files and `ensure_filter_dir()` are removed along
+- **R35** The `*.yaml.example` files and `ensure_filter_dir()` are removed along
 	with the auto-copy they exist for. XLib gets a committed `.taskview.yaml`; the
 	Agents workspace gets one too (this change edits the Agents repo, which the
 	human has authorised for this task).
 
 ### Reading old data
 
-- **R33** A CSV row with fewer than 8 fields must not break reading. Missing
+- **R36** A CSV row with fewer than 9 fields must not break reading. Missing
 	trailing columns read as empty, so a legacy 5-column row has no category and
 	is uncategorised.
-- **R34** A row whose `chg_ts` is missing or unparseable, or whose `id` is not an
+- **R37** A row whose `chg_ts` is missing or unparseable, or whose `id` is not an
 	integer, is skipped rather than aborting the read. Fold order is file order,
 	last row per id wins.
 
@@ -268,64 +283,64 @@ Added 2026-10-01 (epiq `EY72YA9`), alongside the pane-side id prefix
 it; before this, the only way to answer "what is #40?" was to open `tasks.csv`
 and parse it by hand — the exact failure mode `AQQNPAN` describes.
 
-- **R35** `taskupdate.py show <id>` prints that task's last row as id / status /
-	title / due / due_ts / category / tags / importance. An empty optional field
+- **R38** `taskupdate.py show <id>` prints that task's last row as id / status /
+	title / due / due_ts / category / tags / importance / description. An empty optional field
 	prints `(none)` rather than a blank label, so an empty column is visibly empty
 	rather than absent.
-- **R36** `show` on an id with no row exits **1** with a message naming the id. It
+- **R39** `show` on an id with no row exits **1** with a message naming the id. It
 	must not exit 0 on a task it could not resolve.
-- **R37** `show --field <name>` prints only that field's stored value and nothing
+- **R40** `show --field <name>` prints only that field's stored value and nothing
 	else. `--field` names are the CSV column names (`id`, `status`, `title`,
-	`due_ts`, `chg_ts`, `category`, `tags`, `importance`); the value printed is
+	`due_ts`, `chg_ts`, `category`, `tags`, `importance`, `description`); the value printed is
 	**what is stored**, not a formatted form, because the usual caller is an agent
 	that wants to hand the value back to `update`. An unknown `--field` exits 1
 	listing the valid names. The human-readable due form (`overdue 3d`, `today`)
 	belongs to the full `show` view and to `list`, **not** to `--field due_ts` —
 	a formatted string there could not be passed back to `--due`.
-- **R38** `show` and `list` read through the same last-row-wins fold as `update`,
-	so R33 and R34 apply to them: a legacy 5-column row resolves with empty
-	category / tags / importance, and an id whose rows are mixed-width resolves to
+- **R41** `show` and `list` read through the same last-row-wins fold as `update`,
+	so R36 and R37 apply to them: a legacy 5-column row resolves with empty
+	category / tags / importance / description, and an id whose rows are mixed-width resolves to
 	its last row however wide the earlier rows were.
-- **R39** `taskupdate.py list` prints one line per task with the **id first**,
+- **R42** `taskupdate.py list` prints one line per task with the **id first**,
 	ascending by id, so a task can be named without reading the CSV. `--status`
 	and `--category` narrow the set. No matching task exits 1 with a message on
 	stderr — an empty result is not a success, and a missing CSV exits 1 without a
 	traceback.
-- **R40** `show` and `list` are read-only: neither appends a row, creates the
-	CSV, nor writes anywhere. R30's resolution order applies unchanged, and
+- **R43** `show` and `list` are read-only: neither appends a row, creates the
+	CSV, nor writes anywhere. R33's resolution order applies unchanged, and
 	`--csv` / `$TASKVIEW_CSV` / `<data-dir>/tasks.csv` are honoured as they are by
 	every write path.
-- **R41** `list` is **not** the wide multi-axis view. That is `E5MH4S2`, a
+- **R44** `list` is **not** the wide multi-axis view. That is `E5MH4S2`, a
 	separate tool, and `list` must not grow into one: it prints the store, it does
 	not analyse it. The one thing it adds over the raw CSV is the id in front.
 
 ### Showing the id
 
 Added 2026-10-01 (epiq `X06YVNP`). The pane-side half of the pair specified in
-R35-R41's preamble.
+R38-R44's preamble.
 
-- **R42** The current-task line and every UPCOMING line render the task's id as a
+- **R45** The current-task line and every UPCOMING line render the task's id as a
 	`#<id> ` prefix before the title. An id is the natural handle for a task, and
 	until now the pane could not produce one: a task could only be named by its
 	title, and two titles sharing a first few words were indistinguishable. A
 	truncated title is worse than no title, because the identifying part is
 	exactly what the cut removes.
-- **R43** The prefix comes out of the **title's** budget, not the line's, so a
+- **R46** The prefix comes out of the **title's** budget, not the line's, so a
 	title that fit before the change is still fully shown after it. `task_label`
 	receives the line budget and subtracts the prefix width itself; a test asserts
 	the title part equals `truncate(title, budget - len(prefix))`, so "the id was
 	added and the title is now shorter" cannot pass.
-- **R44** `truncate` never returns more than `width` characters, for any `width`
+- **R47** `truncate` never returns more than `width` characters, for any `width`
 	including zero and negative. Before this it returned `text[:max(0, width-3)] +
 	"..."`, which is three characters wide at `width == 0` — so a caller that
 	subtracts a prefix from its budget could not rely on the line fitting.
 	`task_label` depends on this guarantee, so the two requirements are one change.
-- **R45** When the budget cannot hold the id and a title, the **title is dropped**
+- **R48** When the budget cannot hold the id and a title, the **title is dropped**
 	and the id is truncated alone: a pane wraps badly long before a task becomes
 	unnamed, and an id with no title is still a resolvable reference. For the same
 	reason, when the remaining width cannot hold both a label and a due date, the
 	UPCOMING line drops the due rather than overflowing.
-- **R46** No rendered **task** line may exceed the render width, at any width, for
+- **R49** No rendered **task** line may exceed the render width, at any width, for
 	either the current-task line or an UPCOMING line. Verified across widths 0-89
 	with a fixture whose ids and titles are long enough to force every branch. This
 	does not cover R24's header or the PACE / QUEUE blocks: those are not task
@@ -578,39 +593,45 @@ def compute_metrics(state: dict, selected: dict, filter_data: dict | None) -> di
 	# `selected` is every status that passed the filter (as the old `filtered`
 	# argument was); `shown` and `filtered_total` count OPEN tasks only.
 
-def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, source: str) -> str
-	# R24, R26, R26a, R27. Pure.
+def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str
+	# R24, R26, R26a, R27, R28, R29. Pure.
 
 def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]
 	# R22. The CSV plus the resolved filter file if there is one, de-duplicated.
 	# Both may live in different directories.
 
+def get_terminal_size(width_override: int | None = None) -> tuple[int, int]
+	# R20, R30. Returns (width, height) at render time. --width overrides width only.
+
 def truncate(text: str, width: int) -> str
-	# R44. Shorten to fit width, marked with an ellipsis. Never returns more than
+	# R47. Shorten to fit width, marked with an ellipsis. Never returns more than
 	# max(0, width) characters, so a caller may subtract a prefix from its budget
 	# and rely on the line still fitting.
 
 def task_label(task: dict, budget: int) -> str
-	# R42, R43, R45. "#<id> " then the title truncated into what is left of
+	# R45, R46, R48. "#<id> " then the title truncated into what is left of
 	# budget. A budget too small for the id returns the truncated id alone.
 
+def wrap_text(text: str, width: int) -> list[str]
+	# Helper for description wrapping in detail view.
+
 def read_csv(path: Path) -> dict
-	# R33, R34. Unchanged behaviour.
+	# R36, R37. Returns 9-key dict per task (id, status, title, due_ts, chg_ts, category, tags, importance, description).
 ```
 
 `taskupdate.py` keeps its CLI shape. `parse_due` and `read_last_id` are
-unchanged; the resolution of the target CSV follows R30.
+unchanged; the resolution of the target CSV follows R33.
 
 `taskupdate.py` additionally exposes:
 
 ```python
 def read_task(path: Path, task_id: int) -> dict | None
-	# R38. Last row for task_id as an 8-key dict, or None when there is no such
-	# row. Short rows read as empty (R33). This is the reader `update`, `done` and
+	# R38. Last row for task_id as a 9-key dict, or None when there is no such
+	# row. Short rows read as empty (R36). This is the reader `update`, `done` and
 	# `cancel` use, so all four resolve a task the same way.
 
 def read_all(path: Path) -> dict
-	# R38, R39. Every task by id, last row per id winning. `read_task` is this
+	# R38, R42. Every task by id, last row per id winning. `read_task` is this
 	# fold restricted to one id.
 
 def fmt_due(ts: str | int) -> str
