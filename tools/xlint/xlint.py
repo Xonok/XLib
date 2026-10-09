@@ -1,4 +1,4 @@
-import argparse,ast,ctypes,io,os,re,select,struct,sys,time,tokenize
+import argparse,ast,ctypes,io,os,re,select,struct,sys,time,tokenize,subprocess
 from pathlib import Path
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
@@ -359,6 +359,60 @@ def _markdown_exempt_spans(lines):
 			exempt[ln] = [(0, len(lines[ln - 1]))]
 	return exempt
 
+
+def _blockquote_exempt(lines):
+	"""Line numbers of block-quote lines (lines starting with `> ` after optional whitespace).
+
+	These are exempt from the absolute-path check because quoted material is evidence,
+	not a location reference.
+	"""
+	exempt = set()
+	for i, line in enumerate(lines, start=1):
+		stripped = line.lstrip()
+		if stripped.startswith("> "):
+			exempt.add(i)
+	return exempt
+
+
+def _is_tracked_file(path):
+	"""True when `path` is tracked by git (in the index or committed)."""
+	try:
+		result = subprocess.run(
+			["git", "ls-files", "--", str(path)],
+			capture_output=True,
+			text=True,
+			timeout=2,
+		)
+		return bool(result.stdout.strip())
+	except (subprocess.SubprocessError, OSError):
+		return False
+
+
+_ABSOLUTE_PATH_RE = re.compile(r"(?:^|[\s\(\"\'])((?:/storage/|/home/[^/]+/|/root/|~/)[^\s\)\]\}\"'>]+)")
+
+
+def check_absolute_paths(lines, exempt_lines, path):
+	"""Report absolute system paths in tracked Markdown files.
+
+	Flags tokens starting with `/storage/`, `/home/<user>/`, `/root/`, or `~/`
+	that are not in exempt lines (frontmatter, fenced code, block quotes).
+	Known exempt paths (AGENTS.md, plans/, personal/*/HISTORY.md) are skipped
+	entirely at the file level.
+	"""
+	# File-level exemptions: known paths where absolute paths are the content
+	path_str = str(path)
+	if path_str == "AGENTS.md" or path_str.startswith("plans/") or path_str.startswith("doc/plans/") or re.match(r"personal/[^/]+/HISTORY\.md$", path_str):
+		return []
+
+	report = []
+	for index, line in enumerate(lines, start=1):
+		if index in exempt_lines:
+			continue
+		for match in _ABSOLUTE_PATH_RE.finditer(line):
+			report.append((index, "absolute system path in tracked file — use a repo-relative path or point at .agents/machine-info.md"))
+	return report
+
+
 def _is_permitted_multiline(lines, node, end):
 	"""True when `node`'s header takes the shape the houserule permits.
 
@@ -607,6 +661,15 @@ def check_file(path, args):
 		if not args.no_double_space:
 			problems.extend((line, msg) for line, msg in check_double_space(text_lines, True))
 	elif path.suffix == ".md":
+		if not _is_tracked_file(path):
+			# Untracked files are not subject to the absolute-path rule
+			pass
+		else:
+			exempt = _frontmatter_exempt(text_lines)
+			exempt.update(_fence_exempt(text_lines))
+			exempt.update(_blockquote_exempt(text_lines))
+			if not args.no_absolute_paths:
+				problems.extend((line, msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
 		if not args.no_space_indent:
 			exempt = _frontmatter_exempt(text_lines)
 			exempt.update(_fence_exempt(text_lines))
@@ -760,6 +823,7 @@ def main():
 	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline and trailing blank line checks")
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
+	parser.add_argument("--no-absolute-paths", action="store_true", help="disable absolute system path check in Markdown")
 	args = parser.parse_args()
 
 	for entry in args.paths:
