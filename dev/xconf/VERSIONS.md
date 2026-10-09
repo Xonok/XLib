@@ -1,5 +1,7 @@
 # XConf version history
 
+> **Convention:** each entry cites the epiq ref of the release's ticket (e.g. `[ABC1234]`). Entries without a ref were released before this convention.
+
 ## 1_0_0
 
 Initial release of the config library.

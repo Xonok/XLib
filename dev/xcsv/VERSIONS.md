@@ -1,5 +1,7 @@
 # XCSV version history
 
+> **Convention:** each entry cites the epiq ref of the release's ticket (e.g. `[ABC1234]`). Entries without a ref were released before this convention.
+
 ## 1_1_0 (minor)
 
 Major feature release adding read API and schema improvements:
