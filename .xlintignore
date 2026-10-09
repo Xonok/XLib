@@ -1,0 +1,14 @@
+# xlint exclusion file — gitignore format
+# Keep the built-in defaults (__pycache__, .git, node_modules, xlib_legacy) and add:
+
+# pybundle test fixtures violate import rules deliberately; they are bundler input,
+# not code the project owns.
+tools/pybundle/test/fixtures/
+
+# .agents/ is gitignored scratch (agent notes, shared notes, claims) and no clone
+# will ever have it. But we exclude it explicitly rather than driving from
+# .gitignore, because the exclusion list is a style statement, not a tracking one.
+.agents/
+
+# .work/ holds per-ticket worktrees, one per ticket — not part of the project.
+.work/

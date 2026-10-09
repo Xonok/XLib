@@ -26,19 +26,145 @@ try:
 except AttributeError:
 	_libc = None
 
-def is_ignored(path):
-	parts = set(path.parts)
-	excluded = {"__pycache__", ".git", "node_modules", "xlib_legacy", "test"}
-	return bool(parts & excluded)
+_BUILTIN_EXCLUDED = {"__pycache__", ".git", "node_modules", "xlib_legacy"}
+_IGNORE_FILE = ".xlintignore"
 
-def lint_files(paths):
+class _Exclusions:
+	"""What xlint skips, from its own defaults plus a per-repo `.xlintignore`.
+
+	A separate file rather than `.gitignore` on purpose: a tracking statement is not a
+	style statement, and a documentation file the human is still drafting is untracked
+	by definition. Reading `.gitignore` here would exempt exactly the files most worth
+	linting (`AK633QC`).
+	"""
+
+	def __init__(self, extra=()):
+		self.rules = []
+		for base in sorted(set(extra)):
+			self.load(base / _IGNORE_FILE, base)
+
+	def load(self, path, base):
+		"""Read one `.xlintignore`; patterns are relative to the directory holding it."""
+		try:
+			text = path.read_text(encoding="utf-8")
+		except OSError:
+			return
+		for line in text.splitlines():
+			rule = _compile_pattern(line, base)
+			if rule is not None:
+				self.rules.append(rule)
+
+	def excluded(self, path, is_dir):
+		"""True when `path` is skipped, directly or by living inside an excluded directory.
+
+		Each ancestor is tested too, because a pattern ending in `/` is about a
+		directory and never matches the file inside it.
+		"""
+		path = path.resolve()
+		parts = path.parts
+		for depth in range(len(parts), 0, -1):
+			if self.excluded_here(Path(*parts[:depth]), is_dir and depth == len(parts)):
+				return True
+		return False
+
+	def excluded_here(self, path, is_dir):
+		"""True when a pattern matches `path` itself. Last match wins, as in gitignore."""
+		verdict = False
+		for negated, base, regex in self.rules:
+			base = base.resolve()
+			try:
+				relative = path.relative_to(base)
+			except ValueError:
+				continue
+			if regex.match(relative.as_posix() + ("/" if is_dir else "")) is not None:
+				verdict = not negated
+		return verdict
+
+def _compile_pattern(line, base):
+	"""One gitignore pattern to `(negated, base, regex)`, or None for a comment or blank.
+
+	The supported subset is what an exclusion list needs: `*`, `?`, `**`, a trailing `/`
+	for directories only, a leading `/` or an interior `/` to anchor, `!` to re-include,
+	and `#` comments. Anything outside it is treated as literal text rather than
+	guessed at, so an unrecognised pattern cannot silently exclude the whole tree.
+	"""
+	line = line.rstrip()
+	if not line.strip() or line.lstrip().startswith("#"):
+		return None
+	negated = line.startswith("!")
+	if negated:
+		line = line[1:]
+	dir_only = line.endswith("/")
+	if dir_only:
+		line = line[:-1]
+		if not line:
+			return None
+	anchored = line.startswith("/") or "/" in line
+	line = line.lstrip("/")
+	parts = []
+	for part in line.split("/"):
+		if part == "**":
+			parts.append("(?:.*/)?")
+			continue
+		parts.append(_glob_to_regex(part))
+	body = "/".join(parts)
+	if dir_only:
+		# A directory pattern matches the directory itself AND everything inside it.
+		regex = "^" + body + "(?:/.*)?$"
+	else:
+		regex = "^" + body + ("$" if anchored else "(?:/.*)?$")
+	return negated, base, re.compile(regex)
+
+def _glob_to_regex(part):
+	"""One path segment of a pattern to a regex: `*` and `?` stop at a separator, and
+	everything else is literal."""
+	out = []
+	for char in part:
+		if char == "*":
+			out.append("[^/]*")
+		elif char == "?":
+			out.append("[^/]")
+		else:
+			out.append(re.escape(char))
+	return "".join(out)
+
+def find_exclusion_roots(start):
+	"""Directories from `start` upward whose `.xlintignore` governs it, nearest last.
+
+	Walks up so a run from a subdirectory sees the same exclusions a run from the repo
+	root does, and so a nested repository's file overrides rather than disappears.
+	"""
+	roots = []
+	current = start.resolve()
+	if current.is_file():
+		current = current.parent
+	while True:
+		if (current / _IGNORE_FILE).is_file():
+			roots.append(current)
+		if current.parent == current:
+			return roots
+		current = current.parent
+
+def is_ignored(path, exclusions=None):
+	if set(path.parts) & _BUILTIN_EXCLUDED:
+		return True
+	if exclusions is not None and exclusions.excluded(path, path.is_dir()):
+		return True
+	return False
+
+def lint_files(paths, exclusions=None):
 	found = []
 	for entry in paths:
 		if entry.is_file() and entry.suffix in (".py", ".md"):
-			found.append(entry)
+			if exclusions is None:
+				exclusions = _Exclusions(find_exclusion_roots(entry))
+			if not is_ignored(entry, exclusions):
+				found.append(entry)
 		elif entry.is_dir():
+			if exclusions is None:
+				exclusions = _Exclusions(find_exclusion_roots(entry))
 			for path in sorted(entry.rglob("*")):
-				if not is_ignored(path) and path.suffix in (".py", ".md"):
+				if not is_ignored(path, exclusions) and path.suffix in (".py", ".md"):
 					found.append(path)
 	return found
 
@@ -385,7 +511,8 @@ def check_file(path, args):
 	return problems
 
 class _InotifyWatcher:
-	def __init__(self, paths):
+	def __init__(self, paths, exclusions):
+		self.exclusions = exclusions
 		self.wd_to_dir = {}
 		self.fd = _libc.inotify_init()
 		if self.fd == -1:
@@ -399,7 +526,7 @@ class _InotifyWatcher:
 			return
 		self.add_dir(root)
 		for path in root.rglob("*"):
-			if path.is_dir() and not is_ignored(path):
+			if path.is_dir() and not is_ignored(path, self.exclusions):
 				self.add_dir(path)
 
 	def add_dir(self, path):
@@ -443,7 +570,7 @@ class _InotifyWatcher:
 				return [("delete_dir", path)]
 			if mask & (_IN_CREATE | _IN_MOVED_TO):
 				self.add_dir(path)
-				return [("modify", inner) for inner in lint_files([path])]
+				return [("modify", inner) for inner in lint_files([path], self.exclusions)]
 			return []
 		if path.suffix not in (".py", ".md"):
 			return []
@@ -452,13 +579,14 @@ class _InotifyWatcher:
 		return [("modify", path)]
 
 class _PollWatcher:
-	def __init__(self, paths):
+	def __init__(self, paths, exclusions):
+		self.exclusions = exclusions
 		self.paths = paths
-		self.stamps = {path: stamp(path) for path in lint_files(paths)}
+		self.stamps = {path: stamp(path) for path in lint_files(paths, self.exclusions)}
 
 	def collect(self):
 		time.sleep(0.2)
-		current = {path: stamp(path) for path in lint_files(self.paths)}
+		current = {path: stamp(path) for path in lint_files(self.paths, self.exclusions)}
 		events = []
 		for path, value in current.items():
 			if value != self.stamps.get(path):
@@ -469,13 +597,13 @@ class _PollWatcher:
 		self.stamps = current
 		return events
 
-def make_watcher(paths):
+def make_watcher(paths, exclusions):
 	if _libc is not None:
 		try:
-			return _InotifyWatcher(paths)
+			return _InotifyWatcher(paths, exclusions)
 		except OSError:
 			pass
-	return _PollWatcher(paths)
+	return _PollWatcher(paths, exclusions)
 
 def draw(snapshot):
 	print(_CLEAR_SCREEN, end="")
@@ -485,9 +613,9 @@ def draw(snapshot):
 	for path, line, msg in sorted(found):
 		print(f"{path}:{line}: {msg}", flush=True)
 
-def watch(paths, args):
-	snapshot = {path: check_file(path, args) for path in lint_files(paths)}
-	watcher = make_watcher(paths)
+def watch(paths, args, exclusions):
+	snapshot = {path: check_file(path, args) for path in lint_files(paths, exclusions)}
+	watcher = make_watcher(paths, exclusions)
 	draw(snapshot)
 	while True:
 		changed = {}
@@ -529,15 +657,17 @@ def main():
 		if not entry.exists():
 			parser.error(f"not found: {entry}")
 
+	exclusions = _Exclusions(find_exclusion_roots(args.paths[0]))
+
 	if args.watch:
 		try:
-			watch(args.paths, args)
+			watch(args.paths, args, exclusions)
 		except KeyboardInterrupt:
 			pass
 		return 0
 
 	problems = []
-	for path in lint_files(args.paths):
+	for path in lint_files(args.paths, exclusions):
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
 	if not problems:
 		return 0

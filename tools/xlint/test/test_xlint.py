@@ -16,6 +16,7 @@ to run on every edit.
 """
 
 import unittest
+from pathlib import Path
 from tools.xlint import xlint
 
 def messages(problems):
@@ -253,6 +254,53 @@ class TestMarkdownFences(unittest.TestCase):
 	def test_frontmatter_is_still_exempt(self):
 		lines = ["---", "key:   value", "---", "body"]
 		self.assertEqual(xlint.check_space_indent_exempt(lines, xlint._frontmatter_exempt(lines)), [])
+
+class TestExclusions(unittest.TestCase):
+	"""The per-repo `.xlintignore` file and the built-in defaults, per AK633QC."""
+
+	def test_builtin_defaults_exclude_vendored_directories(self):
+		# The four "not our code" names are hard-coded.
+		self.assertTrue(xlint.is_ignored(Path("__pycache__/x.py")))
+		self.assertTrue(xlint.is_ignored(Path(".git/config")))
+		self.assertTrue(xlint.is_ignored(Path("node_modules/x.py")))
+		self.assertTrue(xlint.is_ignored(Path("xlib_legacy/x.py")))
+
+	def test_test_is_no_longer_a_builtin_exclusion(self):
+		# The bug: "test" was in the built-in set, so every test/ folder was skipped.
+		# The ruling drops it; tests must be linted like any other code.
+		self.assertFalse(xlint.is_ignored(Path("test/x.py")))
+		self.assertFalse(xlint.is_ignored(Path("tools/taskview/test/x.py")))
+
+	def test_xlintignore_excludes_fixtures_and_scratch(self):
+		# The repo's .xlintignore explicitly excludes the pybundle fixtures and .agents/.
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		self.assertTrue(xlint.is_ignored(Path("tools/pybundle/test/fixtures/alias/main.py"), excl))
+		self.assertTrue(xlint.is_ignored(Path("tools/pybundle/test/fixtures/alias/util.py"), excl))
+		self.assertTrue(xlint.is_ignored(Path(".agents/agent-notes-x.md"), excl))
+		self.assertTrue(xlint.is_ignored(Path(".work/xlint-improvements/xlint.py"), excl))
+
+	def test_xlintignore_does_not_exclude_siblings(self):
+		# A pattern for a directory excludes that directory and its contents, but
+		# not its siblings.
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		self.assertTrue(xlint.is_ignored(Path("tools/pybundle/test/fixtures"), excl))
+		self.assertFalse(xlint.is_ignored(Path("tools/taskview/test/x.py"), excl))
+
+	def test_lint_files_respects_xlintignore(self):
+		# Explicit file arguments also respect the exclusion file.
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		self.assertEqual(xlint.lint_files([Path("tools/pybundle/test/fixtures/alias/main.py")], excl), [])
+		self.assertEqual(xlint.lint_files([Path(".agents/agent-notes-x.md")], excl), [])
+		# But a non-excluded file is returned.
+		found = xlint.lint_files([Path("tools/xlint/xlint.py")], excl)
+		self.assertEqual(len(found), 1)
+
+	def test_lint_files_directory_walk_skips_ignored(self):
+		# Walking a directory skips ignored subtrees entirely. The fixtures directory
+		# is ignored, but other files in the same parent are not.
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		found = xlint.lint_files([Path("tools/pybundle/test/fixtures")], excl)
+		self.assertEqual(found, [])
 
 if __name__ == "__main__":
 	unittest.main()
