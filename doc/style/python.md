@@ -16,6 +16,7 @@ rules; this file only adds Python-specific rules.
 - A file ends with exactly one newline, after real content: no trailing blank line,
 	and no missing final newline (`BX56XRY`).
 - No trailing whitespace.
+- A mid-line double space is a typo. Use one space between tokens and after commas.
 - Prefer concise code, but do not make it complicated just to be concise.
 - Use intermediate variables to break up complex logic; use spaces to break
 	math into simpler parts, and don't pad spaces as a blanket rule.
