@@ -257,6 +257,108 @@ def check_trailing_whitespace(lines):
 			report.append((index, "trailing whitespace"))
 	return report
 
+def check_double_space(lines, is_py):
+	"""Report a mid-line double space — two or more spaces between non-space characters.
+
+	Exempt regions are skipped:
+	- Python: string literals and comments (via tokenize)
+	- Markdown: fenced code, frontmatter, inline code spans (backtick-delimited)
+
+	The ruling is general: any mid-line double space is a typo unless it lives in
+	exempt content. The BSFQYPF ruling removes the aligned-comment exemption,
+	so aligned comment columns are now violations.
+	"""
+	report = []
+	if is_py:
+		exempt = _python_exempt_spans(lines)
+	else:
+		exempt = _markdown_exempt_spans(lines)
+	for index, line in enumerate(lines, start=1):
+		spans = exempt.get(index, [])
+		if spans:
+			# Replace each exempt span with a single non-space placeholder
+			# This prevents double spaces from forming or hiding at the boundary
+			# between exempt and non-exempt content.
+			chars = list(line)
+			for start, end in sorted(spans, reverse=True):
+				chars[start:end] = ["·"]
+			line = "".join(chars)
+		if _DOUBLE_SPACE_RE.search(line):
+			report.append((index, "mid-line double space"))
+	return report
+
+def _line_has_double_space(line, spans):
+	"""True when `line` contains a mid-line double space outside `spans`.
+
+	`spans` is a list of (start, end) column pairs that are exempt.
+	The check is done on the non-exempt segments only.
+	"""
+	if not spans:
+		return _DOUBLE_SPACE_RE.search(line) is not None
+	spans = sorted(spans)
+	last = 0
+	for start, end in spans:
+		if start > last:
+			segment = line[last:start]
+			if _DOUBLE_SPACE_RE.search(segment):
+				return True
+		last = end
+	if last < len(line):
+		segment = line[last:]
+		if _DOUBLE_SPACE_RE.search(segment):
+			return True
+	return False
+
+_DOUBLE_SPACE_RE = re.compile(r"[^ ](  +)[^ ]")
+
+def _python_exempt_spans(lines):
+	"""Map each line number to a list of (start, end) spans that are exempt from the double-space check.
+
+	Covers string literals and comments as tokenize sees them. A `#` inside a string
+	is not a comment; a `"` inside a comment is not a string.
+	"""
+	exempt = {}
+	source = "".join(line + "\n" for line in lines)
+	try:
+		for token in tokenize.generate_tokens(io.StringIO(source).readline):
+			if token.type in (tokenize.STRING, tokenize.COMMENT):
+				start_line = token.start[0]
+				start_col = token.start[1]
+				end_line = token.end[0]
+				end_col = token.end[1]
+				for ln in range(start_line, end_line + 1):
+					if ln not in exempt:
+						exempt[ln] = []
+					if ln == start_line and ln == end_line:
+						exempt[ln].append((start_col, end_col))
+					elif ln == start_line:
+						exempt[ln].append((start_col, len(lines[ln - 1])))
+					elif ln == end_line:
+						exempt[ln].append((0, end_col))
+					else:
+						exempt[ln].append((0, len(lines[ln - 1])))
+	except (tokenize.TokenError, IndentationError, SyntaxError):
+		return {}
+	return exempt
+
+def _markdown_exempt_spans(lines):
+	"""Line spans inside fenced code, frontmatter, or inline code spans."""
+	exempt = {}
+	exempt_set = _frontmatter_exempt(lines)
+	exempt_set.update(_fence_exempt(lines))
+	# Inline code spans: backtick-delimited on a single line
+	for index, line in enumerate(lines, start=1):
+		if index in exempt_set:
+			continue
+		for match in re.finditer(r"`[^`]*`", line):
+			start, end = match.span()
+			exempt.setdefault(index, []).append((start, end))
+	# Convert the set of fully-exempt lines to spans
+	for ln in exempt_set:
+		if ln <= len(lines):
+			exempt[ln] = [(0, len(lines[ln - 1]))]
+	return exempt
+
 def _is_permitted_multiline(lines, node, end):
 	"""True when `node`'s header takes the shape the houserule permits.
 
@@ -500,6 +602,8 @@ def check_file(path, args):
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 		if not args.no_imports:
 			problems.extend((line, msg) for line, msg in check_imports(text_lines))
+		if not args.no_double_space:
+			problems.extend((line, msg) for line, msg in check_double_space(text_lines, True))
 	elif path.suffix == ".md":
 		if not args.no_space_indent:
 			exempt = _frontmatter_exempt(text_lines)
@@ -508,6 +612,8 @@ def check_file(path, args):
 		if not args.no_final_newline:
 			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
+		if not args.no_double_space:
+			problems.extend((line, msg) for line, msg in check_double_space(text_lines, False))
 	return problems
 
 class _InotifyWatcher:
@@ -651,6 +757,7 @@ def main():
 	parser.add_argument("--no-def-comment", action="store_true", help="disable the check for a comment on a def line")
 	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline and trailing blank line checks")
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
+	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
 	args = parser.parse_args()
 
 	for entry in args.paths:
