@@ -18,11 +18,9 @@ to run on every edit.
 import unittest
 from tools.xlint import xlint
 
-
 def messages(problems):
 	"""The messages alone, so a test asserts on what is reported and not on its order."""
 	return sorted(message for _, message in problems)
-
 
 class TestPlainImports(unittest.TestCase):
 	"""Plain imports are comma-joined; dotted and aliased names each get their own line."""
@@ -60,7 +58,6 @@ class TestPlainImports(unittest.TestCase):
 		problems = xlint.check_imports(["import json,math as m"])
 		self.assertEqual(messages(problems), ["aliased import on a shared line"])
 
-
 class TestFromImports(unittest.TestCase):
 	"""Names from one module are comma-joined; the module's own name carries the check."""
 
@@ -78,7 +75,6 @@ class TestFromImports(unittest.TestCase):
 	def test_a_wildcard_import_is_reported(self):
 		self.assertEqual(messages(xlint.check_imports(["from util import *"])), ["wildcard import"])
 
-
 class TestImportBlocks(unittest.TestCase):
 	"""The block-level rules: one statement per line, no blank line inside the block."""
 
@@ -93,6 +89,60 @@ class TestImportBlocks(unittest.TestCase):
 	def test_a_dotted_name_is_clean_beside_a_plain_one(self):
 		self.assertEqual(xlint.check_imports(["import json", "import os.path"]), [])
 
+class TestOneLineDefinition(unittest.TestCase):
+	"""The three states of a `def` signature, which the check used to conflate into one.
+
+	1YPFZYH measured 74 findings in this repo, every one of them a single-line `def`
+	carrying a trailing comment: a 100% false-positive rate in the check enforcing the
+	signature houserule, all of it invisible because those files sit in a `test/` folder
+	that AK633QC covers.
+	"""
+
+	def test_a_trailing_comment_is_not_a_spill(self):
+		# The whole of 1YPFZYH: `def ok(a, b):` is on one line whatever follows the colon.
+		self.assertEqual(xlint.check_def_one_line(["def ok(a, b):  # why", "\treturn a"]), [])
+
+	def test_a_plain_single_line_definition_is_clean(self):
+		self.assertEqual(xlint.check_def_one_line(["def ok(a, b):", "\treturn a"]), [])
+
+	def test_an_async_single_line_definition_is_clean(self):
+		self.assertEqual(xlint.check_def_one_line(["async def ok(a):", "\treturn a"]), [])
+
+	def test_the_permitted_multiline_shape_is_clean(self):
+		lines = ["def ok(", "\talpha,", "\tbeta,", "):", "\treturn alpha"]
+		self.assertEqual(xlint.check_def_one_line(lines), [])
+
+	def test_the_permitted_shape_nests_by_one_tab_inside_a_class(self):
+		lines = ["class C:", "\tdef ok(", "\t\talpha,", "\t):", "\t\treturn alpha"]
+		self.assertEqual(xlint.check_def_one_line(lines), [])
+
+	def test_a_spill_aligned_to_the_open_paren_is_reported(self):
+		# The shape the ruling bans: alignment breaks when a parameter is renamed.
+		lines = ["def ok(alpha,", "\t\tbeta):", "\treturn alpha"]
+		self.assertEqual(messages(xlint.check_def_one_line(lines)), ["function definition split across lines"])
+
+	def test_two_arguments_on_one_line_inside_a_spill_are_reported(self):
+		lines = ["def ok(", "\talpha, beta,", "):", "\treturn alpha"]
+		self.assertEqual(messages(xlint.check_def_one_line(lines)), ["function definition split across lines"])
+
+	def test_a_permitted_shape_whose_closing_paren_is_misindented_is_reported(self):
+		lines = ["def ok(", "\talpha,", "\t\t):", "\treturn alpha"]
+		self.assertEqual(messages(xlint.check_def_one_line(lines)), ["function definition split across lines"])
+
+	def test_a_spilled_return_annotation_is_a_spill(self):
+		# The rule is that the definition stays on one line, so a header whose return
+		# annotation wraps is split across lines whatever the shape of its parameters.
+		lines = ["def ok(a) -> dict[", "\tstr,", "\tint,", "]:", "\treturn {}"]
+		self.assertEqual(messages(xlint.check_def_one_line(lines)), ["function definition split across lines"])
+
+	def test_an_unparseable_file_falls_back_to_the_text_check(self):
+		# ast is unavailable for a file mid-edit; the rule still has to hold, and a
+		# trailing comment still must not read as a spill.
+		lines = ["def ok(a, b):  # why", "\treturn a", "def broken("]
+		self.assertEqual(messages(xlint.check_def_one_line(lines)), ["function definition split across lines"])
+
+	def test_a_paren_inside_a_default_string_is_not_a_signature_end(self):
+		self.assertEqual(xlint.check_def_one_line(["def ok(pattern=r')'):", "\treturn pattern"]), [])
 
 if __name__ == "__main__":
 	unittest.main()

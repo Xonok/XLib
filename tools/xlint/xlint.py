@@ -1,4 +1,4 @@
-import argparse,ctypes,os,re,select,struct,sys,time
+import argparse,ast,ctypes,os,re,select,struct,sys,time
 from pathlib import Path
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
@@ -128,16 +128,110 @@ def check_trailing_whitespace(lines):
 			report.append((index, "trailing whitespace"))
 	return report
 
+def _is_permitted_multiline(lines, node, end):
+	"""True when `node`'s header takes the shape the houserule permits.
+
+	Arguments each on their own line, one tab deeper than the `def`; the closing `)`
+	on its own line at the `def`'s own indent. Structure, not alignment — which is
+	the point of the shape (a rename cannot break it).
+	"""
+	start = node.lineno
+	def_indent = len(lines[start - 1]) - len(lines[start - 1].lstrip("\t"))
+	for line in lines[start:end - 1]:
+		if not line.strip():
+			return False
+		if len(line) - len(line.lstrip("\t")) != def_indent + 1:
+			return False
+	closing = lines[end - 1]
+	if len(closing) - len(closing.lstrip("\t")) != def_indent:
+		return False
+	if not closing.lstrip("\t").startswith(")"):
+		return False
+	return _one_argument_per_line(node, start)
+
+def _one_argument_per_line(node, start):
+	"""True when no two arguments of `node` share a line, and none sits on the `def` line.
+
+	Reads the argument nodes' own lines rather than counting commas: a default value
+	may contain one (`alpha=(1, 2)`), and a comma count cannot tell that from a
+	separator.
+	"""
+	nodes = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+	nodes += [extra for extra in (node.args.vararg, node.args.kwarg) if extra is not None]
+	seen = set()
+	for argument in nodes:
+		if argument.lineno <= start or argument.lineno in seen:
+			return False
+		seen.add(argument.lineno)
+	return True
+
+def _spanned_def_lines(lines):
+	"""Map each `def` line to the line its parameter list closes on, or None when the file does not parse.
+
+	`ast` is asked rather than a bracket count: a paren inside a string literal or a
+	comment is not a paren, and counting characters cannot tell the difference.
+	"""
+	try:
+		tree = ast.parse("".join(line + "\n" for line in lines))
+	except SyntaxError:
+		return None
+	spans = {}
+	for node in ast.walk(tree):
+		if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+			spans[node.lineno] = (node, _signature_end(node, lines))
+	return spans
+
+def _signature_end(node, lines):
+	"""The line the header of `node` — everything up to its closing `:` — closes on.
+
+	Read off the first statement rather than off the arguments: `ast` gives no node for
+	the parameter list itself, so an empty one (`def ok(\\n):`) would leave nothing to
+	measure. The line above the body is that `):` by construction, stepping back over
+	blank and comment lines so neither a gap nor a comment between the two hides it —
+	both sit inside the header without being part of it.
+	"""
+	if not node.body:
+		return node.lineno
+	end = node.body[0].lineno - 1
+	while end > node.lineno and _is_gap(lines[end - 1]):
+		end -= 1
+	return max(end, node.lineno)
+
+def _is_gap(line):
+	"""True when a line carries nothing that belongs to the header it sits inside."""
+	stripped = line.strip()
+	return not stripped or stripped.startswith("#")
+
 def check_def_one_line(lines):
+	"""Report a `def` whose signature is neither on one line nor in the permitted shape.
+
+	Three states, previously conflated into one: closed on the line is clean whatever
+	follows the colon (a trailing comment included); spanning lines in the permitted
+	shape is clean; anything else is a spill. Deciding the middle case needs `ast`,
+	because whether the parameter list closes on its line is not a question a regex
+	can answer without also being fooled by a comment or a string.
+	"""
 	report = []
+	spans = _spanned_def_lines(lines)
 	for index, line in enumerate(lines, start=1):
 		open_paren = line.find("(")
 		if open_paren == -1:
 			continue
 		if not _DEF_PREFIX_RE.match(line[:open_paren]):
 			continue
-		if not re.match(r"\(.*\)\s*(->\s*.+)?\s*:\s*$", line[open_paren:]):
-			report.append((index, "function definition split across lines"))
+		if spans is not None:
+			spanned = spans.get(index)
+			if spanned is None:
+				end = None
+			else:
+				node, end = spanned
+				if end == index:
+					continue
+				if end <= len(lines) and _is_permitted_multiline(lines, node, end):
+					continue
+		elif not re.match(r"\(.*\)\s*(->\s*.+)?\s*:\s*$", line[open_paren:].split("#", 1)[0].rstrip()):
+			continue
+		report.append((index, "function definition split across lines"))
 	return report
 
 def check_final_newline(lines):
