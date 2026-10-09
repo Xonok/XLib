@@ -3,6 +3,7 @@ from pathlib import Path
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
+_ALIASED_NAME_RE = re.compile(r"\bas\b")
 _CLEAR_SCREEN = "\033[2J\033[H"
 NAME = "xlint"
 _EVENT_HEADER = struct.Struct("=iIII")
@@ -187,7 +188,11 @@ def check_imports(lines):
 				names = line[import_match.end():]
 				if re.search(r",\s", names):
 					report.append((index, "space after comma in import"))
-				if "." not in names:
+				if _ALIASED_NAME_RE.search(names):
+					if "," in names:
+						report.append((index, "aliased import on a shared line"))
+					prev_plain = False
+				elif "." not in names:
 					if prev_plain:
 						report.append((index, "consecutive plain imports not merged"))
 					prev_plain = True
