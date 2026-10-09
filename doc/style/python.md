@@ -6,7 +6,10 @@ rules; this file only adds Python-specific rules.
 ## Formatting
 
 - Code is indented with tabs.
-- Function definitions and calls stay on one line.
+- Function definitions and calls stay on one line. A definition that cannot fit is
+	avoided; when it is unavoidable the spill becomes ordinary indentation, not
+	alignment — arguments on separate lines one tab deeper than the `def`, and the
+	closing `)` on its own line at the `def`'s own indent (`BSFQYPF`).
 - No double newlines; one blank line separates functions; related globals stay
 	together as one block.
 - Methods within a class have no empty lines between them.
