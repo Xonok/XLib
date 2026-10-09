@@ -80,26 +80,30 @@ def _frontmatter_exempt(lines):
 	return set()
 
 def _fence_exempt(lines):
+	"""Line numbers inside a fenced code block, including the fence lines themselves.
+
+	A fence is recognised after leading whitespace, so a block nested in a list item is
+	a fence rather than a space-indented violation. That is the ordinary way to write
+	one, and a rule that makes it unlintable is a rule whose only remedy is to corrupt
+	the code to satisfy the linter (`QN1N82Y`).
+	"""
 	exempt = set()
 	in_fence = False
 	fence_char = None
 	fence_len = 0
 	for i, line in enumerate(lines, start=1):
-		if not line:
+		body = line.lstrip()
+		if not body:
 			if in_fence:
 				exempt.add(i)
 			continue
-		if line[0].isspace():
-			if in_fence:
-				exempt.add(i)
-			continue
-		ch = line[0]
+		ch = body[0]
 		if ch not in ("`", "~"):
 			if in_fence:
 				exempt.add(i)
 			continue
 		count = 0
-		for c in line:
+		for c in body:
 			if c == ch:
 				count += 1
 			else:
@@ -109,13 +113,12 @@ def _fence_exempt(lines):
 				in_fence = True
 				fence_char = ch
 				fence_len = count
+			elif ch == fence_char and count >= fence_len:
+				in_fence = False
+				fence_char = None
+				fence_len = 0
 			else:
-				if ch == fence_char and count >= fence_len:
-					in_fence = False
-					fence_char = None
-					fence_len = 0
-				else:
-					exempt.add(i)
+				exempt.add(i)
 		else:
 			if in_fence:
 				exempt.add(i)
