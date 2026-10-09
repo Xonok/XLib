@@ -717,9 +717,9 @@ def draw(snapshot):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
 	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
-	print(f"{len(found)} problem(s)" if found else "clean", end="\n\n", flush=True)
 	for path, line, msg in sorted(found):
 		print(f"{path}:{line}: {msg}", flush=True)
+	print(f"{len(found)} problem(s)" if found else "clean", flush=True)
 
 def watch(paths, args, exclusions):
 	snapshot = {path: check_file(path, args) for path in lint_files(paths, exclusions)}
@@ -779,9 +779,11 @@ def main():
 	for path in lint_files(args.paths, exclusions):
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
 	if not problems:
+		print("clean")
 		return 0
 	for path, line, msg in problems:
 		print(f"{path}:{line}: {msg}")
+	print(f"{len(problems)} problem(s)")
 	return 1
 
 if __name__ == "__main__":
