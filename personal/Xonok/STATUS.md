@@ -239,6 +239,128 @@ Two consequences for anyone reading the workspace:
 	ticket is filed rather than after. What it cannot do is catch a ticket filed
 	without it: the choice is made through the epiq MCP, not through a repo tool,
 	so nothing local can intercept it. That is the one rule here left as prose.
+- **The best column alignment in this repo is module-docstring prose, not code.**
+	`dev/xcsv/xcsv.py:24-30` and `xlib/xcsv_1_1_0.py:97-103` line up five
+	exception names with literal `#` characters **inside a `"""` docstring**,
+	where Python sees no comment at all. Found 2026-10-09 while re-measuring the
+	alignment ruling, and it is the cause of two wrong figures I reported earlier
+	this session: the masking handled single-line strings but not docstrings, so
+	those 10 lines were counted as aligned code comments. `doc/style/python.md` has
+	no sentence on docstrings — formatting, length, or what belongs in one rather
+	than in the SPEC. Same shape as `DDRBHD5`/`BX56XRY`/`13QYCT8`/`KJKEQ01`: a
+	convention in wide use with no text behind it. epiq `HRGFRWX` (Todo).
+- **Houserule ruled 2026-10-09, second half: alignment counts only at very high
+	comment density, and a comment belongs on the line before what it explains.**
+	Aligned same-line comments count only where **comment density is very high**;
+	inline comments should **usually be avoided** in favour of a preceding line;
+	and the single space applies **only to inline comments**, i.e. to those allowed
+	to stay inline at all. Such cases are rare because high comment density is
+	itself often a violation of *comments are for why, not what or how*.
+	**Corrected 2026-10-09, twice.** I first reported all 134 aligned comments as
+	violations, then 31-in-9-blocks as legitimate; both were wrong because the
+	docstring masking missed. Corrected: **91 lone inline comments** (74 of them
+	`def`-line comments owned by `HRCQSV4`, **17** on ordinary code) and **5 real
+	blocks** of 2+, not 9 — and **2 of the 5 are already single-spaced and
+	compliant**. The ruling's default is existing practice: **528 of 663** tracked
+	Python comment lines (79%) already sit on their own line. epiq `BSFQYPF`.
+- **Houserule ruled 2026-10-09: spaces are never used for alignment.** Tabs if
+	alignment is wanted; avoid alignment where possible. A spilled function
+	signature becomes ordinary tab indentation, not columns — `func(` alone,
+	arguments one tab deeper, `)` at the `func(`'s own indent — because
+	**renaming a parameter breaks a space alignment and cannot break an
+	indent**; that fragility is the stated reason. **Not yet written down**:
+	`AGENTS.md`'s `## Houserules` (`:137-139`, one entry) and
+	`doc/style/python.md` are both untouched, and the `0P2TVAM` precedent put that
+	houserule in both files. Measured scope: **369 lines in 47 tracked files** —
+	134 `.py` space-aligned comments, 135 Markdown alignment prose/tables,
+	100 other (epi `BSFQYPF`; reformat `F8XBH1F`). Two questions the ruling does
+	not answer: **comment columns** (the biggest category, and the fragility
+	argument applies to them as much as to signatures) and **Markdown tables**,
+	where tabs do not render as padding so "use tabs" has no working answer.
+	Three xlint tickets now hang off this ruling: `BSFQYPF`, `13QYCT8` (whose
+	`code  +#` exemption the ruling deletes — outside data a double space is a
+	typo by construction), and `1YPFZYH`.
+- **xlint's `check_def_one_line` is wrong in 74 of 74 cases.** It reports
+	"function definition split across lines" for **74** `def`s across tracked
+	`.py` and **none** are spills — every one is a single-line `def` carrying a
+	trailing comment, because the closing pattern is anchored `\s*$` (`:130-140`).
+	A 100% false-positive rate, and all 74 sit in `tools/taskview/test/`, which
+	`AK633QC` shows is invisible to a plain `xlint .`. It also **bans the exact
+	tab-indented signature shape the new houserule permits**, so the ruling and
+	the check cannot both stand and the check cannot be the survivor. The
+	trailing-comment fix is one line and converts 74 findings to 0 — worth
+	landing before any redesign. **Split 2026-10-09**: the human ruled the 74
+	lines are bad taste but not spills, so the one-line false-positive fix stays
+	here and the new rule is `HRCQSV4` — where **`class` lines turn out never to
+	have been checked at all** (`_DEF_PREFIX_RE` matches `def` only), so the 0
+	count is a coverage gap rather than a clean baseline. epiq `1YPFZYH` + `HRCQSV4`
+	(Todo).
+- **xlint runs `check_trailing_whitespace` on `.py` and not on `.md`.**
+	`check_file` (`:198-222`) branches by suffix: five checks for `.py`, two for
+	`.md`. So Markdown hard breaks — two trailing spaces, a documented CommonMark
+	feature — are permitted by omission rather than by decision, and **58 tracked
+	`.md` lines carry trailing whitespace, 56 of them exactly two-or-more spaces**.
+	Corrected 2026-10-09: I first wrote that this contradicted the double-space
+	check; it does not, because the check is simply absent on `.md`. epiq
+	`KJKEQ01` (Todo).
+- **xlint has no mid-line double-space check, and the rule as stated would
+	fight the repo's own comment alignment.** Not implemented — no check, no
+	`--no-` flag. The human's condition is that it **must not fire inside data**
+	(inline strings and the like), and that condition is most of the ticket: a
+	prototype goes **116 → 586** findings repo-wide, of which **134 are the
+	`ClassName    # comment` column layout** used across `dev/xcsv`, `xlib/` and
+	`dev/xschema` — house style, not sloppiness. 120 more are SPEC.md alignment
+	prose, 94 are string literals, 7 Markdown tables, 5 inline code spans. So
+	exempting "data" is a **ruling, not a detail**, and the rule is unwritten:
+	`doc/style/*.md` has no double-space sentence at all, and on the narrow
+	sentence-period reading (`[.!?:]  +[A-Za-z]`) the repo is already clean at
+	zero hits. Two implementation findings worth keeping: exempt by
+	**replacement, never deletion** (deleting `` `<REF> ` `` from
+	`...is \`<REF> \` — ref...` leaves two spaces and the line explodes: 1879 vs
+	586 findings), and `_fence_exempt` (`:81-120`) is already built for the `.md`
+	branch but feeds only `check_space_indent_exempt`. epiq `13QYCT8` (Todo).
+- **xlint has no check for a single trailing blank line, and its two
+	file-ending checks do not compose into the rule either states.**
+	`check_final_newline` (`tools/xlint/xlint.py:142-145`) requires the file to
+	end in a newline and `check_double_blank` (`:50-55`) rejects two consecutive
+	blanks — so `import os\n\n` passes both, being a real last line, one blank,
+	and a present terminator. Two blanks at the end *is* caught, which is the tell
+	that `\n\n` is an oversight and not a policy. **Four tracked files carry it**,
+	none currently flagged: `tools/taskview/taskview.py:765`,
+	`tools/taskview/taskupdate.py:298`, `tools/bbprs/README.md:193`,
+	`doc/reviews/pybundle-review.md:336` — the tool's own two entry points
+	included. A prototype adds 4 findings repo-wide (116 → 120) and loses none.
+	Same root as `DDRBHD5`: each check was written against its own symptom rather
+	than against the rule, so neither composes. Also unenumerable — neither
+	`missing final newline` nor this has a sentence in `doc/style/python.md`.
+	epiq `BX56XRY` (Todo).
+- **xlint's merged-imports rule is unsatisfiable for aliased imports.** The
+	human ruled on 2026-10-09: **aliased imports get their own line, and should
+	generally be avoided where avoidable — but xlint must handle them
+	correctly.** The code change is now unambiguous (detect ` as ` explicitly,
+	give aliased imports a branch, `prev_plain = False` so they do not
+	propagate), and a prototype is inert on tracked code: 116 findings before and
+	after, byte-identical. The ruling's second half is still open — whether
+	"avoided when possible" is prose or a new check; mechanically it means "the
+	alias never appears", which would fire on `import numpy as np` everywhere.
+	`check_imports` (`tools/xlint/xlint.py:190`) decides plain-vs-dotted by
+	testing the module text for a dot, and `import x as y` has no dot — so an
+	aliased plain import is classified plain, flagged, and propagated as a
+	mergeable predecessor. `import json` / `import math as m` /
+	`import collections` produces two findings and **no rewrite that clears
+	them**; the merged form `import json,math as m,collections` is legal Python
+	(`ast.parse` accepts it, binds `json`/`m`/`collections`) but still reads as
+	plain under the classifier. The two aliased forms are treated oppositely for
+	no reason but the dot: `import a.b as c` escapes the rule, `import math as m`
+	does not. `doc/style/python.md:20-23` covers plain and dotted and says nothing
+	about aliases, which is how the linter filled the gap on its own.
+	**Corrected 2026-10-09**: an earlier entry here said two shipped fixtures
+	already violate it, making this non-latent. Wrong — both fixture findings are
+	unrelated (`stdlib/main.py:3` is a plain/plain pair with the alias *after* it;
+	`alias/main.py:3` is the `from`-import same-module check), so the
+	unsatisfiable input has **zero occurrences in tracked code**. `tools/xlint/`
+	has no test file at all, which is how it went unnoticed. epiq `DDRBHD5`
+	(Todo).
 - **xlint does not lint tests, and the house rule for test folder names is
 	inverted relative to it.** `is_ignored` (`tools/xlint/xlint.py:28`) excludes any
 	path part named `test` — the repo's own convention, so `xlint .` skips every
