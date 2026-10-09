@@ -152,10 +152,14 @@ def is_ignored(path, exclusions=None):
 		return True
 	return False
 
+_JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
+_PY_MD_SUFFIXES = (".py", ".md")
+_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES
+
 def lint_files(paths, exclusions=None):
 	found = []
 	for entry in paths:
-		if entry.is_file() and entry.suffix in (".py", ".md"):
+		if entry.is_file() and entry.suffix in _ALL_SUFFIXES:
 			if exclusions is None:
 				exclusions = _Exclusions(find_exclusion_roots(entry))
 			if not is_ignored(entry, exclusions):
@@ -164,7 +168,7 @@ def lint_files(paths, exclusions=None):
 			if exclusions is None:
 				exclusions = _Exclusions(find_exclusion_roots(entry))
 			for path in sorted(entry.rglob("*")):
-				if not is_ignored(path, exclusions) and path.suffix in (".py", ".md"):
+				if not is_ignored(path, exclusions) and path.suffix in _ALL_SUFFIXES:
 					found.append(path)
 	return found
 
@@ -260,6 +264,52 @@ def check_trailing_whitespace(lines, is_md=False):
 				continue
 			report.append((index, "trailing whitespace"))
 	return report
+
+
+def check_js_trailing_whitespace(lines):
+	"""Trailing whitespace check for JS/TS — same as Python, no Markdown exception."""
+	report = []
+	for index, line in enumerate(lines, start=1):
+		if line != line.rstrip() and line.strip():
+			report.append((index, "trailing whitespace"))
+	return report
+
+
+def check_js_double_blank(lines):
+	"""Double blank line check for JS/TS — same as Python/Markdown."""
+	report = []
+	for index, (prev, current) in enumerate(zip(lines, lines[1:]), start=2):
+		if prev == "" and current == "":
+			report.append((index, "double blank line"))
+	return report
+
+
+def check_js_space_indent(lines, exempt):
+	"""Space indentation check for JS/TS — tabs only, with exempt spans."""
+	report = []
+	for index, line in enumerate(lines, start=1):
+		if index in exempt:
+			continue
+		if _SPACE_INDENT_RE.match(line):
+			report.append((index, "indented with spaces"))
+	return report
+
+
+def check_js_final_newline(lines):
+	"""Final newline check for JS/TS — file must end with exactly one newline."""
+	if lines and not lines[-1].endswith("\n"):
+		return [(len(lines), "missing final newline")]
+	return []
+
+
+def check_js_trailing_blank(lines):
+	"""Trailing blank line check for JS/TS — no empty line at end after real content."""
+	if len(lines) < 2 or lines[-1].strip():
+		return []
+	if lines[-2].strip():
+		return [(len(lines), "trailing blank line at end of file")]
+	return []
+
 
 def check_double_space(lines, is_py):
 	"""Report a mid-line double space — two or more spaces between non-space characters.
@@ -396,6 +446,231 @@ def _blockquote_exempt(lines):
 		if stripped.startswith("> "):
 			exempt.add(i)
 	return exempt
+
+
+def _js_exempt_spans(lines):
+	"""Map each line number to a list of (start_col, end_col) spans exempt from checks.
+
+	Covers string literals (single/double quoted), template literals (backtick),
+	line comments (//), block comments (/* */), and regex literals (/pattern/flags).
+
+	Uses a simple state machine — no parser — because the exemption rules only need
+	to know where literal content lives, not the full AST.
+	"""
+	exempt = {}
+	source = "\n".join(lines) + "\n"
+	i = 0
+	line = 1
+	col = 0
+	line_start = 0
+
+	while i < len(source):
+		ch = source[i]
+
+		if ch == "\n":
+			line += 1
+			col = 0
+			line_start = i + 1
+			i += 1
+			continue
+
+		# Single-line comment //
+		if ch == "/" and i + 1 < len(source) and source[i + 1] == "/":
+			start_line = line
+			start_col = col
+			# Consume to end of line
+			while i < len(source) and source[i] != "\n":
+				i += 1
+				col += 1
+			end_col = col
+			if start_line not in exempt:
+				exempt[start_line] = []
+			exempt[start_line].append((start_col, end_col))
+			continue
+
+		# Block comment /* ... */
+		if ch == "/" and i + 1 < len(source) and source[i + 1] == "*":
+			start_line = line
+			start_col = col
+			i += 2
+			col += 2
+			while i + 1 < len(source):
+				if source[i] == "\n":
+					line += 1
+					col = 0
+					line_start = i + 1
+					i += 1
+				elif source[i] == "*" and source[i + 1] == "/":
+					i += 2
+					col += 2
+					break
+				else:
+					i += 1
+					col += 1
+			end_line = line
+			end_col = col
+			for ln in range(start_line, end_line + 1):
+				if ln not in exempt:
+					exempt[ln] = []
+				if ln == start_line and ln == end_line:
+					exempt[ln].append((start_col, end_col))
+				elif ln == start_line:
+					exempt[ln].append((start_col, len(lines[ln - 1])))
+				elif ln == end_line:
+					exempt[ln].append((0, end_col))
+				else:
+					exempt[ln].append((0, len(lines[ln - 1])))
+			continue
+
+		# String literals: '...' or "..." (with escape handling)
+		if ch == "'" or ch == '"':
+			quote = ch
+			start_line = line
+			start_col = col
+			i += 1
+			col += 1
+			while i < len(source):
+				if source[i] == "\n":
+					# Unclosed string - treat as ending at line end
+					break
+				if source[i] == "\\":
+					i += 2
+					col += 2
+					continue
+				if source[i] == quote:
+					i += 1
+					col += 1
+					break
+				i += 1
+				col += 1
+			end_line = line
+			end_col = col
+			for ln in range(start_line, end_line + 1):
+				if ln not in exempt:
+					exempt[ln] = []
+				if ln == start_line and ln == end_line:
+					exempt[ln].append((start_col, end_col))
+				elif ln == start_line:
+					exempt[ln].append((start_col, len(lines[ln - 1])))
+				elif ln == end_line:
+					exempt[ln].append((0, end_col))
+				else:
+					exempt[ln].append((0, len(lines[ln - 1])))
+			continue
+
+		# Template literals: `...` (with ${...} interpolation and escape handling)
+		if ch == "`":
+			start_line = line
+			start_col = col
+			i += 1
+			col += 1
+			while i < len(source):
+				if source[i] == "\n":
+					line += 1
+					col = 0
+					line_start = i + 1
+					i += 1
+					continue
+				if source[i] == "\\":
+					i += 2
+					col += 2
+					continue
+				if source[i] == "$" and i + 1 < len(source) and source[i + 1] == "{":
+					# Skip interpolation - treat as part of template
+					i += 2
+					col += 2
+					continue
+				if source[i] == "`":
+					i += 1
+					col += 1
+					break
+				i += 1
+				col += 1
+			end_line = line
+			end_col = col
+			for ln in range(start_line, end_line + 1):
+				if ln not in exempt:
+					exempt[ln] = []
+				if ln == start_line and ln == end_line:
+					exempt[ln].append((start_col, end_col))
+				elif ln == start_line:
+					exempt[ln].append((start_col, len(lines[ln - 1])))
+				elif ln == end_line:
+					exempt[ln].append((0, end_col))
+				else:
+					exempt[ln].append((0, len(lines[ln - 1])))
+			continue
+
+		# Regex literals: /pattern/flags (heuristic: / not preceded by identifier, (, [, {, ,, ;, :, =, !, &, |, ?, +, -, *, %, ~, ^)
+		# This is a best-effort approximation without a full parser
+		if ch == "/":
+			# Look back to see if this could be a regex
+			prev_i = i - 1
+			while prev_i >= 0 and source[prev_i] in " \t\r\n":
+				prev_i -= 1
+			prev_char = source[prev_i] if prev_i >= 0 else ""
+			# Regex appears after: ( [ { , ; : = ! & | ? + - * % ~ ^ > < return throw case
+			# Not after: identifier, ), ], }, string, number, regex, `, null, true, false, this
+			is_regex = prev_char in "([{,;:=!&|?+-*%~^<>"
+
+			if is_regex:
+				start_line = line
+				start_col = col
+				i += 1
+				col += 1
+				in_class = False
+				while i < len(source):
+					if source[i] == "\n":
+						# Unclosed regex
+						break
+					if source[i] == "\\":
+						i += 2
+						col += 2
+						continue
+					if source[i] == "[" and not in_class:
+						in_class = True
+					elif source[i] == "]" and in_class:
+						in_class = False
+					elif source[i] == "/" and not in_class:
+						i += 1
+						col += 1
+						# Consume flags
+						while i < len(source) and source[i].isalpha():
+							i += 1
+							col += 1
+						break
+					i += 1
+					col += 1
+				end_line = line
+				end_col = col
+				for ln in range(start_line, end_line + 1):
+					if ln not in exempt:
+						exempt[ln] = []
+					if ln == start_line and ln == end_line:
+						exempt[ln].append((start_col, end_col))
+					elif ln == start_line:
+						exempt[ln].append((start_col, len(lines[ln - 1])))
+					elif ln == end_line:
+						exempt[ln].append((0, end_col))
+					else:
+						exempt[ln].append((0, len(lines[ln - 1])))
+				continue
+
+		i += 1
+		col += 1
+
+	return exempt
+
+
+def _js_exempt_lines(lines):
+	"""Return set of line numbers that are inside JS/TS literals or comments.
+
+	These lines may start with spaces as part of the literal/comment content and should be
+	exempt from the space-indentation check. Mirrors `_python_string_lines`.
+	"""
+	spans = _js_exempt_spans(lines)
+	# A line is exempt if it has any exempt span (string, template, comment, regex)
+	return set(spans.keys())
 
 def _is_tracked_file(path):
 	"""True when `path` is tracked by git (in the index or committed)."""
@@ -702,6 +977,17 @@ def check_file(path, args):
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 		if not args.no_double_space:
 			problems.extend((line, msg) for line, msg in check_double_space(text_lines, False))
+	elif path.suffix in _JS_SUFFIXES:
+		if not args.no_js_double_blank:
+			problems.extend((line, msg) for line, msg in check_js_double_blank(text_lines))
+		if not args.no_js_space_indent:
+			exempt = _js_exempt_lines(text_lines)
+			problems.extend((line, msg) for line, msg in check_js_space_indent(text_lines, exempt))
+		if not args.no_js_trailing:
+			problems.extend((line, msg) for line, msg in check_js_trailing_whitespace(text_lines))
+		if not args.no_js_final_newline:
+			problems.extend((line, msg) for line, msg in check_js_trailing_blank(text_lines))
+			problems.extend((line, msg) for line, msg in check_js_final_newline(lines))
 	return problems
 
 class _InotifyWatcher:
@@ -766,7 +1052,7 @@ class _InotifyWatcher:
 				self.add_dir(path)
 				return [("modify", inner) for inner in lint_files([path], self.exclusions)]
 			return []
-		if path.suffix not in (".py", ".md"):
+		if path.suffix not in _ALL_SUFFIXES:
 			return []
 		if mask & (_IN_DELETE | _IN_MOVED_FROM):
 			return [("delete_file", path)]
@@ -835,7 +1121,7 @@ def watch(paths, args, exclusions):
 			draw(snapshot)
 
 def main():
-	parser = argparse.ArgumentParser(description="Check Python files against XLib style rules, and Markdown files for space indentation (code fences and frontmatter exempt)")
+	parser = argparse.ArgumentParser(description="Check Python, Markdown, and JavaScript/TypeScript files against XLib style rules")
 	parser.add_argument("paths", nargs="+", type=Path)
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
@@ -847,6 +1133,10 @@ def main():
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
 	parser.add_argument("--no-absolute-paths", action="store_true", help="disable absolute system path check in Markdown")
+	parser.add_argument("--no-js-double-blank", action="store_true", help="disable JS/TS double blank line check")
+	parser.add_argument("--no-js-space-indent", action="store_true", help="disable JS/TS space indentation check")
+	parser.add_argument("--no-js-trailing", action="store_true", help="disable JS/TS trailing whitespace check")
+	parser.add_argument("--no-js-final-newline", action="store_true", help="disable JS/TS final newline and trailing blank line checks")
 	args = parser.parse_args()
 
 	for entry in args.paths:
