@@ -61,6 +61,18 @@ rules; this file only adds Python-specific rules.
 	and return values.** Internal code only needs them where the name doesn't
 	carry the type or the contract is non-obvious.
 
+## Comments
+
+- A comment goes on the line immediately before what it explains. A comment on the
+	same line as a `def` or a `class` is not allowed at all; it goes above (`HRCQSV4`).
+- Comments are for why, not what or how. What and how are the code's job, and a
+	comment restating them is a second copy to fall out of step.
+- An inline comment on ordinary code is allowed only where a run of consecutive
+	lines each carry one, so there is a column to read. That is rare, and rare for a
+	reason: only "why" comments exist to be inlined, and most code has no "why" to
+	record next to it. Where the run exists, the comments are one space from the
+	code unless there is the column to line up against (`BSFQYPF`).
+
 ## Imperative shape
 
 - Guard clauses per `style/common.md`.

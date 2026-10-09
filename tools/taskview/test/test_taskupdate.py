@@ -718,14 +718,16 @@ class TestShowCommand(unittest.TestCase):
 class TestIsolationGuard(unittest.TestCase):
 	"""R17, R19, R30: Verify the test suite cannot touch the real data directory."""
 
-	def test_resolve_data_dir_default_is_in_temp_tree(self):  # R17, R19
+	# R17, R19
+	def test_resolve_data_dir_default_is_in_temp_tree(self):
 		# The module-level setUpModule sets XDG_DATA_HOME to a unique temp dir
 		from tools.taskview.taskview import resolve_data_dir
 		data_dir = resolve_data_dir(None, {})
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME),
 			f"Default data dir {data_dir} must be inside test temp tree {_TEST_XDG_DATA_HOME}")
 
-	def test_real_data_dir_untouched_by_resolve(self):  # R17, R19
+	# R17, R19
+	def test_real_data_dir_untouched_by_resolve(self):
 		# The real ~/.local/share/taskview must not be created or modified by tests
 		from tools.taskview.taskview import resolve_data_dir
 		real_default = Path.home() / '.local' / 'share' / 'taskview'
@@ -733,7 +735,8 @@ class TestIsolationGuard(unittest.TestCase):
 		self.assertNotEqual(data_dir, real_default)
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME))
 
-	def test_write_via_taskupdate_add_goes_to_temp_tree(self):  # R30, R19
+	# R30, R19
+	def test_write_via_taskupdate_add_goes_to_temp_tree(self):
 		# Run an add without --csv, no $TASKVIEW_CSV → should use default under temp XDG_DATA_HOME
 		from tools.taskview.taskview import resolve_data_dir, resolve_csv
 		data_dir = resolve_data_dir(None, {})
