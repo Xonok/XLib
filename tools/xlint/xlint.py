@@ -273,6 +273,21 @@ def check_def_comment(lines):
 		return []
 	return [(line, "comment on a def line") for line in sorted(defs & comments)]
 
+def check_trailing_blank(lines):
+	"""Report a file whose last line is empty, after real content.
+
+	The other half of the final-newline rule, and neither check could stand in for the
+	other: `import os\\n\\n` has the final newline, so that check passes, and has no
+	double blank line, so the other passes. Only one finding per file — a file ending in
+	two or more blank lines is already reported as a double blank line, and naming both
+	problems at the same lines is noise.
+	"""
+	if len(lines) < 2 or lines[-1].strip():
+		return []
+	if lines[-2].strip():
+		return [(len(lines), "trailing blank line at end of file")]
+	return []
+
 def check_final_newline(lines):
 	if lines and not lines[-1].endswith("\n"):
 		return [(len(lines), "missing final newline")]
@@ -352,6 +367,7 @@ def check_file(path, args):
 		if not args.no_def_comment:
 			problems.extend((line, msg) for line, msg in check_def_comment(text_lines))
 		if not args.no_final_newline:
+			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 		if not args.no_imports:
 			problems.extend((line, msg) for line, msg in check_imports(text_lines))
@@ -361,6 +377,7 @@ def check_file(path, args):
 			exempt.update(_fence_exempt(text_lines))
 			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
 		if not args.no_final_newline:
+			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 	return problems
 
@@ -501,7 +518,7 @@ def main():
 	parser.add_argument("--no-trailing", action="store_true", help="disable trailing whitespace check")
 	parser.add_argument("--no-def-one-line", action="store_true", help="disable one-line function definition check")
 	parser.add_argument("--no-def-comment", action="store_true", help="disable the check for a comment on a def line")
-	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline check")
+	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline and trailing blank line checks")
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	args = parser.parse_args()
 

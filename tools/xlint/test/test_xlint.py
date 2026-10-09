@@ -178,5 +178,38 @@ class TestDefLineComment(unittest.TestCase):
 		# line is a `def` needs the parse, and guessing is what produced the 74.
 		self.assertEqual(xlint.check_def_comment(["def ok(a):  # why", "\treturn a", "def broken("]), [])
 
+class TestTrailingBlankLine(unittest.TestCase):
+	"""A file ends with exactly one newline, after real content — the other half of BX56XRY.
+
+	Neither existing check covered this: `import os\\n\\n` has the final newline, and has
+	no double blank line, so both passed. Together the pair was meant to state one rule
+	and stated two halves of it without either.
+	"""
+
+	def test_one_trailing_blank_line_is_reported(self):
+		problems = xlint.check_trailing_blank(["import os", ""])
+		self.assertEqual(messages(problems), ["trailing blank line at end of file"])
+
+	def test_no_trailing_blank_line_is_clean(self):
+		self.assertEqual(xlint.check_trailing_blank(["import os"]), [])
+
+	def test_two_trailing_blank_lines_are_left_to_the_double_blank_check(self):
+		# One finding per file, naming one problem: naming both at the same lines is noise.
+		self.assertEqual(xlint.check_trailing_blank(["import os", "", ""]), [])
+
+	def test_a_whitespace_only_file_is_clean(self):
+		# The three pybundle fixtures that are a single newline are bundler input, not
+		# a file that happens to end in a blank line.
+		self.assertEqual(xlint.check_trailing_blank([""]), [])
+
+	def test_an_empty_file_is_clean(self):
+		self.assertEqual(xlint.check_trailing_blank([]), [])
+
+	def test_a_trailing_blank_line_keeps_the_final_newline_check_passing(self):
+		# The pair has to be read together, so this is the input that used to slip past both.
+		lines = ["import os\n", "\n"]
+		self.assertEqual(xlint.check_final_newline(lines), [])
+		self.assertEqual(messages(xlint.check_trailing_blank(["import os", ""])), ["trailing blank line at end of file"])
+
 if __name__ == "__main__":
 	unittest.main()
