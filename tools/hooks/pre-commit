@@ -1,0 +1,29 @@
+#!/bin/sh
+# xlint pre-commit hook — runs xlint on staged .py/.md files.
+# Install: tools/hooks/install.sh
+
+set -eu
+
+# Resolve the repo root so this works from any worktree.
+root=$(git rev-parse --show-toplevel)
+if [ -z "$root" ]; then
+	echo "xlint-hook: not a git repository" >&2
+	exit 1
+fi
+
+# Collect staged .py and .md files.
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' '*.md' | tr '\n' ' ')
+if [ -z "$staged" ]; then
+	exit 0
+fi
+
+# Run xlint from the repo root, using the repo's xlint.
+cd "$root"
+if ! python3 tools/xlint/xlint.py $staged; then
+	echo "xlint-hook: commit blocked by style violations above." >&2
+	echo "xlint-hook: run 'python3 tools/xlint/xlint.py <files>' to see details." >&2
+	echo "xlint-hook: bypass with 'git commit --no-verify' (not recommended)." >&2
+	exit 1
+fi
+
+exit 0
