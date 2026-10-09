@@ -20,7 +20,8 @@ rules; this file only adds Python-specific rules.
 - Imports go on one line: plain imports are comma-joined
 	(`import argparse,ctypes,os`), names from the same module are comma-joined
 	(`from X import Y,Z`), no space after a comma. Dotted names get their own
-	line.
+	line, and so do aliased ones (`import os as o`) — they are avoided where the
+	plain name is clear enough.
 - One statement per line (no `;`); no blank lines between imports. Imports
 	from meaningfully different categories (stdlib vs repo-local) are separated
 	without an empty line between them.
