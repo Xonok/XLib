@@ -250,10 +250,14 @@ def _fence_exempt(lines):
 				exempt.add(i)
 	return exempt
 
-def check_trailing_whitespace(lines):
+def check_trailing_whitespace(lines, is_md=False):
 	report = []
 	for index, line in enumerate(lines, start=1):
 		if line != line.rstrip() and line.strip():
+			trailing = len(line) - len(line.rstrip())
+			if is_md and trailing == 2:
+				# Markdown hard break: two trailing spaces is intentional <br>
+				continue
 			report.append((index, "trailing whitespace"))
 	return report
 
@@ -674,6 +678,8 @@ def check_file(path, args):
 			exempt = _frontmatter_exempt(text_lines)
 			exempt.update(_fence_exempt(text_lines))
 			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
+		if not args.no_trailing:
+			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines, True))
 		if not args.no_final_newline:
 			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
