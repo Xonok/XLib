@@ -3,8 +3,36 @@
 Status: **implemented** — `_frontmatter_exempt` and `_fence_exempt` in
 `tools/xlint/xlint.py`; epi `GBNEWPS` closed 2026-09-29 after its own 12-point
 checklist passed. The question the spec left open (should an *indented* code
-fence be a violation?) is parked as epi `QN1N82Y`; this spec says indented
-fences stay a violation.
+fence be a violation?) is settled as epi `QN1N82Y`, and the ruling reverses
+requirement B's second bullet below: an indented fence is a fence, not a
+violation. `_fence_exempt` now recognises a fence after leading whitespace.
+
+## Amendment — indented fences (ruling, human, 2026-10-09)
+
+Requirement B, bullet 2 said:
+
+> The fence lines themselves are at column 0, so they are never flagged;
+> an INDENTED fence line is a violation and stays one (house style forbids
+> indented fences).
+
+**Reversed.** A fence nested in a list item is the ordinary way to write one,
+and a rule that makes it unlintable has a single remedy: corrupt the code to
+satisfy the linter. `agent-notes-a4.md` had its content converted to tabs to
+dodge the check — the failure mode this ruling removes.
+
+So a fence is recognised after leading whitespace, and an indented fenced
+block is exempt like any other. Two consequences worth stating:
+
+- **A 4-space indented code block is still flagged**, which is what the rule
+	was really for. Markdown's indented-code syntax *requires* spaces, so a
+	space-indented line that opens no fence is the signal, and it survives.
+- **12 indented fence lines exist in tracked `.md` today**
+	(`doc/development.md:96,99`, six in
+	`doc/reviews/pybundle-review-2026-09-10.md`). They were violations that no
+	one fixed, because fixing them meant un-nesting the code they contained.
+
+Tracked Markdown findings are unchanged by this: 0 before, 0 after. The
+indentation of prose is still checked; only what is inside a fence is exempt.
 
 ## Problem
 

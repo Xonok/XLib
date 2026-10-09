@@ -17,7 +17,7 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [taskview-time-refresh.md](taskview-time-refresh.md) — periodic time-based refresh of the tmux task view so relative timestamps update.
 - [tmux-panel-priorities.md](tmux-panel-priorities.md) — repurpose the unused tmux panel to show priorities in condensed form.
 - [typechecking.md](typechecking.md) — type system with custom type support, usable standalone. `dev/xschema/SPEC.md` draws on it.
-- [xlint-frontmatter-fence-skip.md](xlint-frontmatter-fence-skip.md) — exempt YAML frontmatter and fenced code blocks from the `.md` space-indent check. Implemented.
+- [xlint-frontmatter-fence-skip.md](xlint-frontmatter-fence-skip.md) — exempt YAML frontmatter and fenced code blocks from the `.md` space-indent check. Implemented; indented fences exempted per ruling `QN1N82Y`.
 - [xaudit.md](xaudit.md) — project-specific structural checks, owning the watch loop and calling xlint one-shot. Decided, not started.
 - [per-person-files.md](per-person-files.md) — make the per-person master files (`STATUS.md`, `TASKS.md`, `PLAN.md`) tracked but personal, with the root file a gitignored per-person symlink.
 - [server.md](server.md) — declarative server framework that other libraries plug into.

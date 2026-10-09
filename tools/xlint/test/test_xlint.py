@@ -211,5 +211,48 @@ class TestTrailingBlankLine(unittest.TestCase):
 		self.assertEqual(xlint.check_final_newline(lines), [])
 		self.assertEqual(messages(xlint.check_trailing_blank(["import os", ""])), ["trailing blank line at end of file"])
 
+class TestMarkdownFences(unittest.TestCase):
+	"""A fence is a fence wherever it sits, per QN1N82Y.
+
+	The spec this reverses said an indented fence line stays a violation. The cost was
+	that a fence nested in a list item could never be lint-clean, and the only remedy
+	was to edit inside the code block — `agent-notes-a4.md` had its content converted
+	to tabs to dodge the check.
+	"""
+
+	def fenced(self, lines):
+		return xlint.check_space_indent_exempt(lines, xlint._fence_exempt(lines))
+
+	def test_a_top_level_fence_exempts_its_space_indented_body(self):
+		self.assertEqual(self.fenced(["```json", '  {"a": 1}', "```"]), [])
+
+	def test_a_fence_nested_in_a_list_item_is_a_fence(self):
+		lines = ["1. Do the thing:", "", "\t```sh", "\t  echo hi", "\t```"]
+		self.assertEqual(self.fenced(lines), [])
+
+	def test_a_fence_nested_two_deep_is_a_fence(self):
+		lines = ["1. Outer:", "", "\t1. Inner:", "", "\t\t```python", "\t\tx = 1", "\t\t```"]
+		self.assertEqual(self.fenced(lines), [])
+
+	def test_a_four_space_indented_code_block_is_still_reported(self):
+		# What the rule was really for: Markdown's indented-code syntax requires spaces,
+		# so a space-indented line opening no fence is the signal, and it survives.
+		self.assertEqual(messages(self.fenced(["    echo hi"])), ["indented with spaces"])
+
+	def test_a_tilde_fence_nested_in_a_list_item_is_a_fence(self):
+		lines = ["1. Item:", "", "\t~~~python", "\tx = 1", "\t~~~"]
+		self.assertEqual(self.fenced(lines), [])
+
+	def test_prose_indented_with_spaces_is_still_reported(self):
+		self.assertEqual(messages(self.fenced(["text", "  more text"])), ["indented with spaces"])
+
+	def test_a_backtick_fence_is_not_closed_by_tildes(self):
+		lines = ["1. Item:", "", "\t```sh", "\t~~~", "\t  echo hi", "\t```"]
+		self.assertEqual(self.fenced(lines), [])
+
+	def test_frontmatter_is_still_exempt(self):
+		lines = ["---", "key:   value", "---", "body"]
+		self.assertEqual(xlint.check_space_indent_exempt(lines, xlint._frontmatter_exempt(lines)), [])
+
 if __name__ == "__main__":
 	unittest.main()
