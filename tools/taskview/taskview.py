@@ -119,7 +119,7 @@ def discover_filter(start: Path) -> Path | None:
 		if candidate.is_file():
 			return candidate
 		parent = current.parent
-		if parent == current:  # reached filesystem root
+		if parent == current: # reached filesystem root
 			return None
 		current = parent
 
@@ -422,7 +422,7 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 
 	for i, task in enumerate(detail_tasks):
 		if i > 0:
-			lines.append("")  # blank line between detail blocks
+			lines.append("") # blank line between detail blocks
 		lines.append(f"▸ {task_label(task, width - 2)}")
 		due_str = fmt_due(task["due_ts"])
 		chg_str = fmt_time(task["chg_ts"])
@@ -445,8 +445,8 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	# Calculate remaining height for UPCOMING list
 	# Reserve lines for: PACE (5 lines), QUEUE (2-3 lines), header (2 lines already counted)
 	# and 1 blank line before UPCOMING
-	reserved_after_upcoming = 8  # PACE (4) + blank + QUEUE (2-3) ≈ 8
-	upcoming_header_lines = 2  # "UPCOMING" + blank line after
+	reserved_after_upcoming = 8 # PACE (4) + blank + QUEUE (2-3) ≈ 8
+	upcoming_header_lines = 2 # "UPCOMING" + blank line after
 	available_for_upcoming = height - len(lines) - reserved_after_upcoming - upcoming_header_lines
 	upcoming_limit = max(0, available_for_upcoming)
 

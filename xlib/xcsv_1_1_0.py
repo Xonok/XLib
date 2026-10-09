@@ -330,7 +330,7 @@ def parse_all(path: str, schema: list[str] | dict[str, int], allow_unfinished: b
 					return None, error
 
 				if tokens is None:
-					continue  # skip comments
+					continue # skip comments
 
 				if tokens and tokens[0] == "__reschema__":
 					if not reschema:

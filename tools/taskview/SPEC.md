@@ -112,8 +112,8 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R9** The filter path is resolved in this order, first hit wins:
 	1. `--filter PATH` if given → `source` = `explicit`.
 	2. Otherwise, walk up from the current working directory; the first ancestor
-	   directory containing a file named `.taskview.yaml` supplies it →
-	   `source` = `discovered`.
+	 directory containing a file named `.taskview.yaml` supplies it →
+	 `source` = `discovered`.
 	3. Otherwise, no filter applies (see R12) → `source` = `none`.
 	4. `--no-filter` bypasses all of the above → `source` = `flag`.
 - **R9a** `source` is part of the resolution result and must be carried through to
@@ -143,12 +143,12 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R14** A task is selected by the first rule that applies:
 	1. Its tags include `cancelled` or `archived` → **excluded**, unconditionally.
 	2. Its category is not accepted by the active filter → **excluded**. Accepted
-	   means: the filter's `categories` is empty (R4), or the task's category is
-	   one of them, or the task is uncategorised and `include_bucket` is true.
+	 means: the filter's `categories` is empty (R4), or the task's category is
+	 one of them, or the task is uncategorised and `include_bucket` is true.
 	3. Its tags include `critical` or `emergency` → **included**, bypassing the
-	   tag rule only.
+	 tag rule only.
 	4. The filter's `tags` is non-empty and does not overlap the task's tags →
-	   **excluded**.
+	 **excluded**.
 	5. Otherwise → **included**.
 - **R15** Rule 2 precedes rule 3 deliberately: `critical` and `emergency` are
 	subdivision markers within a project, not global overrides. A `critical` task
@@ -202,11 +202,11 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R24** The header line renders one of three distinguishable states, chosen by
 	the resolution `source` from R9a:
 	- `explicit` or `discovered` (a filter was loaded):
-	  `=== Tasks (<label>) ===`
+	 `=== Tasks (<label>) ===`
 	- `none` (discovery ran and found nothing):
-	  `=== Tasks (no filter found — showing all) ===`
+	 `=== Tasks (no filter found — showing all) ===`
 	- `flag` (`--no-filter` was given):
-	  `=== Tasks (no filter) ===`
+	 `=== Tasks (no filter) ===`
 
 	The first and the other two must never render identically, so a pane showing
 	everything because it is unconfigured cannot be mistaken for a pane showing

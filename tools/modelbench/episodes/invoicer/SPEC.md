@@ -20,9 +20,9 @@ change is wrong, not the number.
 
 | Account | Lines (`unit_cents`, `qty`) | discount % | tax % | total (cents) |
 |---------|------------------------------|-----------|-------|----------------|
-| 7  | `[(1000, 2)]`         | 10 | 20 | **2160** |
-| 12 | `[(250, 4), (99, 3)]` | 0  | 20 | 1357 |
-| 31 | `[(10000, 1)]`       | 33 | 5  | 6735 |
+| 7 | `[(1000, 2)]` | 10 | 20 | **2160** |
+| 12 | `[(250, 4), (99, 3)]` | 0 | 20 | 1357 |
+| 31 | `[(10000, 1)]` | 33 | 5 | 6735 |
 
 Account 12 has no discount, which is why it does not discriminate between "tax on
 subtotal" and "tax on discounted" — it is a regression guard, not a bug witness.

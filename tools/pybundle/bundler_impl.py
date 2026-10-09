@@ -219,8 +219,8 @@ def _scope_frame(m, node):
 			if isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
 				add([c.name])
 				continue
-			if isinstance(c, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp,
-			                  ast.GeneratorExp)):
+if isinstance(c, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp,
+		ast.GeneratorExp)):
 				continue
 			if isinstance(c, ast.Assign):
 				for t in c.targets:
@@ -677,7 +677,7 @@ def _gather_chain(toks, i):
 	while cursor < len(toks) and toks[cursor].type == token.NAME:
 		chain.append((cursor, toks[cursor].string))
 		if (cursor + 2 < len(toks) and toks[cursor + 1].type == token.OP
-		        and toks[cursor + 1].string == "." and toks[cursor + 2].type == token.NAME):
+		and toks[cursor + 1].string == "." and toks[cursor + 2].type == token.NAME):
 			cursor += 2
 		else:
 			break

@@ -69,7 +69,7 @@ def parse_event(event_type:str,data:dict,state:AgentState):
 			status_type=status_raw.get("type","")
 		else:
 			status_type=str(status_raw)
-		if status_type==event_type:  # meta wrapper: type is event name, not status
+		if status_type==event_type: # meta wrapper: type is event name, not status
 			status_type=payload.get("status","")
 			if isinstance(status_type,dict):
 				status_type=status_type.get("type","")

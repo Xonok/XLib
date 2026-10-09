@@ -1,12 +1,7 @@
 """Tests for taskview library — pass 1: derived from SPEC.md before implementation."""
-import unittest
-import sys
-import os
-import tempfile
-import yaml
+import unittest,sys,os,tempfile,yaml,contextlib
 from pathlib import Path
 from io import StringIO
-import contextlib
 
 # Import convention: add repo root to path, then import from tools.taskview.taskview
 ROOT = os.path.join(os.path.dirname(__file__), '..', '..', '..')
@@ -48,7 +43,6 @@ def tearDownModule():
 		import shutil
 		shutil.rmtree(_TEST_XDG_DATA_HOME, ignore_errors=True)
 
-
 class InterfaceTests(unittest.TestCase):
 	"""Interfaces section: the names exist and have documented shapes."""
 
@@ -77,7 +71,7 @@ class InterfaceTests(unittest.TestCase):
 	# Interfaces, R8
 	def test_load_filter_raises_FilterError_on_malformed_yaml(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-			f.write("label: Test\ncategories: [A\n")  # invalid YAML
+			f.write("label: Test\ncategories: [A\n") # invalid YAML
 			path = f.name
 		try:
 			with self.assertRaises(FilterError):
@@ -201,7 +195,6 @@ class InterfaceTests(unittest.TestCase):
 			result = watch_targets(csv_path, csv_path)
 			self.assertEqual(result, [csv_path])
 
-
 class FilterLoadingTests(unittest.TestCase):
 	"""R6-R8: filter file keys, defaults, unknown keys, malformed YAML, empty file."""
 
@@ -295,7 +288,6 @@ limits:
 			self.assertEqual(result['_path'], Path(path))
 		finally:
 			os.unlink(path)
-
 
 class SelectionPrecedenceTests(unittest.TestCase):
 	"""R14-R16: all five rules and their interactions."""
@@ -435,7 +427,6 @@ class SelectionPrecedenceTests(unittest.TestCase):
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-
 class SPlusFInvariantTests(unittest.TestCase):
 	"""R25: S + F = open tasks not excluded by rule 1 (never-show)."""
 
@@ -469,13 +460,13 @@ class SPlusFInvariantTests(unittest.TestCase):
 	# R25
 	def test_invariant_holds_with_mixed_tasks(self):
 		state = {
-			1: self._make_task(1, category='MyProject', tags={'work'}),      # included
-			2: self._make_task(2, category='Other', tags={'work'}),           # excluded by category
-			3: self._make_task(3, category='', tags={'work'}),                # excluded (no bucket)
-			4: self._make_task(4, category='', tags={'work'}),                # excluded (no bucket)
-			5: self._make_task(5, tags={'cancelled'}),                        # excluded by rule 1
-			6: self._make_task(6, category='MyProject', tags={'critical'}),   # included (critical)
-			7: self._make_task(7, category='MyProject', tags={'personal'}),   # excluded by tag filter
+			1: self._make_task(1, category='MyProject', tags={'work'}), # included
+			2: self._make_task(2, category='Other', tags={'work'}), # excluded by category
+			3: self._make_task(3, category='', tags={'work'}), # excluded (no bucket)
+			4: self._make_task(4, category='', tags={'work'}), # excluded (no bucket)
+			5: self._make_task(5, tags={'cancelled'}), # excluded by rule 1
+			6: self._make_task(6, category='MyProject', tags={'critical'}), # included (critical)
+			7: self._make_task(7, category='MyProject', tags={'personal'}), # excluded by tag filter
 		}
 		filter_data = self._make_filter(categories=['MyProject'], tags=['work'], include_bucket=False)
 		selected = select_tasks(state, filter_data)
@@ -522,7 +513,6 @@ class SPlusFInvariantTests(unittest.TestCase):
 		self.assertEqual(metrics['shown'] + metrics['filtered_total'], open_not_rule1)
 		self.assertEqual(metrics['shown'], 1)
 		self.assertEqual(metrics['filtered_total'], 0)
-
 
 class DiscoveryTests(unittest.TestCase):
 	"""R9-R13: filter discovery and resolution."""
@@ -644,7 +634,6 @@ class DiscoveryTests(unittest.TestCase):
 			result = discover_filter(project)
 			self.assertEqual(result, tmp / 'a' / '.taskview.yaml')
 
-
 class HeaderStatesTests(unittest.TestCase):
 	"""R24: three exact header strings, mutually distinguishable."""
 
@@ -692,7 +681,6 @@ class HeaderStatesTests(unittest.TestCase):
 		self.assertNotEqual(view1.split('\n')[0], view2.split('\n')[0])
 		self.assertNotEqual(view2.split('\n')[0], view3.split('\n')[0])
 		self.assertNotEqual(view1.split('\n')[0], view3.split('\n')[0])
-
 
 class PurityTests(unittest.TestCase):
 	"""R20, R27: pure functions, deterministic output, --width honoured."""
@@ -742,7 +730,6 @@ class PurityTests(unittest.TestCase):
 		result2 = compute_metrics(state, selected, filter_data)
 		self.assertEqual(result1, result2)
 
-
 class TaskIdDisplayTests(unittest.TestCase):
 	"""R42: the pane shows the task id, and the title is not shortened by it."""
 
@@ -753,11 +740,11 @@ class TaskIdDisplayTests(unittest.TestCase):
 	def _view(self, tasks, width):
 		selected = {t['id']: t for t in tasks}
 		metrics = {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': len(tasks),
-				   'this_week': 0, 'this_month': 0, 'later': len(tasks),
-				   'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0}
+			'this_week': 0, 'this_month': 0, 'later': len(tasks),
+			'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0}
 		filter_data = {'label': 'T', 'categories': set(), 'tags': set(),
-					   'include_bucket': True,
-					   'limits': {'upcoming': 5, 'queue_breakdown': True}}
+			'include_bucket': True,
+			'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		return build_view(selected, metrics, filter_data, width, 24, 'explicit')
 
 	def _lines(self, view):
@@ -830,7 +817,6 @@ class TaskIdDisplayTests(unittest.TestCase):
 		detail_lines = [l for l in view.splitlines() if l.startswith('▸')]
 		self.assertEqual(len(detail_lines), 2, f"expected 2 detail lines: {detail_lines}")
 		self.assertTrue(all('...' in l for l in detail_lines), f"expected marked cut in both detail lines: {detail_lines}")
-
 
 class CSVToleranceTests(unittest.TestCase):
 	"""R33, R34: legacy rows, missing columns, bad id/chg_ts, comments, header, last-row-wins."""
@@ -946,7 +932,6 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-
 class TestIsolationGuard(unittest.TestCase):
 	"""R17, R19: Verify the test suite cannot touch the real data directory."""
 
@@ -968,7 +953,6 @@ class TestIsolationGuard(unittest.TestCase):
 		data_dir = resolve_data_dir(None, {})
 		self.assertNotEqual(data_dir, real_default)
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME))
-
 
 if __name__ == '__main__':
 	unittest.main()

@@ -72,7 +72,7 @@ Each helper formats a readable message:
 - `not_equal`: `unexpectedly equal: {a!r}`
 - `same`: `not identical: {a!r} is not {b!r}`
 - `true`: `expected truthy, got {x!r}`
-- `raises`: 
+- `raises`:
 	- Wrong type: `expected {exc.__name__}, got {type(e).__name__}: {e}`
 	- None raised: `expected {exc.__name__}, but nothing raised`
 - `contains`: `{item!r} not in {container!r}`

@@ -5,16 +5,11 @@ Tests for taskupdate.py — writer side (R28, R29, R30, read_last_id).
 Run with: python3 -m unittest tools.taskview.test.test_taskupdate -v
 """
 
-import csv
-import os
-import sys
-import tempfile
-import time
-import unittest
+import csv,os,sys,tempfile,time,unittest
 from pathlib import Path
 
 # Import taskupdate by path (like test_xcsv.py does)
-ROOT = Path(__file__).resolve().parents[3]  # XLib root
+ROOT = Path(__file__).resolve().parents[3] # XLib root
 sys.path.insert(0, str(ROOT))
 from tools.taskview import taskupdate
 
@@ -38,7 +33,6 @@ def tearDownModule():
 	if _TEST_XDG_DATA_HOME and os.path.exists(_TEST_XDG_DATA_HOME):
 		import shutil
 		shutil.rmtree(_TEST_XDG_DATA_HOME, ignore_errors=True)
-
 
 class TestR28CategoryTagsAccepted(unittest.TestCase):
 	"""R28: --category and --tags are accepted by add and update."""
@@ -105,14 +99,14 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 		self.run_add("Task with category", category="XLib")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][5], "XLib")  # category column
+		self.assertEqual(rows[0][5], "XLib") # category column
 
 	def test_add_accepts_tags(self):
 		# R28: add accepts --tags
 		self.run_add("Task with tags", tags="urgent,backend")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][6], "urgent,backend")  # tags column
+		self.assertEqual(rows[0][6], "urgent,backend") # tags column
 
 	def test_add_accepts_both_category_and_tags(self):
 		# R28: add accepts both together
@@ -147,7 +141,6 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 		self.assertEqual(len(rows), 2)
 		self.assertEqual(rows[1][5], "B")
 		self.assertEqual(rows[1][6], "y,z")
-
 
 class TestR32AllNineColumnsWritten(unittest.TestCase):
 	"""R32: Every write path writes all 9 columns, carrying forward unchanged fields."""
@@ -374,10 +367,9 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 			reader = csv.reader(f)
 			data_rows = [r for r in reader if r and not r[0].startswith("//") and r[0] != "id"]
 
-		self.assertEqual(len(data_rows), 6)  # 3 adds + 3 updates
+		self.assertEqual(len(data_rows), 6) # 3 adds + 3 updates
 		for row in data_rows:
 			self.assertEqual(len(row), 9, f"Row must have 9 columns: {row}")
-
 
 class TestR30CSVResolution(unittest.TestCase):
 	"""R30: CSV resolves as --csv > $TASKVIEW_CSV > default (data-dir/tasks.csv)."""
@@ -483,7 +475,6 @@ class TestR30CSVResolution(unittest.TestCase):
 		self.assertEqual(len(rows_env), 1, "R30: $TASKVIEW_CSV should be used")
 		self.assertEqual(len(rows_default), 0, "Default must not be created when $TASKVIEW_CSV used")
 
-
 class TestReadLastId(unittest.TestCase):
 	"""read_last_id derives next id from file's maximum (not reusing ids)."""
 
@@ -575,7 +566,6 @@ class TestReadLastId(unittest.TestCase):
 		self.assertIn(42, ids)
 		self.assertIn(43, ids)
 		self.assertNotIn(1, ids, "Must not reuse low ids")
-
 
 class TestShowCommand(unittest.TestCase):
 	"""EY72YA9: `show <id>` resolves a task reference, and `list` prints id first."""
@@ -714,7 +704,6 @@ class TestShowCommand(unittest.TestCase):
 		out, _, _ = self.run_cli("show", "1", expect_exit=0)
 		self.assertIn("real task", out)
 
-
 class TestIsolationGuard(unittest.TestCase):
 	"""R17, R19, R30: Verify the test suite cannot touch the real data directory."""
 
@@ -777,7 +766,6 @@ class TestIsolationGuard(unittest.TestCase):
 				content = f.read()
 			# We only assert our temp tree got the write
 			pass
-
 
 if __name__ == "__main__":
 	unittest.main()

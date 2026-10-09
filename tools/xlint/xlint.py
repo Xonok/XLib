@@ -318,14 +318,14 @@ _DOUBLE_SPACE_RE = re.compile(r"[^ ](  +)[^ ]")
 def _python_exempt_spans(lines):
 	"""Map each line number to a list of (start, end) spans that are exempt from the double-space check.
 
-	Covers string literals and comments as tokenize sees them. A `#` inside a string
+	Covers string literals, f-strings, and comments as tokenize sees them. A `#` inside a string
 	is not a comment; a `"` inside a comment is not a string.
 	"""
 	exempt = {}
 	source = "".join(line + "\n" for line in lines)
 	try:
 		for token in tokenize.generate_tokens(io.StringIO(source).readline):
-			if token.type in (tokenize.STRING, tokenize.COMMENT):
+			if token.type in (tokenize.STRING, tokenize.COMMENT, tokenize.FSTRING_START, tokenize.FSTRING_MIDDLE, tokenize.FSTRING_END):
 				start_line = token.start[0]
 				start_col = token.start[1]
 				end_line = token.end[0]
@@ -345,6 +345,27 @@ def _python_exempt_spans(lines):
 		return {}
 	return exempt
 
+def _python_string_lines(lines):
+	"""Return set of line numbers that are inside string literals (including f-strings).
+
+	These lines may start with spaces as part of the string content and should be
+	exempt from the space-indentation check.
+	"""
+	exempt = _python_exempt_spans(lines)
+	# Filter to only string spans (not comments)
+	string_lines = set()
+	source = "".join(line + "\n" for line in lines)
+	try:
+		for token in tokenize.generate_tokens(io.StringIO(source).readline):
+			if token.type in (tokenize.STRING, tokenize.FSTRING_START, tokenize.FSTRING_MIDDLE, tokenize.FSTRING_END):
+				start_line = token.start[0]
+				end_line = token.end[0]
+				for ln in range(start_line, end_line + 1):
+					string_lines.add(ln)
+	except (tokenize.TokenError, IndentationError, SyntaxError):
+		return set()
+	return string_lines
+
 def _markdown_exempt_spans(lines):
 	"""Line spans inside fenced code, frontmatter, or inline code spans."""
 	exempt = {}
@@ -363,7 +384,6 @@ def _markdown_exempt_spans(lines):
 			exempt[ln] = [(0, len(lines[ln - 1]))]
 	return exempt
 
-
 def _blockquote_exempt(lines):
 	"""Line numbers of block-quote lines (lines starting with `> ` after optional whitespace).
 
@@ -376,7 +396,6 @@ def _blockquote_exempt(lines):
 		if stripped.startswith("> "):
 			exempt.add(i)
 	return exempt
-
 
 def _is_tracked_file(path):
 	"""True when `path` is tracked by git (in the index or committed)."""
@@ -391,9 +410,7 @@ def _is_tracked_file(path):
 	except (subprocess.SubprocessError, OSError):
 		return False
 
-
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^|[\s\(\"\'])((?:/storage/|/home/[^/]+/|/root/|~/)[^\s\)\]\}\"'>]+)")
-
 
 def check_absolute_paths(lines, exempt_lines, path):
 	"""Report absolute system paths in tracked Markdown files.
@@ -415,7 +432,6 @@ def check_absolute_paths(lines, exempt_lines, path):
 		for match in _ABSOLUTE_PATH_RE.finditer(line):
 			report.append((index, "absolute system path in tracked file — use a repo-relative path or point at .agents/machine-info.md"))
 	return report
-
 
 def _is_permitted_multiline(lines, node, end):
 	"""True when `node`'s header takes the shape the houserule permits.
@@ -650,7 +666,8 @@ def check_file(path, args):
 		if not args.no_double_blank:
 			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
 		if not args.no_space_indent:
-			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
+			string_lines = _python_string_lines(text_lines)
+			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, string_lines))
 		if not args.no_trailing:
 			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
 		if not args.no_def_one_line:

@@ -311,7 +311,6 @@ def test_lint_files_directory_walk_skips_ignored(self):
 		found = xlint.lint_files([Path("tools/pybundle/test/fixtures")], excl)
 		self.assertEqual(found, [])
 
-
 class TestDoubleSpace(unittest.TestCase):
 	"""A mid-line double space is a typo — whether Python or Markdown.
 
