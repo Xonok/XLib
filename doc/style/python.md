@@ -13,6 +13,8 @@ rules; this file only adds Python-specific rules.
 - No double newlines; one blank line separates functions; related globals stay
 	together as one block.
 - Methods within a class have no empty lines between them.
+- A file ends with exactly one newline, after real content: no trailing blank line,
+	and no missing final newline (`BX56XRY`).
 - No trailing whitespace.
 - Prefer concise code, but do not make it complicated just to be concise.
 - Use intermediate variables to break up complex logic; use spaces to break

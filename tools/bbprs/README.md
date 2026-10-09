@@ -190,4 +190,3 @@ participant record, so none of this needs the network. The fixtures in
 `parse_pr`, the same mapping the live code uses — a test that hand-builds a
 `PullRequest` would prove nothing about what Bitbucket actually sends. Each
 fixture carries a `_comment` saying which case it pins and why.
-

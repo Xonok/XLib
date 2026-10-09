@@ -333,4 +333,3 @@ No fixture with CRLF line endings to test `_line_offsets`.
 3. Add test fixture for `_` folder convention (with `__init__.py` in `_/`)
 4. Run bundler on `xcsv/xcsv.py` to verify fix works (already verified)
 5. Release fixed bundler, then re-release `xcsv` as v1.1.0
-
