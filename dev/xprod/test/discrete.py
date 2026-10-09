@@ -4,7 +4,6 @@ import xprod
 print(sys.path)
 from xlib import xtest_1_0_0
 
-
 def ordinary():
 	inputs = {
 		"food": 3,

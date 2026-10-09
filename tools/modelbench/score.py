@@ -108,7 +108,7 @@ def _read_records(path):
 			try:
 				rec = json.loads(line.split("\t",1)[-1])
 			except json.JSONDecodeError:
-				continue      # a torn final line from an interrupted run is normal
+				continue # a torn final line from an interrupted run is normal
 			rec.setdefault("kind",line.split("\t",1)[0] if "\t" in line else "judgement")
 			yield rec
 
@@ -285,7 +285,7 @@ def build_report(judgements,tasks,model_id,judge_id,repeats):
 		"overall_pass_rate":round(sum(j["passed"] for j in judged)/len(judged),3) if judged else None,
 		"capability_map":cap,
 		"reliability_flags":flags,
-		"tier_classification":None,   # no pass bar defined (B4) — deliberately not inferred
+		"tier_classification":None, # no pass bar defined (B4) — deliberately not inferred
 	}
 
 def render_markdown(rep):

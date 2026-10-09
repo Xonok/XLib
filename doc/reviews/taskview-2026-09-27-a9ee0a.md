@@ -156,7 +156,7 @@ Compared current `taskview.py` against `git show HEAD:tools/taskview/taskview.py
 
 ## Bump Recommendation
 
-**Minor** — This is a feature release with breaking changes (removed `--context`, changed filter discovery, changed selection precedence per Decision 8). Per versioning rules: "Minor: additions only; must not break previous users. 'Breaking' = any change a user would need to adapt to." 
+**Minor** — This is a feature release with breaking changes (removed `--context`, changed filter discovery, changed selection precedence per Decision 8). Per versioning rules: "Minor: additions only; must not break previous users. 'Breaking' = any change a user would need to adapt to."
 
 The changes **are breaking** for existing users:
 - `--context` flag removed (R31)

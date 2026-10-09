@@ -91,11 +91,11 @@ class Marduk:
 	def _status_color(self, status_text: str) -> str:
 		"""Return ANSI-colored status string."""
 		code = {
-			"idle": "\033[36m",      # cyan
-			"working": "\033[33m",   # yellow
+			"idle": "\033[36m", # cyan
+			"working": "\033[33m", # yellow
 			"delegating": "\033[35m",# magenta
 			"question": "\033[34m", # blue
-			"retry": "\033[31m",    # red
+			"retry": "\033[31m", # red
 			"disconnected": "\033[2m",# dim
 		}.get(status_text.split("⚠")[0], "")
 		reset = "\033[0m"

@@ -255,7 +255,7 @@ class Bitbucket:
 			# Never echo the request headers back — they carry the token.
 			try:
 				detail = json.loads(exc.read().decode()).get("error", {}).get("message", "")
-			except Exception:  # noqa: BLE001 - body may be absent or non-JSON
+			except Exception: # noqa: BLE001 - body may be absent or non-JSON
 				detail = ""
 			hint = HINTS.get(exc.code, "")
 			msg = f"HTTP {exc.code} from Bitbucket for {url}"

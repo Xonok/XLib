@@ -139,10 +139,10 @@ opencode already shows token usage per message in the message log. Run a typical
 
 | Turn | Prompt Tokens | Completion Tokens |
 |------|---------------|-------------------|
-| 1    | ~4,500        | ~2,000            |
-| 2    | ~4,500        | ~2,000            |
-| 3    | ~4,500        | ~2,000            |
-| ...  | ...           | ...               |
+| 1 | ~4,500 | ~2,000 |
+| 2 | ~4,500 | ~2,000 |
+| 3 | ~4,500 | ~2,000 |
+| ... | ... | ... |
 
 Tools contribute ~3,000–4,000 tokens to every prompt.
 

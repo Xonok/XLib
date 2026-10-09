@@ -144,7 +144,7 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 		if show_extra:
 			line += f"  {s['finish_length']:>4}  {s['finish_tool_calls']:>4}  {s['finish_stop']:>4}  {s['finish_unknown']:>4}"
 		lines.append(line)
-	if len(lines) <= 2:  # header + sep only, nothing displayed
+	if len(lines) <= 2: # header + sep only, nothing displayed
 		return "no agents active"
 	return "\n".join(lines)
 
@@ -153,7 +153,7 @@ def render(rows, now):
 	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	today_cutoff = local_midnight.timestamp()
 	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
-	              for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
+		for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
 	today_stats = aggregate(today_rows, now)
 	if not all_stats:
 		return "no agents active in window"
