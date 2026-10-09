@@ -444,23 +444,25 @@ def check_def_one_line(lines):
 	"""
 	report = []
 	spans = _spanned_def_lines(lines)
+	if spans is None:
+		# File has a SyntaxError; we cannot reliably distinguish real function
+		# definitions from ones inside strings/comments. Skip this check.
+		return report
 	for index, line in enumerate(lines, start=1):
 		open_paren = line.find("(")
 		if open_paren == -1:
 			continue
 		if not _DEF_PREFIX_RE.match(line[:open_paren]):
 			continue
-		if spans is not None:
-			spanned = spans.get(index)
-			if spanned is None:
-				end = None
-			else:
-				node, end = spanned
-				if end == index:
-					continue
-				if end <= len(lines) and _is_permitted_multiline(lines, node, end):
-					continue
-		elif not re.match(r"\(.*\)\s*(->\s*.+)?\s*:\s*$", line[open_paren:].split("#", 1)[0].rstrip()):
+		spanned = spans.get(index)
+		if spanned is None:
+			# Line looks like a function definition but `ast` didn't recognize it
+			# as one — it's inside a string literal or a comment. Skip it.
+			continue
+		node, end = spanned
+		if end == index:
+			continue
+		if end <= len(lines) and _is_permitted_multiline(lines, node, end):
 			continue
 		report.append((index, "function definition split across lines"))
 	return report
