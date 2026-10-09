@@ -92,3 +92,21 @@ rules; this file only adds Python-specific rules.
 - Conditional expressions (`a if b else c`) read worse to this reader than
 	JS's `b ? a : c`; keep them short and simple, and prefer an early return or
 	a plain `if` for anything longer.
+
+## Docstrings
+
+- Module docstrings are prose: a short description of what the module provides,
+	followed by a blank line, then any context a caller needs. No structural
+	markers (`Args:`, `Returns:`) — those are for functions.
+- Function docstrings follow the same principle: one prose paragraph describing
+	what the function does and why it exists. If parameters or return values need
+	explaining, write it in prose; avoid `Args:`/`Returns:` sections unless the
+	contract is genuinely non-obvious.
+- No alignment columns in docstrings. If a run of consecutive lines each has an
+	inline comment, the column rule from *Comments* applies; otherwise, one space
+	from the code.
+- Docstrings are not exempt from the alignment rule: spaces are never used for
+	alignment anywhere in this repo (`BSFQYPF`).
+- Class docstrings describe what the class represents, not a list of methods.
+- Private (`_*`) functions and classes do not require docstrings; their names
+	are the contract.
