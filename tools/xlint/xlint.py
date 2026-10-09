@@ -1,4 +1,4 @@
-import argparse,ast,ctypes,os,re,select,struct,sys,time
+import argparse,ast,ctypes,io,os,re,select,struct,sys,time,tokenize
 from pathlib import Path
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
@@ -234,6 +234,45 @@ def check_def_one_line(lines):
 		report.append((index, "function definition split across lines"))
 	return report
 
+def _def_lines(lines):
+	"""Line numbers of every `def`, `async def` and `class` statement, or None when the file does not parse."""
+	try:
+		tree = ast.parse("".join(line + "\n" for line in lines))
+	except SyntaxError:
+		return None
+	kinds = (ast.AsyncFunctionDef, ast.FunctionDef, ast.ClassDef)
+	return {node.lineno for node in ast.walk(tree) if isinstance(node, kinds)}
+
+def _comment_lines(lines):
+	"""Line numbers carrying a real comment, as `tokenize` sees them.
+
+	`tokenize` rather than a `#` split, because a `#` inside a string literal is not a
+	comment: `f"  #{name}"` is report layout, and reading it as a comment would flag a
+	line whose author never wrote one.
+	"""
+	found = set()
+	try:
+		for token in tokenize.generate_tokens(io.StringIO("".join(line + "\n" for line in lines)).readline):
+			if token.type == tokenize.COMMENT:
+				found.add(token.start[0])
+	except (tokenize.TokenError, IndentationError, SyntaxError):
+		return None
+	return found
+
+def check_def_comment(lines):
+	"""Report a comment sharing a line with a `def` or `class`.
+
+	Its own rule rather than a verdict of the one-line-signature check, because it is
+	fixable in a way that check is not: the comment moves up a line. Folded in there, a
+	reader had to re-derive per hit which of two problems they were looking at — which
+	is how that check ended up reporting 74 findings and not one of them right.
+	"""
+	defs = _def_lines(lines)
+	comments = _comment_lines(lines)
+	if defs is None or comments is None:
+		return []
+	return [(line, "comment on a def line") for line in sorted(defs & comments)]
+
 def check_final_newline(lines):
 	if lines and not lines[-1].endswith("\n"):
 		return [(len(lines), "missing final newline")]
@@ -310,6 +349,8 @@ def check_file(path, args):
 			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
 		if not args.no_def_one_line:
 			problems.extend((line, msg) for line, msg in check_def_one_line(text_lines))
+		if not args.no_def_comment:
+			problems.extend((line, msg) for line, msg in check_def_comment(text_lines))
 		if not args.no_final_newline:
 			problems.extend((line, msg) for line, msg in check_final_newline(lines))
 		if not args.no_imports:
@@ -459,6 +500,7 @@ def main():
 	parser.add_argument("--no-space-indent", action="store_true", help="disable space indentation check")
 	parser.add_argument("--no-trailing", action="store_true", help="disable trailing whitespace check")
 	parser.add_argument("--no-def-one-line", action="store_true", help="disable one-line function definition check")
+	parser.add_argument("--no-def-comment", action="store_true", help="disable the check for a comment on a def line")
 	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline check")
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	args = parser.parse_args()

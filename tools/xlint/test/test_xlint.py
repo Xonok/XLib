@@ -144,5 +144,39 @@ class TestOneLineDefinition(unittest.TestCase):
 	def test_a_paren_inside_a_default_string_is_not_a_signature_end(self):
 		self.assertEqual(xlint.check_def_one_line(["def ok(pattern=r')'):", "\treturn pattern"]), [])
 
+class TestDefLineComment(unittest.TestCase):
+	"""A comment on a `def` or `class` line is its own finding, per HRCQSV4.
+
+	It was previously reported as a split signature, which 1YPFZYH fixed — so the 74
+	sites it names are now reported under a name that means what it says. The fix is
+	different too: the comment moves up a line, rather than the signature joining up.
+	"""
+
+	def test_a_comment_on_a_def_line_is_reported(self):
+		problems = xlint.check_def_comment(["def ok(a, b):  # why", "\treturn a"])
+		self.assertEqual(messages(problems), ["comment on a def line"])
+
+	def test_a_comment_on_a_class_line_is_reported(self):
+		# Never checked before: the one-line check's regex matches `def` and `async def`
+		# only, so no class line had ever been examined.
+		problems = xlint.check_def_comment(["class C(Base):  # why", "\tpass"])
+		self.assertEqual(messages(problems), ["comment on a def line"])
+
+	def test_a_comment_on_the_line_above_a_def_is_clean(self):
+		self.assertEqual(xlint.check_def_comment(["# why", "def ok(a, b):", "\treturn a"]), [])
+
+	def test_a_hash_inside_a_string_on_a_def_line_is_not_a_comment(self):
+		# `f"  #{name}"` is report layout, and no comment was written on that line.
+		lines = ["def render(name):", '\treturn f"  #{name}"']
+		self.assertEqual(xlint.check_def_comment(lines), [])
+
+	def test_a_comment_on_an_ordinary_code_line_is_clean(self):
+		self.assertEqual(xlint.check_def_comment(["x = 1  # why"]), [])
+
+	def test_an_unparseable_file_reports_nothing(self):
+		# Unlike the signature check this one has no text fallback: deciding whether a
+		# line is a `def` needs the parse, and guessing is what produced the 74.
+		self.assertEqual(xlint.check_def_comment(["def ok(a):  # why", "\treturn a", "def broken("]), [])
+
 if __name__ == "__main__":
 	unittest.main()

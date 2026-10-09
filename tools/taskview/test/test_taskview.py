@@ -52,7 +52,8 @@ def tearDownModule():
 class InterfaceTests(unittest.TestCase):
 	"""Interfaces section: the names exist and have documented shapes."""
 
-	def test_load_filter_exists_and_returns_dict(self):  # Interfaces
+	# Interfaces
+	def test_load_filter_exists_and_returns_dict(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Test\ncategories: [A]\ntags: [t1]\ninclude_bucket: true\nlimits:\n  upcoming: 3\n  queue_breakdown: false\n")
 			path = f.name
@@ -73,7 +74,8 @@ class InterfaceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_load_filter_raises_FilterError_on_malformed_yaml(self):  # Interfaces, R8
+	# Interfaces, R8
+	def test_load_filter_raises_FilterError_on_malformed_yaml(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Test\ncategories: [A\n")  # invalid YAML
 			path = f.name
@@ -83,12 +85,14 @@ class InterfaceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_discover_filter_exists(self):  # Interfaces
+	# Interfaces
+	def test_discover_filter_exists(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			result = discover_filter(Path(tmp))
 			self.assertIsNone(result)
 
-	def test_resolve_filter_exists(self):  # Interfaces, R9a
+	# Interfaces, R9a
+	def test_resolve_filter_exists(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			result = resolve_filter(Path(tmp), None, False)
 			self.assertIsInstance(result, tuple)
@@ -98,12 +102,14 @@ class InterfaceTests(unittest.TestCase):
 			self.assertIsNone(filter_data)
 			self.assertEqual(source, 'none')
 
-	def test_select_tasks_exists_and_returns_dict(self):  # Interfaces
+	# Interfaces
+	def test_select_tasks_exists_and_returns_dict(self):
 		state = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': '', 'tags': set(), 'importance': ''}}
 		result = select_tasks(state, None)
 		self.assertIsInstance(result, dict)
 
-	def test_compute_metrics_exists_and_returns_dict(self):  # Interfaces
+	# Interfaces
+	def test_compute_metrics_exists_and_returns_dict(self):
 		state = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': '', 'tags': set(), 'importance': ''}}
 		selected = {1: state[1]}
 		result = compute_metrics(state, selected, None)
@@ -111,13 +117,15 @@ class InterfaceTests(unittest.TestCase):
 		for key in ('done_day', 'done_week', 'done_month', 'active', 'this_week', 'this_month', 'later', 'open_tasks', 'shown', 'filtered_total'):
 			self.assertIn(key, result)
 
-	def test_build_view_exists_and_returns_str(self):  # Interfaces
+	# Interfaces
+	def test_build_view_exists_and_returns_str(self):
 		selected = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': '', 'tags': set(), 'importance': '', 'description': ''}}
 		metrics = {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': 1, 'this_week': 0, 'this_month': 0, 'later': 1, 'open_tasks': list(selected.values()), 'shown': 1, 'filtered_total': 0}
 		result = build_view(selected, metrics, None, 80, 24, 'none')
 		self.assertIsInstance(result, str)
 
-	def test_read_csv_exists_and_returns_dict(self):  # Interfaces
+	# Interfaces
+	def test_read_csv_exists_and_returns_dict(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts,category,tags,importance\n1,open,test,,0,,,\n")
 			path = f.name
@@ -127,49 +135,57 @@ class InterfaceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_FilterError_exists(self):  # Interfaces
+	# Interfaces
+	def test_FilterError_exists(self):
 		self.assertTrue(issubclass(FilterError, Exception))
 
-	def test_resolve_data_dir_exists_and_returns_path(self):  # Interfaces, R17
+	# Interfaces, R17
+	def test_resolve_data_dir_exists_and_returns_path(self):
 		# No explicit, no env vars → uses XDG_DATA_HOME/taskview
 		result = resolve_data_dir(None, {})
 		self.assertIsInstance(result, Path)
 		self.assertEqual(result, Path(_TEST_XDG_DATA_HOME) / 'taskview')
 
-	def test_resolve_data_dir_explicit_wins(self):  # R17
+	# R17
+	def test_resolve_data_dir_explicit_wins(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			explicit = Path(tmp) / 'explicit_data'
 			result = resolve_data_dir(explicit, {'TASKVIEW_DATA_DIR': '/ignored'})
 			self.assertEqual(result, explicit)
 
-	def test_resolve_data_dir_taskview_data_dir_env(self):  # R17
+	# R17
+	def test_resolve_data_dir_taskview_data_dir_env(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			env_path = Path(tmp) / 'from_env'
 			environ = {'TASKVIEW_DATA_DIR': str(env_path)}
 			result = resolve_data_dir(None, environ)
 			self.assertEqual(result, env_path)
 
-	def test_resolve_csv_exists_and_returns_path(self):  # Interfaces, R18
+	# Interfaces, R18
+	def test_resolve_csv_exists_and_returns_path(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			data_dir = Path(tmp) / 'data'
 			result = resolve_csv(data_dir, None)
 			self.assertEqual(result, data_dir / 'tasks.csv')
 
-	def test_resolve_csv_explicit_wins(self):  # R18
+	# R18
+	def test_resolve_csv_explicit_wins(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			data_dir = Path(tmp) / 'data'
 			explicit = Path(tmp) / 'custom.csv'
 			result = resolve_csv(data_dir, explicit)
 			self.assertEqual(result, explicit)
 
-	def test_watch_targets_exists_and_returns_list(self):  # Interfaces, R22
+	# Interfaces, R22
+	def test_watch_targets_exists_and_returns_list(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			csv_path = Path(tmp) / 'tasks.csv'
 			result = watch_targets(csv_path, None)
 			self.assertIsInstance(result, list)
 			self.assertEqual(result, [csv_path])
 
-	def test_watch_targets_includes_filter_when_present(self):  # R22
+	# R22
+	def test_watch_targets_includes_filter_when_present(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			csv_path = Path(tmp) / 'tasks.csv'
 			filter_path = Path(tmp) / '.taskview.yaml'
@@ -178,7 +194,8 @@ class InterfaceTests(unittest.TestCase):
 			self.assertIsInstance(result, list)
 			self.assertEqual(set(result), {csv_path, filter_path})
 
-	def test_watch_targets_deduplicates_same_path(self):  # R22
+	# R22
+	def test_watch_targets_deduplicates_same_path(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			csv_path = Path(tmp) / 'tasks.csv'
 			result = watch_targets(csv_path, csv_path)
@@ -188,7 +205,8 @@ class InterfaceTests(unittest.TestCase):
 class FilterLoadingTests(unittest.TestCase):
 	"""R6-R8: filter file keys, defaults, unknown keys, malformed YAML, empty file."""
 
-	def test_all_recognised_keys_loaded(self):  # R6
+	# R6
+	def test_all_recognised_keys_loaded(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("""label: MyProject
 categories: [XLib, Agents]
@@ -210,7 +228,8 @@ limits:
 		finally:
 			os.unlink(path)
 
-	def test_defaults_for_absent_keys(self):  # R6
+	# R6
+	def test_defaults_for_absent_keys(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Minimal\n")
 			path = f.name
@@ -225,7 +244,8 @@ limits:
 		finally:
 			os.unlink(path)
 
-	def test_unknown_key_warns_on_stderr_and_does_not_raise(self):  # R7
+	# R7
+	def test_unknown_key_warns_on_stderr_and_does_not_raise(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Test\ntyop: oops\n")
 			path = f.name
@@ -240,7 +260,8 @@ limits:
 		finally:
 			os.unlink(path)
 
-	def test_malformed_yaml_raises_FilterError(self):  # R8
+	# R8
+	def test_malformed_yaml_raises_FilterError(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Test\ncategories: [unclosed\n")
 			path = f.name
@@ -250,7 +271,8 @@ limits:
 		finally:
 			os.unlink(path)
 
-	def test_empty_file_returns_defaults(self):  # R6, R8
+	# R6, R8
+	def test_empty_file_returns_defaults(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("")
 			path = f.name
@@ -263,7 +285,8 @@ limits:
 		finally:
 			os.unlink(path)
 
-	def test_load_filter_returns_path_in_result(self):  # Interfaces
+	# Interfaces
+	def test_load_filter_returns_path_in_result(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
 			f.write("label: Test\n")
 			path = f.name
@@ -304,79 +327,92 @@ class SelectionPrecedenceTests(unittest.TestCase):
 			'limits': {'upcoming': 5, 'queue_breakdown': True},
 		}
 
-	def test_rule1_never_show_cancelled_excluded_unconditionally(self):  # R14 rule 1
+	# R14 rule 1
+	def test_rule1_never_show_cancelled_excluded_unconditionally(self):
 		state = {1: self._make_task(1, tags={'cancelled'})}
 		filter_data = self._make_filter()
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule1_never_show_archived_excluded_unconditionally(self):  # R14 rule 1
+	# R14 rule 1
+	def test_rule1_never_show_archived_excluded_unconditionally(self):
 		state = {1: self._make_task(1, tags={'archived'})}
 		filter_data = self._make_filter()
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule2_category_not_accepted_excluded(self):  # R14 rule 2
+	# R14 rule 2
+	def test_rule2_category_not_accepted_excluded(self):
 		state = {1: self._make_task(1, category='Other')}
 		filter_data = self._make_filter(categories=['MyProject'])
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule2_empty_categories_list_allows_all_categories(self):  # R14 rule 2, R4
+	# R14 rule 2, R4
+	def test_rule2_empty_categories_list_allows_all_categories(self):
 		state = {1: self._make_task(1, category='Anything')}
 		filter_data = self._make_filter(categories=[])
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_rule2_uncategorised_with_include_bucket_true_included(self):  # R14 rule 2, R3
+	# R14 rule 2, R3
+	def test_rule2_uncategorised_with_include_bucket_true_included(self):
 		state = {1: self._make_task(1, category='')}
 		filter_data = self._make_filter(categories=['MyProject'], include_bucket=True)
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_rule2_uncategorised_with_include_bucket_false_excluded(self):  # R14 rule 2, R3
+	# R14 rule 2, R3
+	def test_rule2_uncategorised_with_include_bucket_false_excluded(self):
 		state = {1: self._make_task(1, category='')}
 		filter_data = self._make_filter(categories=['MyProject'], include_bucket=False)
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule3_critical_included_bypasses_tag_rule(self):  # R14 rule 3
+	# R14 rule 3
+	def test_rule3_critical_included_bypasses_tag_rule(self):
 		state = {1: self._make_task(1, category='MyProject', tags={'critical'})}
 		filter_data = self._make_filter(categories=['MyProject'], tags=['work'])
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_rule3_emergency_included_bypasses_tag_rule(self):  # R14 rule 3
+	# R14 rule 3
+	def test_rule3_emergency_included_bypasses_tag_rule(self):
 		state = {1: self._make_task(1, category='MyProject', tags={'emergency'})}
 		filter_data = self._make_filter(categories=['MyProject'], tags=['work'])
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_rule3_critical_with_nonmatching_category_excluded(self):  # R14 rule 2 precedes rule 3, R15
+	# R14 rule 2 precedes rule 3, R15
+	def test_rule3_critical_with_nonmatching_category_excluded(self):
 		state = {1: self._make_task(1, category='Other', tags={'critical'})}
 		filter_data = self._make_filter(categories=['MyProject'])
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule4_tag_filter_nonempty_no_overlap_excluded(self):  # R14 rule 4
+	# R14 rule 4
+	def test_rule4_tag_filter_nonempty_no_overlap_excluded(self):
 		state = {1: self._make_task(1, category='MyProject', tags={'personal'})}
 		filter_data = self._make_filter(categories=['MyProject'], tags=['work'])
 		result = select_tasks(state, filter_data)
 		self.assertNotIn(1, result)
 
-	def test_rule4_tag_filter_empty_allows_all_tags(self):  # R14 rule 4
+	# R14 rule 4
+	def test_rule4_tag_filter_empty_allows_all_tags(self):
 		state = {1: self._make_task(1, category='MyProject', tags={'anything'})}
 		filter_data = self._make_filter(categories=['MyProject'], tags=[])
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_rule5_default_included(self):  # R14 rule 5
+	# R14 rule 5
+	def test_rule5_default_included(self):
 		state = {1: self._make_task(1, category='MyProject', tags={'work'})}
 		filter_data = self._make_filter(categories=['MyProject'], tags=['work'])
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_none_filter_all_passes_except_never_show(self):  # R14, Interfaces (None filter = all pass except rule 1)
+	# R14, Interfaces (None filter = all pass except rule 1)
+	def test_none_filter_all_passes_except_never_show(self):
 		state = {
 			1: self._make_task(1, category='Anything', tags={'anything'}),
 			2: self._make_task(2, tags={'cancelled'}),
@@ -385,13 +421,15 @@ class SelectionPrecedenceTests(unittest.TestCase):
 		self.assertIn(1, result)
 		self.assertNotIn(2, result)
 
-	def test_critical_in_bucket_with_include_bucket_true_included(self):  # R14 rules 2+3 interaction
+	# R14 rules 2+3 interaction
+	def test_critical_in_bucket_with_include_bucket_true_included(self):
 		state = {1: self._make_task(1, category='', tags={'critical'})}
 		filter_data = self._make_filter(categories=['MyProject'], include_bucket=True)
 		result = select_tasks(state, filter_data)
 		self.assertIn(1, result)
 
-	def test_critical_in_bucket_with_include_bucket_false_excluded_by_rule2(self):  # R15: category precedes critical
+	# R15: category precedes critical
+	def test_critical_in_bucket_with_include_bucket_false_excluded_by_rule2(self):
 		state = {1: self._make_task(1, category='', tags={'critical'})}
 		filter_data = self._make_filter(categories=['MyProject'], include_bucket=False)
 		result = select_tasks(state, filter_data)
@@ -428,7 +466,8 @@ class SPlusFInvariantTests(unittest.TestCase):
 			'limits': {'upcoming': 5, 'queue_breakdown': True},
 		}
 
-	def test_invariant_holds_with_mixed_tasks(self):  # R25
+	# R25
+	def test_invariant_holds_with_mixed_tasks(self):
 		state = {
 			1: self._make_task(1, category='MyProject', tags={'work'}),      # included
 			2: self._make_task(2, category='Other', tags={'work'}),           # excluded by category
@@ -444,7 +483,8 @@ class SPlusFInvariantTests(unittest.TestCase):
 		open_not_rule1 = sum(1 for t in state.values() if t['status'] == 'open' and not (t['tags'] & {'cancelled', 'archived'}))
 		self.assertEqual(metrics['shown'] + metrics['filtered_total'], open_not_rule1)
 
-	def test_invariant_holds_with_all_uncategorised_and_bucket(self):  # R25
+	# R25
+	def test_invariant_holds_with_all_uncategorised_and_bucket(self):
 		state = {
 			1: self._make_task(1, category='', tags={'work'}),
 			2: self._make_task(2, category='', tags={'personal'}),
@@ -456,7 +496,8 @@ class SPlusFInvariantTests(unittest.TestCase):
 		open_not_rule1 = sum(1 for t in state.values() if t['status'] == 'open' and not (t['tags'] & {'cancelled', 'archived'}))
 		self.assertEqual(metrics['shown'] + metrics['filtered_total'], open_not_rule1)
 
-	def test_invariant_holds_with_no_filter(self):  # R25, R12
+	# R25, R12
+	def test_invariant_holds_with_no_filter(self):
 		state = {
 			1: self._make_task(1, category='A', tags={'x'}),
 			2: self._make_task(2, category='B', tags={'y'}),
@@ -467,7 +508,8 @@ class SPlusFInvariantTests(unittest.TestCase):
 		open_not_rule1 = sum(1 for t in state.values() if t['status'] == 'open' and not (t['tags'] & {'cancelled', 'archived'}))
 		self.assertEqual(metrics['shown'] + metrics['filtered_total'], open_not_rule1)
 
-	def test_invariant_excludes_never_show_from_both_counts(self):  # R16, R25
+	# R16, R25
+	def test_invariant_excludes_never_show_from_both_counts(self):
 		state = {
 			1: self._make_task(1, category='MyProject', tags={'work'}),
 			2: self._make_task(2, tags={'cancelled'}),
@@ -485,7 +527,8 @@ class SPlusFInvariantTests(unittest.TestCase):
 class DiscoveryTests(unittest.TestCase):
 	"""R9-R13: filter discovery and resolution."""
 
-	def test_explicit_filter_beats_discovery(self):  # R9 rule 1
+	# R9 rule 1
+	def test_explicit_filter_beats_discovery(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			# Create a filter in the cwd
@@ -498,7 +541,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(filter_data['label'], 'Explicit')
 			self.assertEqual(source, 'explicit')
 
-	def test_discovery_walks_up_from_cwd(self):  # R9 rule 2
+	# R9 rule 2
+	def test_discovery_walks_up_from_cwd(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			project = tmp / 'project'
@@ -510,7 +554,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(filter_data['label'], 'Project')
 			self.assertEqual(source, 'discovered')
 
-	def test_nearest_ancestor_wins(self):  # R9 rule 2, R11
+	# R9 rule 2, R11
+	def test_nearest_ancestor_wins(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			parent = tmp / 'parent'
@@ -523,7 +568,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(filter_data['label'], 'Parent')
 			self.assertEqual(source, 'discovered')
 
-	def test_symlinked_cwd_resolves_to_real_path(self):  # R10
+	# R10
+	def test_symlinked_cwd_resolves_to_real_path(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			real_project = tmp / 'real_project'
@@ -535,7 +581,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(path, real_project / '.taskview.yaml')
 			self.assertEqual(source, 'discovered')
 
-	def test_nothing_found_returns_none_none(self):  # R9 rule 3, R12
+	# R9 rule 3, R12
+	def test_nothing_found_returns_none_none(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			subdir = tmp / 'subdir'
@@ -545,7 +592,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertIsNone(filter_data)
 			self.assertEqual(source, 'none')
 
-	def test_no_filter_flag_returns_none_none(self):  # R13
+	# R13
+	def test_no_filter_flag_returns_none_none(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			(tmp / '.taskview.yaml').write_text("label: Project\n")
@@ -554,7 +602,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertIsNone(filter_data)
 			self.assertEqual(source, 'flag')
 
-	def test_parent_filter_captures_child(self):  # R11
+	# R11
+	def test_parent_filter_captures_child(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			parent = tmp / 'parent'
@@ -566,7 +615,8 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(filter_data['label'], 'Parent')
 			self.assertEqual(source, 'discovered')
 
-	def test_walk_does_not_stop_at_home(self):  # R11
+	# R11
+	def test_walk_does_not_stop_at_home(self):
 		# We can't easily test HOME boundary, but we can verify it walks past a directory named "home"
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
@@ -578,12 +628,14 @@ class DiscoveryTests(unittest.TestCase):
 			self.assertEqual(path, tmp / '.taskview.yaml')
 			self.assertEqual(source, 'discovered')
 
-	def test_discover_filter_returns_none_when_no_filter(self):  # R9, R11
+	# R9, R11
+	def test_discover_filter_returns_none_when_no_filter(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			result = discover_filter(Path(tmp))
 			self.assertIsNone(result)
 
-	def test_discover_filter_finds_first_yaml_upwards(self):  # R9, R11
+	# R9, R11
+	def test_discover_filter_finds_first_yaml_upwards(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			tmp = Path(tmp)
 			project = tmp / 'a' / 'b' / 'c'
@@ -603,21 +655,24 @@ class HeaderStatesTests(unittest.TestCase):
 		open_tasks = list(self._make_selected(shown).values())
 		return {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': shown, 'this_week': 0, 'this_month': 0, 'later': shown, 'open_tasks': open_tasks, 'shown': shown, 'filtered_total': filtered}
 
-	def test_filter_found_header(self):  # R24
+	# R24
+	def test_filter_found_header(self):
 		filter_data = {'label': 'MyProject', 'categories': set(), 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics()
 		view = build_view(selected, metrics, filter_data, 80, 24, 'explicit')
 		self.assertIn('=== Tasks (MyProject) ===', view)
 
-	def test_no_filter_found_header(self):  # R24, R12
+	# R24, R12
+	def test_no_filter_found_header(self):
 		filter_data = None
 		selected = self._make_selected()
 		metrics = self._make_metrics()
 		view = build_view(selected, metrics, filter_data, 80, 24, 'none')
 		self.assertIn('=== Tasks (no filter found \u2014 showing all) ===', view)
 
-	def test_no_filter_flag_header(self):  # R24, R13
+	# R24, R13
+	def test_no_filter_flag_header(self):
 		# With R9a, resolve_filter returns source='flag' for --no-filter
 		# build_view receives filter_data=None and source='flag'
 		filter_data = None
@@ -626,7 +681,8 @@ class HeaderStatesTests(unittest.TestCase):
 		view = build_view(selected, metrics, filter_data, 80, 24, 'flag')
 		self.assertIn('=== Tasks (no filter) ===', view)
 
-	def test_three_headers_are_mutually_distinguishable(self):  # R24
+	# R24
+	def test_three_headers_are_mutually_distinguishable(self):
 		filter_data1 = {'label': 'X', 'categories': set(), 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics()
@@ -649,7 +705,8 @@ class PurityTests(unittest.TestCase):
 		open_tasks = list(selected.values()) if selected else []
 		return {'done_day': 0, 'done_week': 0, 'done_month': 0, 'active': len(open_tasks), 'this_week': 0, 'this_month': 0, 'later': len(open_tasks), 'open_tasks': open_tasks, 'shown': len(open_tasks), 'filtered_total': 0}
 
-	def test_build_view_deterministic_same_input_same_output(self):  # R27
+	# R27
+	def test_build_view_deterministic_same_input_same_output(self):
 		filter_data = {'label': 'Test', 'categories': {'X'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = self._make_selected()
 		metrics = self._make_metrics(selected)
@@ -657,7 +714,8 @@ class PurityTests(unittest.TestCase):
 		view2 = build_view(selected, metrics, filter_data, 80, 24, 'explicit')
 		self.assertEqual(view1, view2)
 
-	def test_build_view_width_parameter_honoured(self):  # R20, R27
+	# R20, R27
+	def test_build_view_width_parameter_honoured(self):
 		filter_data = {'label': 'Test', 'categories': {'X'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		selected = {1: {'id': 1, 'status': 'open', 'title': 'A' * 100, 'due_ts': None, 'chg_ts': 1000, 'category': 'X', 'tags': set(), 'importance': '', 'description': ''}}
 		metrics = self._make_metrics(selected)
@@ -667,14 +725,16 @@ class PurityTests(unittest.TestCase):
 		self.assertIn('...', view_narrow)
 		self.assertNotIn('...', view_wide)
 
-	def test_select_tasks_pure(self):  # R21, R27
+	# R21, R27
+	def test_select_tasks_pure(self):
 		state = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': 'A', 'tags': set(), 'importance': ''}}
 		filter_data = {'label': 'T', 'categories': {'A'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
 		result1 = select_tasks(state, filter_data)
 		result2 = select_tasks(state, filter_data)
 		self.assertEqual(result1, result2)
 
-	def test_compute_metrics_pure(self):  # R21, R27
+	# R21, R27
+	def test_compute_metrics_pure(self):
 		state = {1: {'id': 1, 'status': 'open', 'title': 't', 'due_ts': None, 'chg_ts': 0, 'category': 'A', 'tags': set(), 'importance': ''}}
 		selected = {1: state[1]}
 		filter_data = {'label': 'T', 'categories': {'A'}, 'tags': set(), 'include_bucket': False, 'limits': {'upcoming': 5, 'queue_breakdown': True}}
@@ -775,7 +835,8 @@ class TaskIdDisplayTests(unittest.TestCase):
 class CSVToleranceTests(unittest.TestCase):
 	"""R33, R34: legacy rows, missing columns, bad id/chg_ts, comments, header, last-row-wins."""
 
-	def test_5_column_legacy_row_reads_as_uncategorised(self):  # R33
+	# R33
+	def test_5_column_legacy_row_reads_as_uncategorised(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n1,open,Legacy Task,,1000\n")
 			path = f.name
@@ -787,7 +848,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_8_column_row_reads_all_fields(self):  # R33
+	# R33
+	def test_8_column_row_reads_all_fields(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			# tags column contains "tag1,tag2" as a single comma-separated field
 			f.write('id,status,title,due_ts,chg_ts,category,tags,importance\n1,open,Full Task,,1000,MyProject,"tag1,tag2",high\n')
@@ -801,7 +863,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_non_integer_id_skipped(self):  # R34
+	# R34
+	def test_non_integer_id_skipped(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\nnotanint,open,Bad,,1000\n2,open,Good,,2000\n")
 			path = f.name
@@ -812,7 +875,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_empty_chg_ts_skipped(self):  # R34
+	# R34
+	def test_empty_chg_ts_skipped(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n1,open,NoChange,,,\n2,open,HasChange,,2000\n")
 			path = f.name
@@ -823,7 +887,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_unparseable_chg_ts_skipped(self):  # R34
+	# R34
+	def test_unparseable_chg_ts_skipped(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n1,open,BadChange,,abc\n2,open,GoodChange,,2000\n")
 			path = f.name
@@ -834,7 +899,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_comment_line_skipped(self):  # R34
+	# R34
+	def test_comment_line_skipped(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n// This is a comment\n1,open,Real,,1000\n")
 			path = f.name
@@ -845,7 +911,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_header_row_skipped(self):  # R34
+	# R34
+	def test_header_row_skipped(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts,category,tags,importance\n1,open,Real,,1000,,,\n")
 			path = f.name
@@ -856,7 +923,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_last_row_wins_for_same_id(self):  # R34
+	# R34
+	def test_last_row_wins_for_same_id(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n1,open,First,,1000\n1,open,Second,,2000\n")
 			path = f.name
@@ -867,7 +935,8 @@ class CSVToleranceTests(unittest.TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_last_row_wins_across_status_changes(self):  # R34
+	# R34
+	def test_last_row_wins_across_status_changes(self):
 		with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
 			f.write("id,status,title,due_ts,chg_ts\n1,open,Task,,1000\n1,done,Task,,2000\n")
 			path = f.name
@@ -881,14 +950,16 @@ class CSVToleranceTests(unittest.TestCase):
 class TestIsolationGuard(unittest.TestCase):
 	"""R17, R19: Verify the test suite cannot touch the real data directory."""
 
-	def test_resolve_data_dir_default_is_in_temp_tree(self):  # R17, R19
+	# R17, R19
+	def test_resolve_data_dir_default_is_in_temp_tree(self):
 		# The module-level setUpModule sets XDG_DATA_HOME to a unique temp dir
 		# resolve_data_dir with no args should resolve to that temp tree
 		data_dir = resolve_data_dir(None, {})
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME),
 			f"Default data dir {data_dir} must be inside test temp tree {_TEST_XDG_DATA_HOME}")
 
-	def test_real_data_dir_untouched_by_resolve(self):  # R17, R19
+	# R17, R19
+	def test_real_data_dir_untouched_by_resolve(self):
 		# The real ~/.local/share/taskview must not be created or modified by tests
 		# We only assert on our temp tree's contents — never read the real path
 		real_default = Path.home() / '.local' / 'share' / 'taskview'
