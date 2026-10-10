@@ -20,7 +20,10 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `6963c52` (2026-10-08). **xlint reports clean over the whole
+Basis: `master` at `d061a09` (2026-10-10). **xhttp arrived in `dev/` from
+Space-Traveller on 2026-10-10 and is untracked** — nothing in `dev/xhttp/` is
+committed. Its design record moved with it and now lives at
+`dev/xhttp/SPEC.md`; see *In progress*. **xlint reports clean over the whole
 repo, and that is narrower than it reads** — it skips every directory named
 `test`, so 109 violations in tool tests are invisible to it (epi `AK633QC`).
 **The release script cannot release anything** (`1ZY2Q5Q`) — found 2026-10-01,
@@ -67,6 +70,7 @@ the human's call.
 | Item | Who | Done | Where |
 |------|-----|------|-------|
 | **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
+| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**, untracked. Core suite green (103 tests, exit 0); full suite 115 tests, 1 edge failure. **`xlib_dev` cannot load it** — `_/websocket.py:1` still does a bare `import xhttp`. Websocket does not run. **Not yet validated against real code in Space-Traveller**, which is the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib 31 open (28 Todo, 2 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |

@@ -10,6 +10,22 @@ needed when there is no due date.
 
 ## Open
 
+- [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
+	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
+	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
+- [ ] **#119 — xhttp: fix websocket thread lifecycle** (by 2026-10-20,
+	medium) — `sender` thread in `_/websocket.py` blocks on `queue.get()`
+	forever with no shutdown signal. When connection drops, `receiver` exits
+	but `sender` leaks. Queue grows unbounded if `send()` called after close.
+	No sentinel, no socket check. Unused `queue` import. `key_hash` typo,
+	`_send` arg order, `on_message` msg pass were fixed.
+- [ ] **#117 — xhttp: validate against real code in Space-Traveller** (by
+	2026-10-20, high) — the human's stated condition for calling xhttp done.
+	Blocked behind #116. Parity reads 8/8 and the core suite is green, but parity
+	is a checked list, not a running server.
+- [ ] **#118 — xhttp: commit `dev/xhttp/`** (by 2026-10-13, medium) — the whole
+	folder arrived from Space-Traveller untracked on 2026-10-10; nothing in it is
+	in git.
 - [x] **#112 — `xlib_dev` override package: run real code against prerelease
 	libraries** (done 2026-10-10, high) — human's proposal 2026-10-10: a root
 	package `xlib_dev/` so `from xlib_dev import xcsv` runs real code against a
