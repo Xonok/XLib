@@ -265,7 +265,6 @@ def check_trailing_whitespace(lines, is_md=False):
 			report.append((index, "trailing whitespace"))
 	return report
 
-
 def check_js_trailing_whitespace(lines):
 	"""Trailing whitespace check for JS/TS — same as Python, no Markdown exception."""
 	report = []
@@ -274,7 +273,6 @@ def check_js_trailing_whitespace(lines):
 			report.append((index, "trailing whitespace"))
 	return report
 
-
 def check_js_double_blank(lines):
 	"""Double blank line check for JS/TS — same as Python/Markdown."""
 	report = []
@@ -282,7 +280,6 @@ def check_js_double_blank(lines):
 		if prev == "" and current == "":
 			report.append((index, "double blank line"))
 	return report
-
 
 def check_js_space_indent(lines, exempt):
 	"""Space indentation check for JS/TS — tabs only, with exempt spans."""
@@ -294,13 +291,11 @@ def check_js_space_indent(lines, exempt):
 			report.append((index, "indented with spaces"))
 	return report
 
-
 def check_js_final_newline(lines):
 	"""Final newline check for JS/TS — file must end with exactly one newline."""
 	if lines and not lines[-1].endswith("\n"):
 		return [(len(lines), "missing final newline")]
 	return []
-
 
 def check_js_trailing_blank(lines):
 	"""Trailing blank line check for JS/TS — no empty line at end after real content."""
@@ -309,7 +304,6 @@ def check_js_trailing_blank(lines):
 	if lines[-2].strip():
 		return [(len(lines), "trailing blank line at end of file")]
 	return []
-
 
 def check_double_space(lines, is_py):
 	"""Report a mid-line double space — two or more spaces between non-space characters.
@@ -446,7 +440,6 @@ def _blockquote_exempt(lines):
 		if stripped.startswith("> "):
 			exempt.add(i)
 	return exempt
-
 
 def _js_exempt_spans(lines):
 	"""Map each line number to a list of (start_col, end_col) spans exempt from checks.
@@ -660,7 +653,6 @@ def _js_exempt_spans(lines):
 		col += 1
 
 	return exempt
-
 
 def _js_exempt_lines(lines):
 	"""Return set of line numbers that are inside JS/TS literals or comments.
