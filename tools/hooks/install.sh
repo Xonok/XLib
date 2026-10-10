@@ -6,7 +6,10 @@ set -e
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 HOOKS_SOURCE="$REPO_ROOT/tools/hooks"
-HOOKS_TARGET="$REPO_ROOT/.git/hooks"
+
+# Find the git directory (works for both regular repos and worktrees)
+GIT_DIR=$(git rev-parse --git-dir)
+HOOKS_TARGET="$GIT_DIR/hooks"
 
 if [ ! -d "$HOOKS_SOURCE" ]; then
 	echo "ERROR: hooks source directory not found: $HOOKS_SOURCE"
@@ -14,7 +17,7 @@ if [ ! -d "$HOOKS_SOURCE" ]; then
 fi
 
 if [ ! -d "$HOOKS_TARGET" ]; then
-	echo "ERROR: .git/hooks directory not found. Are you in a git repository?"
+	echo "ERROR: hooks target directory not found: $HOOKS_TARGET"
 	exit 1
 fi
 
@@ -36,4 +39,8 @@ for hook in "$HOOKS_SOURCE"/*; do
 	echo "  Installed $name"
 done
 
+# Set core.hooksPath to use the worktree's hooks directory
+git config core.hooksPath "$HOOKS_TARGET"
+
 echo "Done. Hooks installed to $HOOKS_TARGET"
+echo "core.hooksPath set to $HOOKS_TARGET"
