@@ -1,0 +1,53 @@
+#!/bin/sh
+#
+# Pre-push hook: reject pushes containing commits without valid ticket refs.
+# Checks all commits being pushed that don't exist on the remote.
+
+remote="$1"
+url="$2"
+
+# Determine the default branch (master or main)
+default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+if [ -z "$default_branch" ]; then
+	default_branch="master"
+fi
+
+while read local_ref local_sha remote_ref remote_sha; do
+	if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+		# Branch deletion - skip
+		continue
+	fi
+
+	if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+		# New branch - check commits not on default branch
+		merge_base=$(git merge-base "$default_branch" "$local_sha" 2>/dev/null)
+		if [ -n "$merge_base" ]; then
+			commits=$(git rev-list "$merge_base..$local_sha")
+		else
+			commits=$(git rev-list "$local_sha")
+		fi
+	else
+		# Existing branch - check new commits
+		commits=$(git rev-list "$remote_sha..$local_sha")
+	fi
+
+	for commit in $commits; do
+		subject=$(git log --format=%s -n 1 "$commit")
+
+		# Skip merge commits
+		if echo "$subject" | grep -qE '^Merge '; then
+			continue
+		fi
+
+		# Check if subject matches the pattern: 7 alphanumeric chars + space
+		if ! echo "$subject" | grep -qE '^[A-Z0-9]{7} '; then
+			echo "ERROR: Commit $commit has invalid subject format"
+			echo "Subject: $subject"
+			echo "Commit subject must start with a valid ticket ref (7 alphanumeric chars + space)"
+			echo "Example: ABC1234 Fix the bug"
+			exit 1
+		fi
+	done
+done
+
+exit 0

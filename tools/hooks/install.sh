@@ -1,21 +1,39 @@
 #!/bin/sh
-# Install the xlint pre-commit hook via core.hooksPath.
+#
+# Install git hooks from tools/hooks/ into .git/hooks/
 
-set -eu
+set -e
 
-root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$root" ]; then
-	echo "install-hooks: not a git repository" >&2
+REPO_ROOT=$(git rev-parse --show-toplevel)
+HOOKS_SOURCE="$REPO_ROOT/tools/hooks"
+HOOKS_TARGET="$REPO_ROOT/.git/hooks"
+
+if [ ! -d "$HOOKS_SOURCE" ]; then
+	echo "ERROR: hooks source directory not found: $HOOKS_SOURCE"
 	exit 1
 fi
 
-hooks_dir="$root/tools/hooks"
-if [ ! -d "$hooks_dir" ]; then
-	echo "install-hooks: $hooks_dir not found" >&2
+if [ ! -d "$HOOKS_TARGET" ]; then
+	echo "ERROR: .git/hooks directory not found. Are you in a git repository?"
 	exit 1
 fi
 
-git config core.hooksPath "$hooks_dir"
-chmod +x "$hooks_dir/pre-commit"
-echo "xlint pre-commit hook installed at $hooks_dir/pre-commit"
-echo "To uninstall: git config --unset core.hooksPath"
+echo "Installing git hooks..."
+
+for hook in "$HOOKS_SOURCE"/*; do
+	[ -f "$hook" ] || continue
+	name=$(basename "$hook")
+	target="$HOOKS_TARGET/$name"
+
+	if [ -f "$target" ] && ! [ -L "$target" ]; then
+		# Backup existing non-symlink hook
+		mv "$target" "$target.backup.$(date +%s)"
+		echo "  Backed up existing $name"
+	fi
+
+	cp "$hook" "$target"
+	chmod +x "$target"
+	echo "  Installed $name"
+done
+
+echo "Done. Hooks installed to $HOOKS_TARGET"
