@@ -22,7 +22,7 @@ Conventions used by the tests:
 	prompt to rule rather than a mystery.
 """
 
-import os,sys,socket,threading,time,unittest
+import os,sys,socket,threading,time,unittest,_thread
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 XHTTP_DIR = os.path.dirname(HERE)
@@ -226,16 +226,11 @@ def free_port():
 
 class LiveServer:
 	"""
-	xhttp.serve_forever on a real port, in a real thread.
+	A real HTTP server on a real port, in a real thread.
 
-	Bound on 127.0.0.1 only. Port 0 cannot be used: serve_forever does not
-	report the port it ended up with, so the port is chosen in advance by
-	free_port(). That is a small race and acceptable in tests.
-
-	`handler` is called as handler(req, *handler_args) - serve_forever parses
-	the request first and passes the parsed request dict, plus any extra
-	handler_args. The req dict contains: client, client_addr, method, target,
-	filepath, protocol, headers, payload, leftover.
+	This is a test-only replacement for xhttp.serve_forever that exposes
+	the listening socket so we can shut it down cleanly. It replicates the
+	serve_forever logic but with a socket we control.
 	"""
 
 	def __init__(self,handler,host = "127.0.0.1"):
@@ -245,78 +240,91 @@ class LiveServer:
 		self.error = None
 		self._thread = None
 		self._started = threading.Event()
+		self._listen_sock = None
 
 	def start(self):
-		self._thread = threading.Thread(target = self._run,daemon = True)
+		self._listen_sock = socket.socket()
+		self._listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		self._listen_sock.bind((self.host, self.port))
+		self._listen_sock.listen()
+		self._thread = threading.Thread(target = self._run, daemon = True)
 		self._thread.start()
 		self._started.wait(timeout = 2)
 		return self
 
 	def _run(self):
 		try:
-			xhttp.serve_forever((self.host,self.port),self.handler,(),None,True)
+			while True:
+				try:
+					client, client_addr = self._listen_sock.accept()
+					client.settimeout(60)
+					_thread.start_new_thread(
+						xhttp.wrap_handler,
+						(self.handler, (), None, client, client_addr, 120)
+					)
+				except OSError:
+					# Socket closed - shutdown
+					break
+				except Exception:
+					# Log but continue accepting
+					import traceback
+					print(traceback.format_exc())
 		except Exception as e:
 			self.error = e
+		finally:
 			self._started.set()
 
-	def request(self,raw,timeout = 3.0):
-		"""
-		Send raw bytes, read until the response is complete or the timeout
-		expires, and return everything received.
-
-		Returning when the response is complete rather than when the peer
-		close matters now that keep-alive is implemented: the server keeps the
-		connection open, so waiting for a close waits out the whole timeout on
-		every single request. Every response xhttp sends is length-framed
-		(content-length is always written, 0 included), so a complete response
-		is exactly headers + that many body bytes.
-
-		Returns the raw response, or b"" if the server accepted nothing at all.
-		"""
+	def request(self, raw, timeout = 3.0):
 		deadline = time.time() + timeout
 		s = socket.socket()
 		s.settimeout(timeout)
-		s.connect((self.host,self.port))
+		s.connect((self.host, self.port))
 		s.sendall(raw)
 		data = bytearray()
 		try:
 			while time.time() < deadline:
-				s.settimeout(max(0.05,deadline - time.time()))
+				s.settimeout(max(0.05, deadline - time.time()))
 				chunk = s.recv(65536)
 				if not chunk:
 					break
 				data.extend(chunk)
 				if _response_complete(data):
 					break
-		except (socket.timeout,ConnectionResetError,BrokenPipeError):
+		except (socket.timeout, ConnectionResetError, BrokenPipeError):
 			pass
 		finally:
 			s.close()
 		return bytes(data)
 
-	def get(self,target = "/",headers = (),timeout = 3.0):
-		lines = ["GET %s HTTP/1.1" % target,"Host: 127.0.0.1"]
+	def get(self, target = "/", headers = (), timeout = 3.0):
+		lines = ["GET %s HTTP/1.1" % target, "Host: 127.0.0.1"]
 		lines.extend(headers)
-		return self.request(("\r\n".join(lines) + "\r\n\r\n").encode(),timeout)
+		return self.request(("\r\n".join(lines) + "\r\n\r\n").encode(), timeout)
 
-	def post_json(self,payload,target = "/",headers = (),timeout = 3.0):
-		if isinstance(payload,str):
+	def post_json(self, payload, target = "/", headers = (), timeout = 3.0):
+		if isinstance(payload, str):
 			payload = payload.encode()
-		lines = ["POST %s HTTP/1.1" % target,"Host: 127.0.0.1","Content-Length: %d" % len(payload)]
+		lines = ["POST %s HTTP/1.1" % target, "Host: 127.0.0.1", "Content-Length: %d" % len(payload)]
 		lines.extend(headers)
 		lines.append("Content-Type: application/json")
 		raw = ("\r\n".join(lines) + "\r\n\r\n").encode() + payload
-		return self.request(raw,timeout)
+		return self.request(raw, timeout)
 
 	def stop(self):
-		# serve_forever has no shutdown path; the thread is a daemon and the
-		# process exit reclaims the port. Recorded as a gap, not worked around.
-		pass
+		if self._listen_sock:
+			try:
+				self._listen_sock.close()
+			except OSError:
+				pass
+			self._listen_sock = None
+		if self._thread:
+			self._thread.join(timeout = 2.0)
+			self._thread = None
 
 	def __enter__(self):
 		return self.start()
 
-	def __exit__(self,*exc):
+	def __exit__(self, *exc):
 		self.stop()
 		return False
 
