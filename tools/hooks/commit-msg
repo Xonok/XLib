@@ -2,7 +2,8 @@
 #
 # Commit message hook: reject commits without valid ticket refs.
 # The commit subject must start with a 7-character alphanumeric ticket ref followed by a space.
-# Example: ABC1234 Fix the bug
+# The ref is validated against the epiq board.
+# Example: E98CRYM Fix the bug
 
 commit_msg_file="$1"
 commit_msg=$(cat "$commit_msg_file")
@@ -10,12 +11,28 @@ commit_msg=$(cat "$commit_msg_file")
 # Get the first line (subject)
 subject=$(echo "$commit_msg" | head -n1)
 
+# Extract the ref (first 7 alphanumeric chars before space)
+ref=$(echo "$subject" | sed -E 's/^([A-Z0-9]{7}) .*/\1/')
+
 # Check if subject matches the pattern: 7 alphanumeric chars + space
 if ! echo "$subject" | grep -qE '^[A-Z0-9]{7} '; then
 	echo "ERROR: Commit subject must start with a valid ticket ref (7 alphanumeric chars + space)"
-	echo "Example: ABC1234 Fix the bug"
+	echo "Example: E98CRYM Fix the bug"
 	echo "Your subject: $subject"
 	exit 1
+fi
+
+# Validate the ref against the epiq board
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$repo_root" ]; then
+	validate_script="$repo_root/tools/hooks/validate-ticket-ref.py"
+	if [ -f "$validate_script" ]; then
+		if ! python3 "$validate_script" "$ref"; then
+			exit 1
+		fi
+	else
+		echo "WARNING: validate-ticket-ref.py not found; skipping epiq validation" >&2
+	fi
 fi
 
 exit 0

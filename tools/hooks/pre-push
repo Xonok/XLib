@@ -2,6 +2,7 @@
 #
 # Pre-push hook: reject pushes containing commits without valid ticket refs.
 # Checks all commits being pushed that don't exist on the remote.
+# Validates ticket refs against the epiq board.
 
 remote="$1"
 url="$2"
@@ -10,6 +11,13 @@ url="$2"
 default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
 if [ -z "$default_branch" ]; then
 	default_branch="master"
+fi
+
+# Find the validation script
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+validate_script=""
+if [ -n "$repo_root" ]; then
+	validate_script="$repo_root/tools/hooks/validate-ticket-ref.py"
 fi
 
 while read local_ref local_sha remote_ref remote_sha; do
@@ -44,8 +52,20 @@ while read local_ref local_sha remote_ref remote_sha; do
 			echo "ERROR: Commit $commit has invalid subject format"
 			echo "Subject: $subject"
 			echo "Commit subject must start with a valid ticket ref (7 alphanumeric chars + space)"
-			echo "Example: ABC1234 Fix the bug"
+			echo "Example: E98CRYM Fix the bug"
 			exit 1
+		fi
+
+		# Extract the ref
+		ref=$(echo "$subject" | sed -E 's/^([A-Z0-9]{7}) .*/\1/')
+
+		# Validate the ref against the epiq board
+		if [ -n "$validate_script" ] && [ -f "$validate_script" ]; then
+			if ! python3 "$validate_script" "$ref"; then
+				echo "ERROR: Commit $commit has invalid ticket ref"
+				echo "Subject: $subject"
+				exit 1
+			fi
 		fi
 	done
 done
