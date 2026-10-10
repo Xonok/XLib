@@ -19,6 +19,14 @@ Add -major to change major version.
 Don't do both at once.  
 Maybe the packager should be written in python, since it's easier to work with.  
 
+**Testing an unreleased library**  
+To run real code against a library that isn't released yet, import it from `xlib_dev` instead of `xlib`:  
+`from xlib_dev import xcsv` gives you whatever is in `dev/xcsv/` right now, same names as `from xlib import xcsv`.  
+Swap the import line, run the project, swap it back.  
+It only overrides the import the caller makes — a library's own imports of other libraries still point at released versions, since those are pinned on purpose.  
+Nothing that gets released may import `xlib_dev`; the release script is what refuses to package a library that still does.  
+Details in `doc/library-structure.md`.  
+
 **Maintenance**  
 How to know if something is using old code?  
 Probably make a library that keeps track of projects and appends their paths to a list if they're in this this repo. If you import this library, the folder your project is running from gets added, unless its parent folder is already included.  

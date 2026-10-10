@@ -14,6 +14,7 @@ specific locations belong in the Agents workspace's `.agents/machine-info.md`.
 |------|------------------|
 | `dev/<library>/` | one folder per library under development |
 | `xlib/` | released, versioned, self-contained single files |
+| `xlib_dev/` | override: same import names as `xlib`, resolved from `dev/` |
 | `tools/<tool>/` | tools and scripts, developed like libraries but never released |
 | `doc/` | process, style rules, plans, reviews, audits |
 | `personal/<person>/` | `STATUS.md`, `TASKS.md`, `HISTORY.md` |
@@ -70,7 +71,7 @@ The mechanics live in `tools/release/README.md` — including that
 
 ## Imports
 
-Three forms, and which one is allowed where:
+Three forms for library code, and which one is allowed where:
 
 ```python
 from xlib import xcsv_1_1_0          # explicit version — what libraries use
@@ -87,10 +88,41 @@ from xcsv.xcsv import read_line      # a dev folder importing itself
 	xtest`), because testing the code being developed is the point.
 - **A user of a released library** can import either way; that is why both work.
 
-`xlib/__init__.py` resolves an unversioned name to a file. It looks for a
-top-level `xlib_pins` module and, if the name is pinned there, uses that
-version; otherwise it takes the highest version on disk. There is no
-`xlib_pins` module in the repo, so resolution is currently latest-on-disk.
+### Testing against an unreleased library
+
+`xlib_dev` is a fourth form, and the only one meant for running real code
+against a library that has not shipped yet:
+
+```python
+from xlib_dev import xcsv             # dev version, whatever `dev/xcsv/` holds
+```
+
+Swap that in for `from xlib import xcsv` and the library under development is
+the one that runs. It has no per-library files: `xlib_dev/__init__.py` resolves
+any name with a `dev/<name>/<name>.py` behind it, so adding a library needs no
+change here.
+
+Three limits, all of them deliberate:
+
+- **It covers the import the caller makes.** A library's own imports of *other*
+	libraries stay pinned to released versions, because that is the rule for
+	libraries. Testing a dev xcsv therefore still gets a released xschema.
+- **It is not a release.** The dev surface is a superset: internal modules are
+	visible as themselves (`xcsv.csv_tok`) where the bundle renames them
+	(`xcsv.csv_tok_tokenize`). Code that passes through `xlib_dev` can still fail
+	against the release that follows it.
+- **Nothing released may name it.** A released library that imported `xlib_dev`
+	would stop working the moment `dev/` was removed, and a released file is never
+	edited after the fact.
+
+A dev library depending on another **dev** library is fine and intended — that
+is what makes it worth testing a chain. Only the dev → release boundary is
+policed, and by `release.py` refusing to package the library, not by a rule that
+forbids writing the import.
+
+`xlib_pins` is unrelated to this: it lets `xlib` resolve an unversioned name to a
+version other than the newest on disk. There is no `xlib_pins` module in the
+repo, so resolution is currently latest-on-disk.
 
 ## The bundler and the public API
 

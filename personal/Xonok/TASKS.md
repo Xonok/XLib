@@ -10,6 +10,33 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#112 — `xlib_dev` override package: run real code against prerelease
+	libraries** (by 2026-10-17, high) — human's proposal 2026-10-10: a root
+	package `xlib_dev/` so `from xlib_dev import xcsv` runs real code against a
+	prerelease. The `xlib_dev` prefix is the right call — it cannot collide with a
+	builtin, which the old `from <library> import <library>` shape could.
+	**Verified working** in the real deployment shape, 8/8 clean processes.
+	**Decided:** an `__getattr__` mirror of `xlib/__init__.py`, not one file per
+	library. Enforcement split off into #113/#114/#115. **Dev → dev dependency is
+	allowed and wanted**; only dev → release gets policed. Implementing on a
+	separate branch; the other agent's in-flight xlint changes stay on master.
+	One real constraint on the build: `dev/<lib>/<lib>.py:31` does
+	`from ._ import csv_tok,csv_ser`, so the override must not re-exec the file
+	under a new name — it has to alias the real module object.
+- [ ] **#115 — `release.py`: refuse to release a library that depends on dev
+	versions** (by 2026-10-31, medium) — human's call 2026-10-10. **Not a bundler
+	change**: the bundler is generic and only inlines internal modules;
+	`release.py` owns "is this releasable". This is the real enforcement half —
+	#114 alone would leave a released file free to name `xlib_dev`, but a dev
+	library pointing at another dev library is fine and intended.
+- [ ] **#114 — xlint: released files under `xlib/` must not mention `xlib_dev`**
+	(by 2026-10-31, medium) — deliberately its own ticket rather than a line in
+	#113: this is *policy*, #113 is *mechanism*. Grep-level, zero false
+	positives. Needs #113's extension point first.
+- [ ] **#113 — xlint: support repo-specific rules without editing `xlint.py`**
+	(by 2026-10-24, medium) — the meta ticket. Repo policy should live in config,
+	not inside a shared tool. `tools/xlint/xlint.py` is currently a flat set of
+	`check_*` functions called from `check_file`; there is no extension point.
 - [ ] **#110 — The best alignment in the repo is docstring prose** (by decision
 	needed, low) — `dev/xcsv/xcsv.py:24-30` and `xlib/xcsv_1_1_0.py:97-103`
 	align exception names **inside a module docstring**, where no comment exists.
