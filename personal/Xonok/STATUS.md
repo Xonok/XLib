@@ -448,15 +448,19 @@ Two consequences for anyone reading the workspace:
 	`AGENTS.md` in context. If the prose rules are meant to apply to worker
 	output too, that needs a mechanism; today they bind the agents that read the
 	repo rules. `KDX7KWJ` closed without deciding it.
-6. **`xlib_dev` is approved and building** (taskview #112, human 2026-10-10).
-	Three questions I raised are now closed: it uses an `__getattr__` mirror of
-	`xlib/__init__.py` rather than a file per library; the "released never depends
-	on dev" enforcement splits into **#113** (xlint gains repo-specific rules) →
-	**#114** (the actual rule), plus **#115** (release.py refuses a library with
-	a dev dependency) — and the human corrected my framing there, which had been
-	wrong: **dev → dev dependency is fine and wanted**, only the dev → release
-	boundary is policed. Work is on a separate branch so the other agent's
-	in-flight xlint changes on master are left alone.
+6. **`xlib_dev` shipped to master** (taskview #112 done, epiq `ASTXNPG` Done,
+	commit `b0214a4`, 2026-10-10). `from xlib_dev import xcsv` runs real code
+	against `dev/xcsv/xcsv.py` instead of the newest file in `xlib/`, resolved
+	through an `__getattr__` mirror of `xlib/__init__.py` so adding a library
+	costs nothing and the caller gets the real module object. Three questions I
+	raised are closed: that shape rather than a file per library; the "released
+	never depends on dev" enforcement split into **#113** (xlint gains
+	repo-specific rules) → **#114** (the actual rule), plus **#115** (release.py
+	refuses a library with a dev dependency) — with the human correcting my
+	framing, which had been wrong: **dev → dev dependency is fine and wanted**,
+	only the dev → release boundary is policed. The other agent's in-flight
+	xlint work was kept off the branch and restored to master's working tree
+	uncommitted. **master is one commit ahead of origin and unpushed.**
 7. **Correction: there is no broken namespace-package import in `dev/`.** I told
 	the human on 2026-10-10 that `import dev.<lib>` was unreliably importable on
 	py3.14 and built an mtime/`FileFinder` theory on top of it. All of it was my
@@ -468,7 +472,7 @@ Two consequences for anyone reading the workspace:
 	`dev/` is required. **Why it matters beyond this task:** the failure mode was
 	an unverified premise promoted to a confident root cause, with real-looking
 	detail attached. A "not reproducible, here is my theory" report should have
-	come first, and the cheapest check — printing the string I was importing —
+	came first, and the cheapest check — printing the string you were importing —
 	should have come before the theory, not after.
 
 ## Pointers

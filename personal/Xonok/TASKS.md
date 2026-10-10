@@ -10,19 +10,18 @@ needed when there is no due date.
 
 ## Open
 
-- [ ] **#112 — `xlib_dev` override package: run real code against prerelease
-	libraries** (by 2026-10-17, high) — human's proposal 2026-10-10: a root
+- [x] **#112 — `xlib_dev` override package: run real code against prerelease
+	libraries** (done 2026-10-10, high) — human's proposal 2026-10-10: a root
 	package `xlib_dev/` so `from xlib_dev import xcsv` runs real code against a
 	prerelease. The `xlib_dev` prefix is the right call — it cannot collide with a
 	builtin, which the old `from <library> import <library>` shape could.
-	**Verified working** in the real deployment shape, 8/8 clean processes.
-	**Decided:** an `__getattr__` mirror of `xlib/__init__.py`, not one file per
-	library. Enforcement split off into #113/#114/#115. **Dev → dev dependency is
-	allowed and wanted**; only dev → release gets policed. Implementing on a
-	separate branch; the other agent's in-flight xlint changes stay on master.
-	One real constraint on the build: `dev/<lib>/<lib>.py:31` does
-	`from ._ import csv_tok,csv_ser`, so the override must not re-exec the file
-	under a new name — it has to alias the real module object.
+	**Shipped** as `xlib_dev/__init__.py` on master, commit `b0214a4`, board:
+	epiq `ASTXNPG` (Done). An `__getattr__` mirror of `xlib/__init__.py`, not one
+	file per library. 12 tests, mutation-checked. **Dev → dev dependency is
+	allowed and wanted**; only dev → release gets policed, and by release.py
+	(#115), not by a lint rule. Enforcement split into #113/#114.
+	`test_no_released_file_references_the_override` already enforces part of
+	#114 — it should move to xlint when the rule lands, not be duplicated.
 - [ ] **#115 — `release.py`: refuse to release a library that depends on dev
 	versions** (by 2026-10-31, medium) — human's call 2026-10-10. **Not a bundler
 	change**: the bundler is generic and only inlines internal modules;
