@@ -957,6 +957,10 @@ def check_file(path, args):
 		if not args.no_double_space:
 			problems.extend((line, msg) for line, msg in check_double_space(text_lines, True))
 	elif path.suffix == ".md":
+		if not args.no_double_blank:
+			# The target of `check_trailing_blank`'s deferral. Without it a Markdown file
+			# ending in two blank lines is reported by neither check and passes clean.
+			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
 		if not _is_tracked_file(path):
 			# Untracked files are not subject to the absolute-path rule
 			pass

@@ -15,7 +15,7 @@ No file is written and no process is started, which is what keeps these fast eno
 to run on every edit.
 """
 
-import unittest
+import argparse,tempfile,unittest
 from pathlib import Path
 from tools.xlint import xlint
 
@@ -213,6 +213,58 @@ class TestTrailingBlankLine(unittest.TestCase):
 		lines = ["import os\n", "\n"]
 		self.assertEqual(xlint.check_final_newline(lines), [])
 		self.assertEqual(messages(xlint.check_trailing_blank(["import os", ""])), ["trailing blank line at end of file"])
+
+def _every_check_on():
+	"""The CLI's default state, as `check_file` sees it.
+
+	Named explicitly rather than read off the parser, so that adding a flag without
+	deciding what Markdown does with it fails here instead of passing quietly.
+	"""
+	flags = [
+		"no_double_blank", "no_space_indent", "no_trailing", "no_def_one_line",
+		"no_def_comment", "no_final_newline", "no_imports", "no_double_space",
+		"no_absolute_paths", "no_js_double_blank", "no_js_space_indent",
+		"no_js_trailing", "no_js_final_newline",
+	]
+	return argparse.Namespace(**{flag: False for flag in flags})
+
+class TestBlankLinesAtEndOfFile(unittest.TestCase):
+	"""What a file ends with is checked the same way whatever language it is in, per 4JMY5S0.
+
+	`check_trailing_blank` hands a pair of trailing blank lines to the double-blank
+	check on purpose, so one file yields one finding rather than two. The Markdown
+	branch of `check_file` never made that call, so a Markdown file ending in two
+	blank lines was reported by neither: the warning vanished the moment a second
+	blank line was added, while the same file in Python or JavaScript was reported.
+
+	These drive `check_file` rather than the check functions, because every check
+	function was individually correct and the defect was in which ones a Markdown
+	file is routed to. A test of `check_double_blank` alone passes either way.
+	"""
+
+	def _messages(self, text, suffix=".md"):
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / ("sample" + suffix)
+			path.write_text(text, encoding="utf-8")
+			return messages(xlint.check_file(path, _every_check_on()))
+
+	def test_a_single_trailing_newline_is_clean(self):
+		self.assertEqual(self._messages("content\n"), [])
+
+	def test_one_trailing_blank_line_is_reported(self):
+		self.assertEqual(self._messages("content\n\n"), ["trailing blank line at end of file"])
+
+	def test_two_trailing_blank_lines_are_reported(self):
+		self.assertEqual(self._messages("content\n\n\n"), ["double blank line"])
+
+	def test_a_missing_final_newline_is_reported(self):
+		self.assertEqual(self._messages("content"), ["missing final newline"])
+
+	def test_two_trailing_blank_lines_are_reported_in_every_language(self):
+		# The rule is one rule. Markdown agreeing with Python and JS is the whole of it.
+		for suffix in (".md", ".py", ".js"):
+			with self.subTest(suffix=suffix):
+				self.assertEqual(self._messages("content\n\n\n", suffix), ["double blank line"])
 
 class TestMarkdownFences(unittest.TestCase):
 	"""A fence is a fence wherever it sits, per QN1N82Y.
