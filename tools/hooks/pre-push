@@ -56,8 +56,24 @@ while read local_ref local_sha remote_ref remote_sha; do
 			exit 1
 		fi
 
-		# Extract the ref
+		# Extract the ref (first 7 alphanumeric chars before space)
 		ref=$(echo "$subject" | sed -E 's/^([A-Z0-9]{7}) .*/\1/')
+
+		# Rule: ref must be followed immediately by a space (not colon or other char)
+		char_after_ref=$(echo "$subject" | cut -c8)
+		if [ "$char_after_ref" != " " ]; then
+			echo "ERROR: Commit $commit: ticket ref must be followed immediately by a space"
+			echo "Subject: $subject"
+			exit 1
+		fi
+
+		# Rule: only one ref allowed per commit subject
+		rest_of_subject=$(echo "$subject" | cut -c9-)
+		if echo "$rest_of_subject" | grep -qE '[A-Z0-9]{7}'; then
+			echo "ERROR: Commit $commit: commit subject must contain only one ticket ref"
+			echo "Subject: $subject"
+			exit 1
+		fi
 
 		# Validate the ref against the epiq board
 		if [ -n "$validate_script" ] && [ -f "$validate_script" ]; then
