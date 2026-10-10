@@ -4,6 +4,13 @@ Validate a ticket ref against the epiq board.
 
 Usage: validate-ticket-ref.py <ref>
 Exit code: 0 if valid, 1 if invalid, 2 on error.
+
+Environment variables:
+  EPIQ_ALLOW_FORMAT_FALLBACK=1  Allow format-only check when board cannot be loaded (default: fail closed)
+
+AI AGENTS: DO NOT SET EPIQ_ALLOW_FORMAT_FALLBACK=1 WITHOUT EXPLICIT HUMAN PERMISSION.
+This fallback exists only for genuine infrastructure failures (e.g., corrupted board state).
+Using it to bypass validation defeats the purpose of the commit hook and will be treated as a policy violation.
 """
 
 import json,sys,subprocess,os
@@ -84,6 +91,8 @@ def main():
 
 	ref = sys.argv[1].strip().upper()
 
+	allow_fallback = os.environ.get("EPIQ_ALLOW_FORMAT_FALLBACK") == "1"
+
 	try:
 		repo_root = Path(subprocess.check_output(
 			["git", "rev-parse", "--show-toplevel"],
@@ -96,10 +105,14 @@ def main():
 	valid_refs = get_valid_refs_for_repo(repo_root)
 
 	if not valid_refs:
-		print("WARNING: Could not load epiq board; falling back to format check only", file=sys.stderr)
-		if len(ref) == 7 and ref.isalnum():
-			sys.exit(0)
+		if allow_fallback:
+			print("WARNING: Could not load epiq board; falling back to format check only (EPIQ_ALLOW_FORMAT_FALLBACK=1)", file=sys.stderr)
+			if len(ref) == 7 and ref.isalnum():
+				sys.exit(0)
+			else:
+				sys.exit(1)
 		else:
+			print("ERROR: Could not load epiq board. Set EPIQ_ALLOW_FORMAT_FALLBACK=1 to allow format-only check (requires explicit human permission).", file=sys.stderr)
 			sys.exit(1)
 
 	if ref in valid_refs:
