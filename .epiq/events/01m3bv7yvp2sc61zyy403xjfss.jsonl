@@ -308,3 +308,5 @@
 {"v":1,"id":["01M4K0JE4QKRYSMSBGX5VFSBVG","01M4K0G94SG096ACD903E0VT8Y"],"move.node":{"id":"01M4K0G94Q4PDT6HGWEP1RVKSE","parent":"01M3BVED413TBXCFAEK193PBS8","rank":"bfffffffffffffffffffffff"}}
 {"v":1,"id":["01M4K0MWN6R5QSWMYKK4W5AJ51","01M4K0JE4QKRYSMSBGX5VFSBVG"],"close.issue":{"id":"01M4K0G94Q4PDT6HGWEP1RVKSE","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffffffffefffff"}}
 {"v":1,"id":["01M4K9Y8SVGWDYKJTVMNB1Q9QM","01M4K0MWN6R5QSWMYKK4W5AJ51"],"close.issue":{"id":"01M4GGDDK6AG155PQQDPTT2SPD","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"fffffffffffffffffff7ffff"}}
+{"v":1,"id":["01M4KAJP76DHVJDCPKETMMQ23G","01M4K9Y8SVGWDYKJTVMNB1Q9QM"],"add.issue":{"id":"01M4KAJP75NXP0H60EZ6G0M4XX","parent":"01M3BVED413TBXCFAEK193PBS7","name":"xhttp: fixed almost all of the remaining websocket issues","rank":"7fffffffffffffffffffffff"}}
+{"v":1,"id":["01M4KAJP77D62HK8WKX3X72M6B","01M4KAJP76DHVJDCPKETMMQ23G"],"edit.description":{"id":"01M4KAJP75NXP0H60EZ6G0M4XX","md":"Fixes for the remaining websocket issues in xhttp. Changes span request.py, response.py, websocket.py, and test files."}}
