@@ -11,13 +11,32 @@ commit_msg=$(cat "$commit_msg_file")
 # Get the first line (subject)
 subject=$(echo "$commit_msg" | head -n1)
 
-# Extract the ref (first 7 alphanumeric chars before space)
-ref=$(echo "$subject" | sed -E 's/^([A-Z0-9]{7}) .*/\1/')
-
-# Check if subject matches the pattern: 7 alphanumeric chars + space
+# Check if subject matches the pattern: 7 alphanumeric chars + space (no colon or other chars between)
 if ! echo "$subject" | grep -qE '^[A-Z0-9]{7} '; then
 	echo "ERROR: Commit subject must start with a valid ticket ref (7 alphanumeric chars + space)"
 	echo "Example: E98CRYM Fix the bug"
+	echo "Your subject: $subject"
+	exit 1
+fi
+
+# Extract the ref (first 7 alphanumeric chars before space)
+ref=$(echo "$subject" | sed -E 's/^([A-Z0-9]{7}) .*/\1/')
+
+# Rule: ref must be followed immediately by a space (not colon or other char)
+# Check the character at position 8 (0-indexed: 7) is a space
+char_after_ref=$(echo "$subject" | cut -c8)
+if [ "$char_after_ref" != " " ]; then
+	echo "ERROR: Ticket ref must be followed immediately by a space"
+	echo "Example: E98CRYM Fix the bug"
+	echo "Your subject: $subject"
+	exit 1
+fi
+
+# Rule: only one ref allowed per commit subject
+# Check for additional ref-like patterns after the first ref + space
+rest_of_subject=$(echo "$subject" | cut -c9-)
+if echo "$rest_of_subject" | grep -qE '[A-Z0-9]{7}'; then
+	echo "ERROR: Commit subject must contain only one ticket ref"
 	echo "Your subject: $subject"
 	exit 1
 fi
