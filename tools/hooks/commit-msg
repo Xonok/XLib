@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# Commit message hook: reject commits without valid ticket refs.
+# The commit subject must start with a 7-character alphanumeric ticket ref followed by a space.
+# Example: ABC1234 Fix the bug
+
+commit_msg_file="$1"
+commit_msg=$(cat "$commit_msg_file")
+
+# Get the first line (subject)
+subject=$(echo "$commit_msg" | head -n1)
+
+# Check if subject matches the pattern: 7 alphanumeric chars + space
+if ! echo "$subject" | grep -qE '^[A-Z0-9]{7} '; then
+	echo "ERROR: Commit subject must start with a valid ticket ref (7 alphanumeric chars + space)"
+	echo "Example: ABC1234 Fix the bug"
+	echo "Your subject: $subject"
+	exit 1
+fi
+
+exit 0
