@@ -223,7 +223,7 @@ class WrapHandlerTest(unittest.TestCase):
 		a,b = socket.socketpair()
 		b.settimeout(2)
 		try:
-			self._send_request(b)  # send on b, wrap_handler reads from a
+			self._send_request(b) # send on b, wrap_handler reads from a
 			xhttp.wrap_handler(
 				lambda req,*a: (_ for _ in ()).throw(RuntimeError("boom")),
 				(),None,a,("1.2.3.4",9),

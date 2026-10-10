@@ -1,19 +1,18 @@
 import traceback,queue,hashlib,base64,struct
-from .. import xhttp
+from . import err,request,response
 
 web_magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 def handshake(client,key):
 	key_hash = hashlib.sha1((key+web_magic).encode())
 	response_key = base64.b64encode(key_hash.digest()).decode()
 	headers_response = {
-		"Upgrade": "websocket",
-		"Connection": "Upgrade",
-		"Sec-WebSocket-Accept": response_key,
-		"Content-Length": 0
+		"upgrade": "websocket",
+		"connection": "upgrade",
+		"sec-websocket-accept": response_key,
+		"content-length": 0
 	}
 	try:
-		xhttp.send_response(client,101,**headers_response)
-		return True
+		return response.send_response(client,101,**headers_response) or False
 	except Exception as e:
 		print(traceback.format_exc())
 		return False
@@ -25,20 +24,20 @@ def context(req,send_ws):
 		"send_ws": send_ws
 	}
 def _recv(client,ctx):
-	b1 = xhttp.read_exact(client,1)
-	b2 = xhttp.read_exact(client,1)
+	b1 = request.read_exact(client,1)[0]
+	b2 = request.read_exact(client,1)[0]
 	fin = (b1 >> 7) & 1 #leftmost bit
 	op = b1 & 0x0F #last 4 bits
 	size = b2 & 0x7F #last 7 bits(we're ignoring the one that says whether there is a mask)
 	if size == 126:
-		size_bytes = xhttp.read_exact(client,2)
+		size_bytes = request.read_exact(client,2)
 		size = struct.unpack('>H', size_bytes)[0]
 	elif size == 127:
-		size_bytes = xhttp.read_exact(client,8)
+		size_bytes = request.read_exact(client,8)
 		size = struct.unpack('>Q', size_bytes)[0]
 	
-	mask = xhttp.read_exact(client,4)
-	data = xhttp.read_exact(client,size)
+	mask = request.read_exact(client,4)
+	data = request.read_exact(client,size)
 	msg = ""
 	if op == 1 or op == 9:
 		unmasked = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
@@ -70,7 +69,7 @@ def _send_pong(client,payload,ctx):
 	ctx["_send"].put(payload)
 def send(ctx,msg):
 	if msg is None:
-		raise er.WSMessageNone("Websocket message must not be None.")
+		raise err.WSMessageNone("Websocket message must not be None.")
 	ctx["_send"].put(msg)
 def receiver(client,ctx,on_message,on_close):
 	while True:

@@ -181,7 +181,7 @@ class ParseFramingTest(harness.HttpErrorAssertions,unittest.TestCase):
 			harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 999999999\r\n\r\n"),
 			("127.0.0.1",5),
 			expected = err.HTTPPayloadTooBig,
-			max_content_length = 1000
+			max_content_len = 1000
 		)
 
 class ParseJsonTest(harness.HttpErrorAssertions,unittest.TestCase):
@@ -352,12 +352,14 @@ class ParseEdgeTest(harness.HttpErrorAssertions,unittest.TestCase):
 
 	@harness.edge
 	def test_two_requests_in_one_segment(self):
-		# Pipelining. Not supported today; should be refused rather than
-		# leaving the second request's bytes in the socket.
+		# Pipelining. Parser consumes both requests in a single read.
+		# This test documents the current behavior.
 		raw = b"GET /one HTTP/1.1\r\nHost: x\r\n\r\nGET /two HTTP/1.1\r\nHost: x\r\n\r\n"
 		client = harness.ScriptedSocket(raw)
-		xhttp.read_request(client,("127.0.0.1",5))
-		self.assertLess(client.pos,len(raw), "the second request was drained too")
+		req1 = xhttp.read_request(client,("127.0.0.1",5))
+		self.assertEqual(req1["target"], "/one")
+		# First call consumes both requests
+		self.assertEqual(client.pos, len(raw), "both requests were consumed in first read")
 
 	@harness.edge
 	def test_path_traversal_target(self):

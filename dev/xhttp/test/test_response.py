@@ -22,6 +22,7 @@ missing Content-Length on a bodyless response.
 import unittest,harness
 from xhttp import xhttp
 from xhttp._ import err
+from xhttp._.response import http_responses
 
 class ResponseCoreTest(unittest.TestCase):
 	"""What every response has to get right."""
@@ -324,7 +325,6 @@ class ResponseEdgeTest(harness.HttpErrorAssertions,unittest.TestCase):
 		except Exception as e:
 			self.fail("send_response_full raised %s: %s" % (type(e).__name__,e))
 
-
 	@harness.edge
 	def test_header_value_with_newline(self):
 		# Header injection. A value carrying CRLF would forge extra headers, so
@@ -347,7 +347,7 @@ class ResponseEdgeTest(harness.HttpErrorAssertions,unittest.TestCase):
 		# 418 exists in HTTPStatus and has a phrase; make sure the common ones
 		# really do resolve rather than relying on the dict being complete.
 		for code in (200,404,500):
-			self.assertIn(code,xhttp.http_responses)
+			self.assertIn(code,http_responses)
 
 class ResponseDeadPeerTest(unittest.TestCase):
 	"""

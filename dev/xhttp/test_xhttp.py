@@ -1,7 +1,8 @@
 import sys,os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add dev/ to sys.path so xhttp is importable as a package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from xhttp import read_request
-from _ import err
+from xhttp._ import err
 HTTPHeaderInvalid = err.HTTPHeaderInvalid
 HTTPHeaderDuplicate = err.HTTPHeaderDuplicate
 HTTPChunkedEncoding = err.HTTPChunkedEncoding

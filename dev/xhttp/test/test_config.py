@@ -10,13 +10,8 @@ from xhttp import xhttp
 class ConfigValidTest(unittest.TestCase):
 	"""config_valid: validates file-serving config dictionary."""
 
-	@unittest.expectedFailure
 	def test_valid_config_returns_true(self):
-		"""A properly structured config returns (True, None).
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["folder"]
-		instead of v["folder"] (the per-entry value). Bug in xhttp.py:314-319.
-		"""
+		"""A properly structured config returns (True, None)."""
 		config = {
 			".html": {"folder": "www", "mime": "text/html", "compress": True},
 			".css": {"folder": "www", "mime": "text/css", "compress": True},
@@ -61,37 +56,22 @@ class ConfigValidTest(unittest.TestCase):
 		self.assertFalse(valid)
 		self.assertEqual(err, "Each config entry must contain these keys: folder, mime, compress")
 
-	@unittest.expectedFailure
 	def test_folder_must_be_string(self):
-		"""'folder' value must be a string.
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["folder"]
-		instead of v["folder"]. Bug in xhttp.py:314.
-		"""
+		"""'folder' value must be a string."""
 		config = {".html": {"folder": 123, "mime": "text/html", "compress": False}}
 		valid, err = xhttp.config_valid(config)
 		self.assertFalse(valid)
 		self.assertEqual(err, "Key 'folder' must be a string.")
 
-	@unittest.expectedFailure
 	def test_mime_must_be_string(self):
-		"""'mime' value must be a string.
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["mime"]
-		instead of v["mime"]. Bug in xhttp.py:316.
-		"""
+		"""'mime' value must be a string."""
 		config = {".html": {"folder": "www", "mime": 123, "compress": False}}
 		valid, err = xhttp.config_valid(config)
 		self.assertFalse(valid)
 		self.assertEqual(err, "Key 'mime' must be a string.")
 
-	@unittest.expectedFailure
 	def test_compress_must_be_bool(self):
-		"""'compress' value must be a boolean.
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["compress"]
-		instead of v["compress"]. Bug in xhttp.py:318.
-		"""
+		"""'compress' value must be a boolean."""
 		config = {".html": {"folder": "www", "mime": "text/html", "compress": "yes"}}
 		valid, err = xhttp.config_valid(config)
 		self.assertFalse(valid)
@@ -104,25 +84,15 @@ class ConfigValidTest(unittest.TestCase):
 		self.assertTrue(valid)
 		self.assertIsNone(err)
 
-	@unittest.expectedFailure
 	def test_folder_can_be_empty_string(self):
-		"""'folder' can be empty string (means current directory).
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["folder"]
-		instead of v["folder"]. Bug in xhttp.py:314.
-		"""
+		"""'folder' can be empty string (means current directory)."""
 		config = {".html": {"folder": "", "mime": "text/html", "compress": False}}
 		valid, err = xhttp.config_valid(config)
 		self.assertTrue(valid)
 		self.assertIsNone(err)
 
-	@unittest.expectedFailure
 	def test_compress_true_and_false_both_valid(self):
-		"""Both True and False are valid for compress.
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["compress"]
-		instead of v["compress"]. Bug in xhttp.py:318.
-		"""
+		"""Both True and False are valid for compress."""
 		for val in [True, False]:
 			config = {".html": {"folder": "www", "mime": "text/html", "compress": val}}
 			valid, err = xhttp.config_valid(config)
@@ -136,13 +106,8 @@ class ConfigValidEdgeTest(unittest.TestCase):
 	"""
 
 	@harness.edge
-	@unittest.expectedFailure
 	def test_extra_keys_allowed(self):
-		"""Extra keys in config entry are allowed (not rejected).
-
-		EXPECTED FAILURE: config_valid has a bug - it checks config["folder"]
-		instead of v["folder"]. Bug in xhttp.py:314.
-		"""
+		"""Extra keys in config entry are allowed (not rejected)."""
 		config = {
 			".html": {
 				"folder": "www",

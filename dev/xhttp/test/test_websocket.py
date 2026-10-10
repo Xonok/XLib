@@ -19,15 +19,10 @@ from xhttp._ import websocket,err
 class WebSocketHandshakeTest(unittest.TestCase):
 	"""The 101 handshake: key hashing and response emission."""
 
-	@unittest.expectedFailure
 	def test_handshake_computes_correct_accept_key(self):
 		"""
 		The accept key is SHA1(key + magic) base64-encoded.
 		This is the RFC 6455 algorithm and must match exactly.
-
-		EXPECTED FAILURE: websocket.py uses capitalized header names
-		(Upgrade, Connection, Sec-WebSocket-Accept, Content-Length)
-		but xhttp.send_response rejects capitalized headers.
 		"""
 		key = "dGhlIHNhbXBsZSBub25jZQ=="
 		expected = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
@@ -37,14 +32,10 @@ class WebSocketHandshakeTest(unittest.TestCase):
 		head = bytes(s.written).partition(b"\r\n\r\n")[0]
 		self.assertIn(b"sec-websocket-accept: " + expected.encode(), head)
 
-	@unittest.expectedFailure
 	def test_handshake_emits_required_headers(self):
 		"""
 		The 101 response must include Upgrade, Connection, Sec-WebSocket-Accept,
 		and Content-Length: 0.
-
-		EXPECTED FAILURE: websocket.py uses capitalized header names
-		but xhttp.send_response rejects them.
 		"""
 		s = harness.ScriptedSocket(b"")
 		websocket.handshake(s, "dGhlIHNhbXBsZSBub25jZQ==")
@@ -59,7 +50,7 @@ class WebSocketHandshakeTest(unittest.TestCase):
 		"""If the peer vanishes during handshake, return False cleanly."""
 		s = harness.ExplodingSocket(b"", error=ConnectionResetError)
 		result = websocket.handshake(s, "dGhlIHNhbXBsZSBub25jZQ==")
-		self.assertFalse(result)
+		self.assertIs(result, False)
 
 class WebSocketFrameTest(unittest.TestCase):
 	"""Frame parsing and sending: the wire protocol."""
@@ -68,13 +59,12 @@ class WebSocketFrameTest(unittest.TestCase):
 		"""Create a ScriptedSocket pre-loaded with frame data."""
 		return harness.ScriptedSocket(frame_bytes)
 
-	@unittest.expectedFailure
 	def test_recv_text_frame(self):
 		"""
 		A text frame (opcode 0x1) with FIN=1, no mask, payload "HELLO".
 		Frame: 0x81 0x05 HELLO
 
-		EXPECTED FAILURE: xhttp.read_exact returns bytearray but websocket._recv
+		BUG: xhttp.read_exact returns bytearray but websocket._recv
 		treats it as bytes/int (does b1 >> 7). This is a bug in websocket.py.
 		"""
 		frame = b"\x81\x05HELLO"
@@ -84,13 +74,12 @@ class WebSocketFrameTest(unittest.TestCase):
 		self.assertEqual(msg, "HELLO")
 		self.assertEqual(op, 1)
 
-	@unittest.expectedFailure
 	def test_recv_text_frame_with_mask(self):
 		"""
 		A masked text frame. Client-to-server frames are always masked.
 		Payload "HELLO" masked with key 0x12 0x34 0x56 0x78.
 
-		EXPECTED FAILURE: xhttp.read_exact returns bytearray but websocket._recv
+		BUG: xhttp.read_exact returns bytearray but websocket._recv
 		treats it as bytes/int.
 		"""
 		mask = b"\x12\x34\x56\x78"
@@ -103,11 +92,10 @@ class WebSocketFrameTest(unittest.TestCase):
 		self.assertEqual(msg, "HELLO")
 		self.assertEqual(op, 1)
 
-	@unittest.expectedFailure
 	def test_recv_extended_length_16bit(self):
 		"""Payload length 126-65535 uses 16-bit extended length.
 
-		EXPECTED FAILURE: xhttp.read_exact returns bytearray but websocket._recv
+		BUG: xhttp.read_exact returns bytearray but websocket._recv
 		treats it as bytes/int.
 		"""
 		payload = b"x" * 300
@@ -120,11 +108,10 @@ class WebSocketFrameTest(unittest.TestCase):
 		self.assertEqual(msg, "x" * 300)
 		self.assertEqual(op, 1)
 
-	@unittest.expectedFailure
 	def test_recv_close_frame(self):
 		"""Close frame (opcode 0x8) signals connection end.
 
-		EXPECTED FAILURE: xhttp.read_exact returns bytearray but websocket._recv
+		BUG: xhttp.read_exact returns bytearray but websocket._recv
 		treats it as bytes/int.
 		"""
 		frame = b"\x88\x00"
@@ -133,11 +120,10 @@ class WebSocketFrameTest(unittest.TestCase):
 		msg, op = websocket._recv(client, ctx)
 		self.assertEqual(op, 8)
 
-	@unittest.expectedFailure
 	def test_recv_ping_frame_triggers_pong(self):
 		"""Ping frame (opcode 0x9) should queue a pong response.
 
-		EXPECTED FAILURE: xhttp.read_exact returns bytearray but websocket._recv
+		BUG: xhttp.read_exact returns bytearray but websocket._recv
 		treats it as bytes/int.
 		"""
 		payload = b"ping-data"
@@ -201,13 +187,12 @@ class WebSocketContextTest(unittest.TestCase):
 		self.assertIs(ctx["req"], req)
 		self.assertIsInstance(ctx["_send"], queue.Queue)
 
-	@unittest.expectedFailure
 	def test_send_ws_closure_captures_client(self):
 		"""
 		serve_websocket creates send_ws that captures the client socket.
 		This is the integration point between xhttp and websocket.
 
-		EXPECTED FAILURE: serve_websocket calls websocket.send(client, msg)
+		BUG: serve_websocket calls websocket.send(client, msg)
 		but websocket.send expects a context dict, not a socket. This is a
 		bug in xhttp.py:292. The closure should call websocket._send(client, msg).
 		"""
@@ -245,11 +230,10 @@ class WebSocketSenderTest(unittest.TestCase):
 
 		websocket.sender(client, ctx)
 
-	@unittest.expectedFailure
 	def test_sender_handles_dead_peer(self):
 		"""If the peer vanishes, sender should not crash the process.
 
-		EXPECTED FAILURE: sender doesn't catch peer errors (BrokenPipeError,
+		BUG: sender doesn't catch peer errors (BrokenPipeError,
 		ConnectionResetError, ConnectionAbortedError). This is a bug in
 		websocket.py sender function.
 		"""
@@ -267,11 +251,10 @@ class WebSocketSenderTest(unittest.TestCase):
 class WebSocketReceiverTest(unittest.TestCase):
 	"""The receiver thread: reads frames, calls callbacks."""
 
-	@unittest.expectedFailure
 	def test_receiver_calls_on_message_for_text_frame(self):
 		"""Text frame triggers on_message callback.
 
-		EXPECTED FAILURE: receiver calls _recv which has the read_exact bytearray bug.
+		BUG: receiver calls _recv which has the read_exact bytearray bug.
 		"""
 		frame = b"\x81\x05HELLO"
 		client = harness.ScriptedSocket(frame + b"\x88\x00")
@@ -357,13 +340,8 @@ class WebSocketIntegrationTest(unittest.TestCase):
 			b"\r\n"
 		)
 
-	@unittest.expectedFailure
 	def test_serve_websocket_accepts_valid_upgrade(self):
-		"""Valid upgrade request completes handshake and starts threads.
-
-		EXPECTED FAILURE: serve_websocket calls websocket.handshake which
-		uses capitalized headers that xhttp.send_response rejects.
-		"""
+		"""Valid upgrade request completes handshake and starts threads."""
 		req = xhttp.read_request(
 			harness.ScriptedSocket(self._websocket_upgrade_request()),
 			("127.0.0.1", 5000)
@@ -435,7 +413,6 @@ class WebSocketIntegrationTest(unittest.TestCase):
 		ctx = xhttp.serve_websocket(req)
 		self.assertIsNone(ctx)
 
-	@unittest.expectedFailure
 	def test_serve_websocket_preserves_leftover_bytes(self):
 		"""
 		First frame bytes arriving with the upgrade request must be preserved.
@@ -443,7 +420,7 @@ class WebSocketIntegrationTest(unittest.TestCase):
 		This is the critical path from decision 6 in SPEC.md: the websocket
 		frame that shares a TCP segment with the HTTP headers must not be lost.
 
-		EXPECTED FAILURE: serve_websocket calls websocket.handshake which
+		BUG: serve_websocket calls websocket.handshake which
 		uses capitalized headers that xhttp.send_response rejects.
 		"""
 		first_frame = b"\x81\x05HELLO"
@@ -481,23 +458,17 @@ class WebSocketSendTest(unittest.TestCase):
 		self.assertFalse(send_queue.empty())
 		self.assertEqual(send_queue.get(), "hello")
 
-	@unittest.expectedFailure
 	def test_send_rejects_none(self):
-		"""send(None) raises WSMessageNone.
-
-		EXPECTED FAILURE: websocket.py has a typo - uses `er.WSMessageNone`
-		instead of `err.WSMessageNone` (line 73). `er` is not defined.
-		"""
+		"""send(None) raises WSMessageNone."""
 		ctx = {"data": {}, "_send": queue.Queue(), "req": {}, "send_ws": None}
 		with self.assertRaises(err.WSMessageNone):
 			websocket.send(ctx, None)
 
-	@unittest.expectedFailure
 	def test_send_ws_integration(self):
 		"""
 		serve_websocket's send_ws closure correctly forwards to websocket.send.
 
-		EXPECTED FAILURE: serve_websocket calls websocket.send(client, msg)
+		BUG: serve_websocket calls websocket.send(client, msg)
 		but websocket.send expects a context dict, not a socket. This is a
 		bug in xhttp.py:292.
 		"""
