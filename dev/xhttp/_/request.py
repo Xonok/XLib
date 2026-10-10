@@ -56,7 +56,7 @@ def read_request(client,client_addr,max_header_len=8192,max_content_len=100*_MB,
 	if cl < 0:
 		raise err.HTTPNegativeContentLength("Content length must never be negative.")
 	payload = buffer[header_end_idx:]
-	leftover = b""
+	leftover = bytearray()
 	if len(payload) > cl:
 		leftover = payload[cl:]
 		payload = payload[:cl]
@@ -94,8 +94,12 @@ def read_str(client,client_addr,max_header_len=8192,max_content_len=100*_MB):
 	except UnicodeDecodeError as e:
 		raise err.StrDecodeError(traceback.format_exc())
 	return result
-def read_exact(client,length):
+def read_exact(client,length,leftover=bytearray()):
 	buffer = bytearray()
+	while len(buffer) < length and len(leftover) > 0:
+		chunk = leftover[:min(length-len(buffer),len(leftover))]
+		del leftover[:len(chunk)]
+		buffer.extend(chunk)
 	while len(buffer) < length:
 		chunk = client.recv(length-len(buffer))
 		if not chunk:

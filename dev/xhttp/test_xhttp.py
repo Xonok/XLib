@@ -1,8 +1,17 @@
 import sys,os
-# Add dev/ to sys.path so xhttp is importable as a package
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from xhttp import read_request
+# Add dev/ to sys.path so xhttp is importable as a package (namespace package)
+# Must match how test/harness.py does it: add DEV_DIR, then import from xhttp
+# Remove the script directory (dev/xhttp/) from sys.path to avoid namespace package conflict
+HERE = os.path.dirname(os.path.abspath(__file__))
+DEV_DIR = os.path.dirname(HERE)
+# Remove script directory if present (it's added as '' or absolute path by Python)
+sys.path = [p for p in sys.path if os.path.abspath(p) != HERE]
+if DEV_DIR not in sys.path:
+	sys.path.insert(0, DEV_DIR)
+
+from xhttp import xhttp
 from xhttp._ import err
+read_request = xhttp.read_request
 HTTPHeaderInvalid = err.HTTPHeaderInvalid
 HTTPHeaderDuplicate = err.HTTPHeaderDuplicate
 HTTPChunkedEncoding = err.HTTPChunkedEncoding
@@ -46,7 +55,7 @@ def test_send_file_exists():
 	"""Test that send_file function exists."""
 	print("Testing send_file (file response function)...")
 	try:
-		from xhttp import send_file
+		_ = xhttp.send_file
 		print("  send_file exists - checking if callable...")
 		return "exists"
 	except AttributeError:
@@ -60,7 +69,7 @@ def test_serve_files_exists():
 	"""Test that serve_files callback handler exists."""
 	print("Testing serve_files (file server callback)...")
 	try:
-		from xhttp import serve_files
+		_ = xhttp.serve_files
 		print("  serve_files exists - checking if callable...")
 		return "exists"
 	except AttributeError:
@@ -74,7 +83,7 @@ def test_send_not_found_exists():
 	"""Test that send_not_found function exists."""
 	print("Testing send_not_found (404 fallback function)...")
 	try:
-		from xhttp import send_not_found
+		_ = xhttp.send_not_found
 		print("  send_not_found exists - checking if callable...")
 		return "exists"
 	except AttributeError:

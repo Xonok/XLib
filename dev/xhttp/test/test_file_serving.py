@@ -89,10 +89,6 @@ class SendFileTest(unittest.TestCase):
 
 		SPEC.md T7: traversal guard must be inside xhttp, not left to callers.
 		The current implementation checks for ".." in path tokens.
-
-		BUG: send_file looks up config before checking for "..",
-		so unknown extensions (including traversal attempts with unknown ext)
-		cause TypeError on unpacking None.
 		"""
 		# Create a file outside the web root
 		os.mkdir("secret")
@@ -109,11 +105,7 @@ class SendFileTest(unittest.TestCase):
 		self.assertIs(result, False, "Path traversal should be blocked with folder config")
 
 	def test_send_file_unknown_extension(self):
-		"""Unknown extension (not in config) returns False.
-
-		BUG: config.get(ftype) returns None for unknown extensions,
-		causing TypeError when unpacking. Should return False gracefully.
-		"""
+		"""Unknown extension (not in config) returns False."""
 		open("unknown.xyz", "w").write("data")
 		s = harness.ScriptedSocket(b"")
 		result = xhttp.send_file(s, 200, "unknown.xyz", self.CONFIG)

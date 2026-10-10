@@ -67,7 +67,11 @@ def send_redirect(client,code,target,**headers):
 	return send_response(client,code,location=target,**headers)
 def send_file(client,code,path,config,**headers):
 	_,ftype = os.path.splitext(path)
-	folder,mime,compress = config.get(ftype)
+	fconfig = config.get(ftype,config.get("*"))
+	if not fconfig:
+		#Why: config doesn't say to serve this type of file, so don't.
+		return False
+	folder,mime,compress = fconfig
 	path_tokens = [folder] if folder else []
 	path_tokens += path.split("/")
 	path_final = os.path.join(os.getcwd(),*path_tokens)
