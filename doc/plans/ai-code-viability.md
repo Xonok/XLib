@@ -45,7 +45,6 @@ Whether AI-heavy development can be made viable long-term by combining several m
 
 	- Which of the proposed mechanisms from Phase 2 overlap with existing rules?
 
-
 ### Phase 2: Design candidate mechanisms
 
 The previous discussion identified these candidates. Each needs to be concretized into something that can be added to the project's rules or tooling:
@@ -62,7 +61,6 @@ The previous discussion identified these candidates. Each needs to be concretize
 
 	- Is this redundant with existing AGENTS.md project-level docs?
 
-
 **Mechanism B: Structural consistency rules**
 - What: Enforce consistent patterns across modules so that once you learn one module, you can scan others faster.
 - Purpose: Addresses problem #1 (random-access comprehension) by making code predictable.
@@ -72,7 +70,6 @@ The previous discussion identified these candidates. Each needs to be concretize
 	- Which of these are already in AGENTS.md? Which need adding?
 
 	- Should xlint enforce structural consistency, or just guidelines?
-
 
 **Mechanism C: Scenario-oriented tests**
 - What: Tests organized around user-facing scenarios rather than internal function boundaries.
@@ -84,7 +81,6 @@ The previous discussion identified these candidates. Each needs to be concretize
 
 	- Is there a testing framework in use, or is it ad-hoc?
 
-
 **Mechanism D: Design review step**
 - What: Before implementation, produce a brief design doc (module split, key data flows, assumptions). Human reviews the design, not every line of code.
 - Purpose: Addresses problems #3 and #4 by catching design flaws before they become code.
@@ -95,7 +91,6 @@ The previous discussion identified these candidates. Each needs to be concretize
 
 	- How detailed should they be?
 
-
 **Mechanism E: Subtle-behavior annotations**
 - What: Agents annotate (briefly) when code works in a non-obvious way — edge cases, ordering dependencies, coincidental correctness.
 - Purpose: Addresses problems #1 and #4 directly.
@@ -105,7 +100,6 @@ The previous discussion identified these candidates. Each needs to be concretize
 	- Should this be a rule in AGENTS.md or a softer guideline?
 
 	- Are there existing examples of this in the codebase?
-
 
 ### Phase 3: Evaluate and prioritize
 
