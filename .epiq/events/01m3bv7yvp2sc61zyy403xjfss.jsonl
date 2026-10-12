@@ -311,3 +311,9 @@
 {"v":1,"id":["01M4KAJP76DHVJDCPKETMMQ23G","01M4K9Y8SVGWDYKJTVMNB1Q9QM"],"add.issue":{"id":"01M4KAJP75NXP0H60EZ6G0M4XX","parent":"01M3BVED413TBXCFAEK193PBS7","name":"xhttp: fixed almost all of the remaining websocket issues","rank":"7fffffffffffffffffffffff"}}
 {"v":1,"id":["01M4KAJP77D62HK8WKX3X72M6B","01M4KAJP76DHVJDCPKETMMQ23G"],"edit.description":{"id":"01M4KAJP75NXP0H60EZ6G0M4XX","md":"Fixes for the remaining websocket issues in xhttp. Changes span request.py, response.py, websocket.py, and test files."}}
 {"v":1,"id":["01M4KAKVWDA78NHRG2B01J6BE1","01M4KAJP77D62HK8WKX3X72M6B"],"close.issue":{"id":"01M4KAJP75NXP0H60EZ6G0M4XX","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"fffffffffffffffffffbffff"}}
+{"v":1,"id":["01M4PXYNXR2N0K1MHXSYWWE4SV","01M4PTQN1MZG8CJ17V2SEBV02K"],"add.issue":{"id":"01M4PXYNXN6A0XTMW9AW1GTG4A","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Support cursor agents in marduk","rank":"fffffffffffffffffffdffff"}}
+{"v":1,"id":["01M4PXYNXTD6ATS7QPM8XJGFTR","01M4PXYNXR2N0K1MHXSYWWE4SV"],"create.tag":{"id":"01M4PXYNXPF5WFXHJK9AZWPCFA","name":"marduk"}}
+{"v":1,"id":["01M4PXYNXVQZHTQHQ7P5BMGD1D","01M4PXYNXTD6ATS7QPM8XJGFTR"],"add.issue.tag":{"id":"01M4PXYNXN6A0XTMW9AW1GTG4A","tag":"01M4PXYNXPF5WFXHJK9AZWPCFA"}}
+{"v":1,"id":["01M4PXZVF7D5EM8MBYSVS2CJKC","01M4PXYNXVQZHTQHQ7P5BMGD1D"],"add.issue":{"id":"01M4PXZVF62CRRQV3X14P4VD3A","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Consider whether to support cursor agents in skynet","rank":"fffffffffffffffffffeffff"}}
+{"v":1,"id":["01M4PXZVF8C2SZYFQM3B0RGVE2","01M4PXZVF7D5EM8MBYSVS2CJKC"],"create.tag":{"id":"01M4PXZVF6XNCKM9QM315S5Z3X","name":"skynet"}}
+{"v":1,"id":["01M4PXZVF914S0VY95PMN67ZSQ","01M4PXZVF8C2SZYFQM3B0RGVE2"],"add.issue.tag":{"id":"01M4PXZVF62CRRQV3X14P4VD3A","tag":"01M4PXZVF6XNCKM9QM315S5Z3X"}}
