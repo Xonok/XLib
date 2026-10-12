@@ -21,7 +21,8 @@ def read_request(client,client_addr,max_header_len=8192,max_content_len=100*_MB,
 		if not chunk:
 			break
 		buffer.extend(chunk)
-	if not header_end_idx: raise err.HTTPHeaderInvalid("Header invalid.")
+	if not header_end_idx:
+		raise err.HTTPHeaderInvalid("Header invalid.")
 	header_str = buffer[:header_end_idx].decode("iso-8859-1")
 	header_lines = header_str.split("\r\n")
 	req_line = header_lines.pop(0)

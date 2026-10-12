@@ -8,7 +8,7 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 		promise = Future()
 	if new_thread:
 		_thread.start_new_thread(serve_forever,(addr,handler,handler_args,ssl_keys,False,promise))
-		return
+		return promise
 	try:
 		context = None
 		if ssl_keys is not None:
@@ -19,7 +19,7 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 		sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		sock.bind((addr))
 		sock.listen()
-		print("Serving you forever:",addr)
+		print("Serving you forever:",addr,flush=True)
 		promise.set_result(True)
 	except Exception as e:
 		promise.set_exception(e)
@@ -32,13 +32,13 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 			s.settimeout(60)
 			_thread.start_new_thread(wrap_handler,(handler,handler_args,context,s,c))
 		except Exception:
-			print(traceback.format_exc())
+			print(traceback.format_exc(),flush=True)
 			if s and s.fileno() != -1:
 				response.send_response(s,500)
 				s.close()
 def await_startup(promise,timeout=5):
 	promise.result(timeout=timeout)
-def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=120):
+def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=1):
 	buffer = b""
 	try:
 		if ssl_context:
@@ -56,16 +56,16 @@ def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=120)
 	except TimeoutError:
 		pass # idle keep-alive expiry - a normal close, not an error
 	except Exception as e:
+		if type(e) in [ssl.SSLError,ConnectionResetError,ConnectionAbortedError]:
+			return
+		print("Ignoring unhandled exception for the sake of stability.(DumbHTTP)",flush=True)
+		print(traceback.format_exc(),flush=True)
 		try:
 			if client:
 				response.send_response(client,500)
 				client.close()
 		except BrokenPipeError:
 			return
-		if type(e) in [ssl.SSLError,ConnectionResetError,ConnectionAbortedError]:
-			return
-		print("Ignoring unhandled exception for the sake of stability.(DumbHTTP)")
-		print(traceback.format_exc())
 	if client and client.fileno() != -1:
 		client.close()
 #File server callback. Combine with serve_forever and a config to serve files.
@@ -103,9 +103,9 @@ def serve_websocket(req,on_message=None,on_open=None,on_close=None):
 	ctx = websocket.context(req,send_ws)
 	if not websocket.handshake(client,key):
 		on_close(client,ctx)
-		return
+		return False
 	
 	on_open(client,ctx)
-	_thread.start_new_thread(websocket.sender,(client,ctx))
 	_thread.start_new_thread(websocket.receiver,(client,ctx,on_message,on_close))
-	return ctx
+	websocket.sender(client,ctx)
+	return True

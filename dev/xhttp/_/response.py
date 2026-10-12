@@ -71,7 +71,9 @@ def send_file(client,code,path,config,**headers):
 	if not fconfig:
 		#Why: config doesn't say to serve this type of file, so don't.
 		return False
-	folder,mime,compress = fconfig
+	folder = fconfig["folder"]
+	mime = fconfig["mime"]
+	compress = fconfig.get("compress")
 	path_tokens = [folder] if folder else []
 	path_tokens += path.split("/")
 	path_final = os.path.join(os.getcwd(),*path_tokens)

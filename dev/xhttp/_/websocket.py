@@ -14,7 +14,7 @@ def handshake(client,key):
 	try:
 		return response.send_response(client,101,**headers_response) or False
 	except Exception as e:
-		print(traceback.format_exc())
+		print(traceback.format_exc(),flush=True)
 		return False
 def context(req,send_ws):
 	return {
@@ -58,6 +58,8 @@ def _send_pong(client,payload,ctx):
 def send(ctx,msg):
 	if msg is None:
 		raise err.WSMessageNone("Websocket message must not be None.")
+	if type(msg) != str:
+		raise err.WSMessageMustBeString("websocket messages must be strings.")
 	response_bytes = bytearray()
 	response_bytes.extend(map(ord,msg))
 	msg_length = len(response_bytes)
@@ -82,11 +84,11 @@ def receiver(client,ctx,on_message,on_close):
 				continue
 			if op == 9:
 				continue
-			print(op)
+			print(op,flush=True)
 			#if other opcodes show up, print them
 		except Exception:
-			print("Websocket error: ")
-			print(traceback.format_exc())
+			print("Websocket error: ",flush=True)
+			print(traceback.format_exc(),flush=True)
 			on_close(client,ctx)
 			ctx["_send"].put(None)
 			break
@@ -98,7 +100,7 @@ def sender(client,ctx):
 		try:
 			client.sendall(msg)
 		except Exception as e:
+			print(traceback.format_exc(),flush=True)
 			if type(e) in [BrokenPipeError,ConnectionResetError,ConnectionAbortedError]:
-				pass
-			print(traceback.format_exc())
+				break
 			break

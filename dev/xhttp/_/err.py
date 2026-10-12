@@ -18,3 +18,4 @@ class StrDecodeError(HTTPError): pass
 class HTTPCapitalizedHeader(HTTPError): pass
 class HTTPCodeUnknown(HTTPError): pass
 class WSMessageNone(HTTPError): pass
+class WSMessageMustBeString(HTTPError): pass
