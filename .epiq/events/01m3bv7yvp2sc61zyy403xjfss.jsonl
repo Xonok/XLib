@@ -317,3 +317,4 @@
 {"v":1,"id":["01M4PXZVF7D5EM8MBYSVS2CJKC","01M4PXYNXVQZHTQHQ7P5BMGD1D"],"add.issue":{"id":"01M4PXZVF62CRRQV3X14P4VD3A","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Consider whether to support cursor agents in skynet","rank":"fffffffffffffffffffeffff"}}
 {"v":1,"id":["01M4PXZVF8C2SZYFQM3B0RGVE2","01M4PXZVF7D5EM8MBYSVS2CJKC"],"create.tag":{"id":"01M4PXZVF6XNCKM9QM315S5Z3X","name":"skynet"}}
 {"v":1,"id":["01M4PXZVF914S0VY95PMN67ZSQ","01M4PXZVF8C2SZYFQM3B0RGVE2"],"add.issue.tag":{"id":"01M4PXZVF62CRRQV3X14P4VD3A","tag":"01M4PXZVF6XNCKM9QM315S5Z3X"}}
+{"v":1,"id":["01M4V1E4KVAN5K3FHXQDVTTGY6","01M4TVQ7N64ZEAHG61Z1S00SRS"],"add.issue":{"id":"01M4V1E4KTZXV743SYXYHVKGGF","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Fix remaining xhttp issues that interfere with its use in Space-Traveller","rank":"ffffffffffffffffffffbfff"}}
