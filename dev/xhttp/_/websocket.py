@@ -54,7 +54,7 @@ def _send_pong(client,payload,ctx):
 	b2 = len(payload)
 	frame = bytearray([b1, b2])
 	frame.extend(payload)
-	ctx["_send"].put(payload)
+	ctx["_send"].put(frame)
 def send(ctx,msg):
 	if msg is None:
 		raise err.WSMessageNone("Websocket message must not be None.")
@@ -71,13 +71,16 @@ def send(ctx,msg):
 		header = bytearray([0x81, 127]) + struct.pack('>Q', msg_length)
 	response_data = bytearray(header)
 	response_data.extend(response_bytes)
-	ctx["_send"].put(response_bytes)
+	ctx["_send"].put(response_data)
 def receiver(client,ctx,on_message,on_close):
 	while True:
 		try:
 			msg,op = _recv(client,ctx)
 			#op 8 is close socket
-			if op == 8: break
+			if op == 8:
+				ctx["_send"].put(None)
+				on_close(client,ctx)
+				break
 			#op 1 is text frame. Most common for us.
 			if op == 1:
 				on_message(client,ctx,msg)

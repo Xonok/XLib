@@ -100,6 +100,16 @@ class ScriptedSocket:
 		self.send_calls = []
 		self.sendall_calls = []
 		self.closed = False
+		self.timeout = None
+
+	def settimeout(self,timeout):
+		"""
+		A real socket has one, and code under test calls it.
+
+		Recorded rather than ignored, so a test can assert that the timeout the
+		server applies to a request was cleared once the connection was upgraded.
+		"""
+		self.timeout = timeout
 
 	def recv(self,n):
 		if self.drip:

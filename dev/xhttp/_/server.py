@@ -105,7 +105,10 @@ def serve_websocket(req,on_message=None,on_open=None,on_close=None):
 		on_close(client,ctx)
 		return False
 	
+	client.settimeout(None)
 	on_open(client,ctx)
 	_thread.start_new_thread(websocket.receiver,(client,ctx,on_message,on_close))
+	#Blocking call:
 	websocket.sender(client,ctx)
+	#Signal a successful websocket session, so nothing else would be done:
 	return True

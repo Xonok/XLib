@@ -12,7 +12,7 @@ end-to-end. These tests cover:
 - Integration with serve_websocket callback
 """
 
-import unittest,threading,time,queue,harness,sys,io
+import unittest,threading,time,queue,struct,harness,sys,io
 from xhttp import xhttp
 from xhttp._ import websocket,err
 
@@ -110,10 +110,11 @@ class WebSocketFrameTest(unittest.TestCase):
 		"""
 
 	def test_recv_ping_frame_triggers_pong(self):
-		"""Ping frame (opcode 0x9) should queue a pong response.
+		"""Ping frame (opcode 0x9) queues a complete pong frame.
 
-		BUG: xhttp.read_exact returns bytearray but websocket._recv
-		treats it as bytes/int.
+		The queue holds the whole frame - opcode 0x8A, length, payload - because
+		sender writes whatever it gets straight to the socket. A bare payload
+		would reach the peer as bytes with no framing at all.
 		"""
 		payload = b"ping-data"
 		mask = b"\x12\x34\x56\x78"
@@ -125,49 +126,43 @@ class WebSocketFrameTest(unittest.TestCase):
 		msg, op = websocket._recv(client, ctx)
 		self.assertEqual(op, 9)
 		self.assertFalse(send_queue.empty())
-		pong_payload = send_queue.get()
-		self.assertEqual(pong_payload, payload)
+		pong_frame = send_queue.get()
+		self.assertEqual(bytes(pong_frame), b"\x8a\x09ping-data")
 
 	def test_send_text_frame(self):
-		"""Sending a text frame produces correct wire format (queued for sender).
+		"""send() queues a complete text frame for the sender to write.
 
-		BUG: implementation puts only the payload in the queue, not the
-		full WebSocket frame. The queue should contain the full frame
-		(0x81 length payload), but currently only gets the payload bytes.
+		Opcode 0x81, a 7-bit length of 5, then the payload.
 		"""
 		send_queue = queue.Queue()
 		ctx = {"data": {}, "_send": send_queue, "req": {}, "send_ws": None}
 		websocket.send(ctx, "HELLO")
 		self.assertFalse(send_queue.empty())
 		got = send_queue.get()
-		# Implementation bug: returns payload only, not full frame
-		self.assertEqual(got, bytearray(b"HELLO"))
+		self.assertEqual(bytes(got), b"\x81\x05HELLO")
 
 	def test_send_long_text_frame(self):
-		"""Text frame with length 126-65535 uses 16-bit length field.
-
-		BUG: implementation puts only the payload in the queue.
-		"""
+		"""Text frame with length 126-65535 uses 16-bit length field."""
 		payload = "x" * 300
 		send_queue = queue.Queue()
 		ctx = {"data": {}, "_send": send_queue, "req": {}, "send_ws": None}
 		websocket.send(ctx, payload)
 		self.assertFalse(send_queue.empty())
 		got = send_queue.get()
-		self.assertEqual(got, bytearray(payload.encode()))
+		self.assertEqual(bytes(got[:4]), b"\x81\x7e\x01\x2c")
+		self.assertEqual(bytes(got[4:]), payload.encode())
 
 	def test_send_very_long_text_frame(self):
-		"""Text frame with length >65535 uses 64-bit length field.
-
-		BUG: implementation puts only the payload in the queue.
-		"""
+		"""Text frame with length >65535 uses 64-bit length field."""
 		payload = "x" * 70000
 		send_queue = queue.Queue()
 		ctx = {"data": {}, "_send": send_queue, "req": {}, "send_ws": None}
 		websocket.send(ctx, payload)
 		self.assertFalse(send_queue.empty())
 		got = send_queue.get()
-		self.assertEqual(got, bytearray(payload.encode()))
+		self.assertEqual(bytes(got[:2]), b"\x81\x7f")
+		self.assertEqual(struct.unpack(">Q",bytes(got[2:10]))[0], 70000)
+		self.assertEqual(bytes(got[10:]), payload.encode())
 
 class WebSocketContextTest(unittest.TestCase):
 	"""Context creation and the send_ws closure."""
@@ -276,11 +271,13 @@ class WebSocketReceiverTest(unittest.TestCase):
 
 		self.assertEqual(messages, ["HELLO"])
 
-	def test_receiver_exits_on_close_frame(self):
-		"""Close frame (opcode 8) breaks the receive loop.
+	def test_receiver_calls_on_close_on_close_frame(self):
+		"""Close frame (opcode 8) releases the consumer and the sender.
 
-		Note: receiver doesn't call on_close on close frame (implementation bug),
-		it just exits the loop. We verify the receiver returns without hanging.
+		Both matter. A consumer that releases per-connection state in on_close
+		leaks it if the callback is skipped, and the sender stays blocked on the
+		queue - so serve_websocket never returns and the socket stays open -
+		unless the None sentinel is queued to release it.
 		"""
 		# Properly masked close frame per RFC 6455 (client->server MUST mask)
 		mask = b"\x12\x34\x56\x78"
@@ -291,14 +288,15 @@ class WebSocketReceiverTest(unittest.TestCase):
 			pass
 		def on_close(c, ctx):
 			closed.append(True)
-		ctx = {"data": {}, "_send": queue.Queue(), "req": {"leftover": bytearray()}, "send_ws": None}
+		send_queue = queue.Queue()
+		ctx = {"data": {}, "_send": send_queue, "req": {"leftover": bytearray()}, "send_ws": None}
 
-		# Should return without hanging (receiver exits on close frame)
+		# Returns rather than hanging, because the sentinel is queued.
 		websocket.receiver(client, ctx, on_message, on_close)
 
-		# on_close is NOT called on close frame (implementation bug)
-		# self.assertTrue(closed) # This would fail
-		# Test passes if receiver returns without hanging
+		self.assertEqual(closed,[True])
+		self.assertFalse(send_queue.empty())
+		self.assertIsNone(send_queue.get())
 
 	def test_receiver_calls_on_close_on_error(self):
 		"""Any read error triggers on_close and puts None in send queue.
@@ -370,9 +368,8 @@ class WebSocketIntegrationTest(unittest.TestCase):
 
 	def test_serve_websocket_accepts_valid_upgrade(self):
 		"""Valid upgrade request completes handshake and starts threads."""
-		# Include a close frame in the script so it ends up in leftover.
-		# Note: receiver doesn't call on_close on close frame (implementation bug),
-		# so we only verify handshake and thread start.
+		# Include a close frame in the script so the receiver finds it in
+		# leftover, releases the sender, and serve_websocket returns.
 		mask = b"\x12\x34\x56\x78"
 		close_frame = b"\x88\x80" + mask # FIN=1, opcode=8, MASK=1, len=0
 		raw = self._websocket_upgrade_request() + close_frame
@@ -380,19 +377,21 @@ class WebSocketIntegrationTest(unittest.TestCase):
 		req = xhttp.read_request(client, ("127.0.0.1", 5000))
 		
 		opened = []
+		closed = []
 		def on_open(c, ctx):
 			opened.append(True)
 		def on_message(c, ctx, msg):
 			pass
+		def on_close(c, ctx):
+			closed.append(True)
 
-		ctx = xhttp.serve_websocket(req, on_message=on_message, on_open=on_open)
+		result = xhttp.serve_websocket(req, on_message=on_message, on_open=on_open, on_close=on_close)
 
-		self.assertIsNotNone(ctx)
+		self.assertIs(result,True)
 		self.assertTrue(opened)
-		# Receiver will read close frame from leftover and exit silently.
-		# Sender will block on queue.get() - this is a known implementation gap.
-		# We don't wait for shutdown to avoid hanging; the daemon thread will
-		# be cleaned up at process exit.
+		# The request timeout is cleared on upgrade: an upgraded socket is long-lived,
+		# and the 60s idle expiry from wrap_handler would kill a healthy connection.
+		self.assertIsNone(client.timeout)
 		req["client"].close()
 
 	def test_serve_websocket_rejects_non_get(self):
@@ -450,9 +449,6 @@ harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\n\r\n"),
 
 		This is the critical path from decision 6 in SPEC.md: the websocket
 		frame that shares a TCP segment with the HTTP headers must not be lost.
-
-		BUG: serve_websocket calls websocket.handshake which
-		uses capitalized headers that xhttp.send_response rejects.
 		"""
 		# Properly masked frame per RFC 6455 (client->server MUST mask)
 		mask = b"\x12\x34\x56\x78"
@@ -480,27 +476,20 @@ harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\n\r\n"),
 		harness.wait_for(lambda: len(received) > 0, timeout=2.0)
 		self.assertEqual(received, ["HELLO"])
 
-		# Receiver will read close frame from leftover and exit silently.
-		# Sender will block on queue.get() - known implementation gap.
+		# The close frame after it releases the sender, so serve_websocket returns.
 		client.close()
 
 class WebSocketSendTest(unittest.TestCase):
 	"""The send() function and thread coordination."""
 
 	def test_send_queues_message_for_sender(self):
-		"""send() puts message in queue for sender thread.
-
-		BUG: implementation puts bytearray(b'hello') instead of the
-		full frame. The queue should contain the full WebSocket frame
-		(headers + payload), not just the payload.
-		"""
+		"""send() puts a complete frame in the queue for the sender thread."""
 		send_queue = queue.Queue()
 		ctx = {"data": {}, "_send": send_queue, "req": {}, "send_ws": None}
 		websocket.send(ctx, "hello")
 		self.assertFalse(send_queue.empty())
-		# Implementation bug: puts payload bytearray, not full frame
 		got = send_queue.get()
-		self.assertEqual(got, bytearray(b"hello"))
+		self.assertEqual(bytes(got), b"\x81\x05hello")
 
 	def test_send_rejects_none(self):
 		"""send(None) raises WSMessageNone."""
@@ -521,7 +510,7 @@ class WebSocketSendTest(unittest.TestCase):
 		captured_ctx["ctx"] = ctx
 		ctx["send_ws"]("test")
 		self.assertFalse(ctx["_send"].empty())
-		self.assertEqual(ctx["_send"].get(), bytearray(b"test"))
+		self.assertEqual(bytes(ctx["_send"].get()), b"\x81\x04test")
 
 class WebSocketEdgeTest(unittest.TestCase):
 	"""
