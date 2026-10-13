@@ -200,20 +200,21 @@ The `key_hash` typo, `_send` arg order, and `on_message` msg pass were fixed 202
 
 ## Open
 
-- **`send_file` config shape** — `xhttp.py:249` unpacks three values
-	(`folder, mime, compress`); `Space-Traveller/config/files.json` holds four
-	per extension (`folder`, `mime`, `compress`, `cache`). Undecided whether
-	`xhttp` reads that file directly or takes a mapping. `mime` is unpacked but
-	unused.
-- **`send_file` traversal guard** — `xhttp.py:253` rejects the literal token
-	`".."`, which is weaker than a `realpath`-inside-`realpath(cwd)` check.
+- **`send_file` config shape** — resolved 2026-10-13. `send_file` takes a
+	mapping from extension to a **dict** with `folder`, `mime` and `compress`
+	keys; it was never meant to take a tuple. `Space-Traveller/config/files.json`
+	holds a `cache` key the library does not read. Undecided still whether
+	`xhttp` reads that file directly or takes a mapping.
+- **`send_file` traversal guard** — rejects the literal token `".."`, which is
+	weaker than a `realpath`-inside-`realpath(cwd)` check.
 	Path traversal is live on `dumb_http` as soon as file serving becomes
 	config-driven, so this belongs in `xhttp`.
 - **Header dict is lowercase-only.** `read_request` lowercases names
-	(`xhttp.py:127`) and xhttp's own call sites use lowercase. The dict is still
+	and xhttp's own call sites use lowercase. The dict is still
 	a plain `dict`, so an external caller writing `headers.get("X-Real-IP")`
 	gets `None`. Either subclass it case-insensitively or document that callers
 	lowercase.
 - **`send_not_found` / `serve_files`** — no direct coverage in the suite.
-- **Websocket** — the six defects above.
+- **Websocket** — the six defects above, plus `send()` not validating message
+	type.
 - **The `dev/xhttp/` folder is untracked.** Nothing in it is committed.

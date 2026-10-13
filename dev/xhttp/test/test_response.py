@@ -529,7 +529,7 @@ class ResponseFileOutcomeTest(unittest.TestCase):
 	refactor, so it is recorded rather than asserted.
 	"""
 
-	CONFIG = {".html": (None,"text/html",False)}
+	CONFIG = {".html": {"folder": None, "mime": "text/html", "compress": False}}
 
 	def setUp(self):
 		import os,tempfile

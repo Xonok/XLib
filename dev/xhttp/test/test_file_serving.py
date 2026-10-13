@@ -5,27 +5,40 @@ SPEC.md explicitly states: "send_not_found / serve_files — no direct coverage
 in the suite." These tests fill that gap.
 """
 
-import os,tempfile,unittest,harness
+import os,shutil,tempfile,unittest,harness
 from xhttp import xhttp
 from xhttp._ import err
-class SendFileTest(unittest.TestCase):
-	"""send_file: reads a file and sends it as a response."""
 
-	CONFIG = {".html": (None,"text/html",False)}
-	CONFIG_WITH_FOLDER = {".html": ("www", "text/html", False)}
-	CONFIG_COMPRESS = {".txt": (None, "text/plain", True)}
+class TempDirCase(unittest.TestCase):
+	"""
+	Base for tests that touch the filesystem.
+
+	send_file resolves paths against the process cwd, so these tests have to
+	run somewhere disposable. Without this, FileServingEdgeTest wrote a 10 MB
+	large.dat, a link.txt symlink and an outside/ folder straight into the
+	cwd - which is the XLib root whenever the suite is launched from there.
+	"""
 
 	def setUp(self):
 		self.dir = tempfile.mkdtemp()
 		self.cwd = os.getcwd()
 		os.chdir(self.dir)
-		open("probe.html","w").write("hello world")
-		open("probe.txt","w").write("x" * 20000)
 
 	def tearDown(self):
 		os.chdir(self.cwd)
-		import shutil
 		shutil.rmtree(self.dir, ignore_errors=True)
+
+class SendFileTest(TempDirCase):
+	"""send_file: reads a file and sends it as a response."""
+
+	CONFIG = {".html": {"folder": None, "mime": "text/html", "compress": False}}
+	CONFIG_WITH_FOLDER = {".html": {"folder": "www", "mime": "text/html", "compress": False}}
+	CONFIG_COMPRESS = {".txt": {"folder": None, "mime": "text/plain", "compress": True}}
+
+	def setUp(self):
+		super().setUp()
+		open("probe.html","w").write("hello world")
+		open("probe.txt","w").write("x" * 20000)
 
 	def test_send_file_true_when_found_and_delivered(self):
 		"""Found file, successful delivery returns True."""
@@ -110,22 +123,15 @@ class SendFileTest(unittest.TestCase):
 		s = harness.ScriptedSocket(b"")
 		result = xhttp.send_file(s, 200, "unknown.xyz", self.CONFIG)
 		self.assertIs(result, False)
-class ServeFilesTest(unittest.TestCase):
+class ServeFilesTest(TempDirCase):
 	"""serve_files: the file-serving callback for serve_forever."""
 
-	CONFIG = {".html": (None, "text/html", False)}
+	CONFIG = {".html": {"folder": None, "mime": "text/html", "compress": False}}
 
 	def setUp(self):
-		self.dir = tempfile.mkdtemp()
-		self.cwd = os.getcwd()
-		os.chdir(self.dir)
+		super().setUp()
 		open("index.html", "w").write("<html>home</html>")
 		open("404.html", "w").write("<html>not found</html>")
-
-	def tearDown(self):
-		os.chdir(self.cwd)
-		import shutil
-		shutil.rmtree(self.dir, ignore_errors=True)
 
 	def _make_req(self, method="GET", filepath="index.html"):
 		return {
@@ -199,21 +205,14 @@ class ServeFilesTest(unittest.TestCase):
 			f"serve_files wrote {len(s.sendall_calls)} responses to a dead peer; "
 			"after the file send fails there is nothing left to answer"
 		)
-class SendNotFoundTest(unittest.TestCase):
+class SendNotFoundTest(TempDirCase):
 	"""send_not_found: fallback 404 response."""
 
-	CONFIG = {".html": (None, "text/html", False)}
+	CONFIG = {".html": {"folder": None, "mime": "text/html", "compress": False}}
 
 	def setUp(self):
-		self.dir = tempfile.mkdtemp()
-		self.cwd = os.getcwd()
-		os.chdir(self.dir)
+		super().setUp()
 		open("404.html", "w").write("custom 404")
-
-	def tearDown(self):
-		os.chdir(self.cwd)
-		import shutil
-		shutil.rmtree(self.dir, ignore_errors=True)
 
 	def test_send_not_found_serves_custom_404(self):
 		"""Custom 404.html is served when present."""
@@ -231,7 +230,7 @@ class SendNotFoundTest(unittest.TestCase):
 		self.assertEqual(harness.status_code(bytes(s.written)), 404)
 		_, _, body = harness.parse_response(bytes(s.written))
 		self.assertEqual(body, b"")
-class FileServingEdgeTest(unittest.TestCase):
+class FileServingEdgeTest(TempDirCase):
 	"""
 	Edge cases for file serving.
 
@@ -247,7 +246,8 @@ class FileServingEdgeTest(unittest.TestCase):
 		with open(large_file, "wb") as f:
 			f.write(b"x" * (10 * 1024 * 1024)) # 10 MB
 		s = harness.ScriptedSocket(b"")
-		result = xhttp.send_file(s, 200, large_file, {".dat": (None, "application/octet-stream", False)})
+		config = {".dat": {"folder": None, "mime": "application/octet-stream", "compress": False}}
+		result = xhttp.send_file(s, 200, large_file, config)
 		self.assertIs(result, True)
 
 	@harness.edge
@@ -262,7 +262,8 @@ class FileServingEdgeTest(unittest.TestCase):
 			os.remove("link.txt")
 			os.symlink("../outside/secret.txt", "link.txt")
 		s = harness.ScriptedSocket(b"")
-		result = xhttp.send_file(s, 200, "link.txt", {".txt": (None, "text/plain", False)})
+		config = {".txt": {"folder": None, "mime": "text/plain", "compress": False}}
+		result = xhttp.send_file(s, 200, "link.txt", config)
 		# Current implementation: follows symlink, then checks ".." in tokens
 		# This may or may not block depending on resolution order
 		self.assertIn(result, (True, False))

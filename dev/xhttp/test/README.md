@@ -27,6 +27,7 @@ skipped; they are tracked but not what the library is judged on yet.
 | `test_response.py` | `write_response` / `write_response_full` — status line, headers, body, partial writes, gzip, capitalisation | yes |
 | `test_server.py` | `serve_forever`, `wrap_handler` — fd leak, close, error containment, bind reporting | yes |
 | `test_parity.py` | dumb_http feature parity — the exact call sites in server.py, websocket.py, Chat/api.py | yes |
+| `test_websocket_correctness.py` | RFC 6455 behaviour `send()` should have — message type validation | yes |
 | `test_parse.py` (ParseEdgeTest) | TE casing, pipelining, path traversal, obs-fold, bare LF | no |
 | `test_response.py` (ResponseEdgeTest) | header injection, peer vanishes mid-response | no |
 | `test_server.py` (WrapHandlerEdgeTest) | stalling peers, SSL errors, accepted-socket timeout | no |
