@@ -27,9 +27,14 @@ latest existing release in `xlib/`.
 
 ## How it works
 
-It calls the bundler (`tools/pybundle/bundler.py`) to pack the dev folder's modules into
+It calls the bundler (`tools/pybundle/`) to pack the dev folder's modules into
 a single file. The bundler inlines internal modules (e.g. `csv_tok.py`) and renames
 their functions with a module prefix (e.g. `tokenize` becomes `csv_tok_tokenize`).
+
+**The bundler is not in the tree.** The five-phase implementation was deleted on
+2026-10-14 (`5e87ae8`) ahead of a from-scratch rewrite, and `release.py` imports
+it at module scope — so the script currently fails at *import* and no library can
+be released at all until a replacement lands. See epiq `6MFX0Z1`.
 
 It does **not** resolve imports. Cross-library dependencies must already be written
 as versioned imports (`from xlib import somelib_5_9_27`) in the dev library's own
@@ -56,6 +61,14 @@ release in `xlib/` and writes the bundled output to that new path unconditionall
 file behind; that has happened before, and the accidental revision had to be
 deleted again as a test artifact. Inspect the bundler directly instead:
 `python3 tools/pybundle/bundler.py <dev-folder>`.
+
+**That inspection route is currently unavailable, and it was already wrong.**
+There is no bundler to run — see *How it works* above. And while one existed, the
+invocation shown was wrong: `bundle()` takes the library's entry **file**
+(`dev/xcsv/xcsv.py`), not the folder, so passing `dev/xcsv` raised
+`IsADirectoryError`. The consequence worth stating plainly is that **there is no
+way to look at a bundle without writing one**, which is the hazard this section
+exists to warn about.
 
 ## Future work
 

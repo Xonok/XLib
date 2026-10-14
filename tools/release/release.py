@@ -55,7 +55,7 @@ def release(library, bump, force):
 	devdir = ROOT / "dev" / library
 	entry = devdir / f"{library}.py"
 	if not entry.is_file():
-		msg = f"no entry point {entry}: each library lives in {library}/{library}.py"
+		msg = f"no entry point {entry}: each library lives in dev/{library}/{library}.py"
 		raise ValueError(msg)
 	latest = latest_release(library)
 	if latest is None:
