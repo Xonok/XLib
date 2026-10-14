@@ -10,9 +10,23 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
+- [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
+- [x] **#124 — dev/xhttp: move RFC comparison material out of the root folder**
+	(done 2026-10-13, medium) — the RFC reference implementation and its harness
+	now live in `dev/xhttp/compare/`, a sibling of `test/` and deliberately
+	**not** inside it: `run.py`'s `discover` walks subdirectories, and 7 of the
+	loose files match `test_*.py` while being ad-hoc scripts, so moving them into
+	`test/` would enrol them in the suite. Root `test_server.py` would also
+	clobber the tracked suite file of the same name. Board `MV6J077`, commit
+	`ba84849`. The two open questions it raised were settled in the same pass:
+	the second `compare_websockets.py` was the **superset** (it reads raw frame
+	bytes to inspect the masked bit) so the root copy was the stale ancestor and
+	was deleted; `test_websocket_correctness.py` was already being discovered by
+	`run.py`, so it is now tracked on purpose.
 - [ ] **#119 — xhttp: fix websocket thread lifecycle** (by 2026-10-20,
 	medium) — `sender` thread in `_/websocket.py` blocks on `queue.get()`
 	forever with no shutdown signal. When connection drops, `receiver` exits
@@ -23,9 +37,14 @@ needed when there is no due date.
 	2026-10-20, high) — the human's stated condition for calling xhttp done.
 	Blocked behind #116. Parity reads 8/8 and the core suite is green, but parity
 	is a checked list, not a running server.
-- [ ] **#118 — xhttp: commit `dev/xhttp/`** (by 2026-10-13, medium) — the whole
-	folder arrived from Space-Traveller untracked on 2026-10-10; nothing in it is
-	in git.
+- [x] **#118 — xhttp: commit `dev/xhttp/`** (done 2026-10-14, medium) — the whole
+	folder arrived from Space-Traveller untracked on 2026-10-10. The scratch layer
+	was the last of it: `REVIEW.md` and `TODO.md` were the only untracked files
+	left anywhere in the repo, and `0a0dcd8` committed them. **Nothing under
+	`dev/xhttp/` is untracked now.** The store already had this as `done` while
+	this list still showed it open — that drift is what the line above fixes.
+	(how it went: `bec0a9a` and earlier for the code, `ba84849` for `compare/`,
+	#124, then `0a0dcd8`.)
 - [x] **#112 — `xlib_dev` override package: run real code against prerelease
 	libraries** (done 2026-10-10, high) — human's proposal 2026-10-10: a root
 	package `xlib_dev/` so `from xlib_dev import xcsv` runs real code against a
@@ -44,6 +63,10 @@ needed when there is no due date.
 	`release.py` owns "is this releasable". This is the real enforcement half —
 	#114 alone would leave a released file free to name `xlib_dev`, but a dev
 	library pointing at another dev library is fine and intended.
+	**Newly blocked 2026-10-14**: `release.py` imports the bundler at module
+	scope and the bundler was deleted in `5e87ae8`, so the script fails at import
+	and there is no release path to add a check to until `6MFX0Z1` lands a
+	replacement bundler.
 - [ ] **#114 — xlint: released files under `xlib/` must not mention `xlib_dev`**
 	(by 2026-10-31, medium) — deliberately its own ticket rather than a line in
 	#113: this is *policy*, #113 is *mechanism*. Grep-level, zero false

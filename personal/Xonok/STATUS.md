@@ -20,14 +20,21 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `d061a09` (2026-10-10). **xhttp arrived in `dev/` from
-Space-Traveller on 2026-10-10 and is untracked** — nothing in `dev/xhttp/` is
-committed. Its design record moved with it and now lives at
-`dev/xhttp/SPEC.md`; see *In progress*. **xlint reports clean over the whole
-repo, and that is narrower than it reads** — it skips every directory named
-`test`, so 109 violations in tool tests are invisible to it (epi `AK633QC`).
-**The release script cannot release anything** (`1ZY2Q5Q`) — found 2026-10-01,
-not previously recorded. Read Blocked before trusting a release. **195 epiq
+Basis: `master` at `0a0dcd8` (2026-10-14). **The working tree is clean and
+nothing is untracked** — the last two untracked files in the repo were
+`dev/xhttp/REVIEW.md` and `TODO.md`, committed in `0a0dcd8`. xhttp arrived in
+`dev/` from Space-Traveller on 2026-10-10; its root is clean — documentation,
+`xhttp.py`, the internals in `_/`, the suite in `test/`, and `compare/` holding
+the temporary RFC comparison material (`ba84849`). The suite is at **223 tests /
+2 failures / 1 skipped**, unchanged by `95d700b`; see *In progress*. Its design
+record lives at `dev/xhttp/SPEC.md`. **xlint reports clean over the
+whole repo, and that is narrower than it reads** — it skips every directory named
+`test`, so its violations are invisible to it (epi `AK633QC`).
+**Nothing can be released at all right now**, for two independent reasons: the
+dev-folder path fix landed in `c657694` (`1ZY2Q5Q`), but `release.py` imports
+the bundler at module scope and **the bundler was deleted** in `5e87ae8`, so
+the script now fails at *import* rather than at bundle time. Read Blocked before
+trusting a release. **195 epiq
 events were stranded on 2026-10-01, 13 of them issue creations**; the drain ran
 on 2026-10-02 and `tools/epiq-pending.py` reports **1 event still stranded**
 (a bare `create.contributor` carrying no ticket content), confirmed 2026-10-08.
@@ -69,8 +76,8 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (spec) | Spec not written yet; the agent pass is blocked on it | epiq `6MFX0Z1`, `YEBP3QB` |
-| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**, untracked. Core suite green (103 tests, exit 0); full suite 115 tests, 1 edge failure. **`xlib_dev` cannot load it** — `_/websocket.py:1` still does a bare `import xhttp`. Websocket does not run. **Not yet validated against real code in Space-Traveller**, which is the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **pybundle rewrite** | human (intent) / AI (spec) | **The spec is written** — the human's intent is `DRAFT.md`, and `SPEC.md` is derived from it and carries `<!-- spec-origin: ai -->` (`24e1856`, `d9528b0`). **The old implementation was deleted 2026-10-14** (`5e87ae8`), so `tools/pybundle/` holds documents and no bundler. **Tests are the next stage and are delegatable**; implementation is not, because tests are load-bearing | epiq `6MFX0Z1`, `YEBP3QB` |
+| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib 31 open (28 Todo, 2 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
@@ -110,24 +117,37 @@ committed the git way first and read as zero commits; epiq's own skill never
 states the separator. A rebase merge preserves it; a merge commit would bury
 it under a refless subject.
 
-### pybundle — read this before trusting the reviews
+### pybundle — the folder is documents only, and three of them disagree
 
-The bundler in the tree is the five-phase implementation in
-`tools/pybundle/bundler.py` + `bundler_impl.py`, and `tools/pybundle/SPEC.md`
-describes that code. Seven fixtures, all passing.
+**There is no bundler in the tree.** The five-phase implementation
+(`bundler.py` + `bundler_impl.py`) and its seven fixtures were deleted on
+2026-10-14 (`5e87ae8`, epiq `055TS78` closed by deletion). `tools/pybundle/`
+now holds four documents and no code, and a reader arriving there sees **three
+specifications with nothing marking which is current**:
 
-A single-pass redesign was attempted on top of it and abandoned: the code's
-complexity was the blocker, not the design. **The human is writing a new spec
-from scratch** (epiq `6MFX0Z1`, plus the stdout constraint in `YEBP3QB`); the
-rewrite follows that spec.
+- **`SPEC.md`** — the one the rewrite follows. Written by an AI, carries
+	`<!-- spec-origin: ai -->`, derived from `DRAFT.md` with each decision
+	cited back to a draft section.
+- **`SPEC_old.md`** — the old `SPEC.md`, renamed. Describes the deleted
+	5-phase `Context`-based bundler. It is a record, not a plan.
+- **`SPEC_new.md`** — the human's earlier handwritten attempt, brought in from
+	outside the repo in `79acddf`. Its own commit subject said "Needs more
+	work", and `DRAFT.md` carries its intent forward. The rewrite does not
+	follow it.
 
-Two consequences for anyone reading the workspace:
+`DRAFT.md` is the human's intent and is the source of truth for what the
+rewrite is for. The spec-input constraint — the output sink is anything
+file-like — is written into `SPEC.md` as requirement R5 (epi `YEBP3QB`), which
+it had been missing from every prior draft.
 
-- The four `doc/reviews/pybundle-*.md` reviews that approved the redesign review
-	files which are not in the tree (`pybundle.py`, `BUG_FIX_SPEC.md`,
-	`VERSIONS.md`, three fixtures that were never added). They are the record of
-	a real attempt, not a verdict on the code that exists.
-- `tools/pybundle/_/` is an empty directory left from that attempt.
+Also standing, from the abandoned single-pass attempt:
+
+- The four `doc/reviews/pybundle-*.md` reviews approved files which were never
+	in the tree (`pybundle.py`, `BUG_FIX_SPEC.md`, `VERSIONS.md`, three fixtures).
+	They are the record of a real attempt, not a verdict on anything.
+- `tools/pybundle/_/` and `tools/pybundle/test/` are empty directories left
+	behind. Git does not track empty directories, so they exist on disk and not
+	in the repository.
 
 ## Blocked / needs attention
 
@@ -157,27 +177,36 @@ Two consequences for anyone reading the workspace:
 	has exactly one adding commit, so the ref is findable via
 	`git log --diff-filter=A`, and the check should validate against **git rather
 	than the board**, since the board is not durable.
-- **`tools/release/release.py` cannot release anything.** It resolves the dev
-	folder at `ROOT / <library>`; the folders moved under `dev/` in `da1d163`
-	(2026-09-17) and the script was not updated, so every library fails with an
-	error naming a path that does not exist. Found 2026-10-01. All six releases in
-	`xlib/` predate the move, and nothing tests the path. The safe inspection route
-	the README offers in its place is broken too: `bundler.py <dev-folder>` raises
-	`IsADirectoryError`, because `bundle()` takes the entry **file**. Fixing this
-	first is also what gives the pybundle rewrite a path to be tested through
-	(epiq `1ZY2Q5Q`).
-- **pybundle agent work is blocked on the human's spec, and the spec arrived
-	2026-10-08 but is not finished.** `79acddf` brought `tools/pybundle/SPEC_new.md`
-	(215 lines) in from outside the repository — a single-pass inliner replacing
-	the 5-phase Context-based bundler, and its own commit subject says *"Needs
-	more work."* There is still no `PLAN.md`, so no step of the process is
-	delegatable yet. The old `tools/pybundle/SPEC.md` (`<!-- spec-origin: ai -->`)
-	describes the bundler being replaced, not the replacement, and both files now
-	carry a similar name — worth settling which one is `SPEC.md` before an agent
-	reads the wrong one. The human's reasons for the rewrite — pybundle is a tool
-	and carries no versions; its earlier releases were removed before ever being
-	committed; the last agent on it went in circles on the complexity — are in epiq
-	`6MFX0Z1` (why: HISTORY.md 2026-09-30 for the original block).
+- **`tools/release/release.py` cannot release anything — two independent breaks,
+	one now fixed and one deeper.** The dev-folder path bug is **fixed and
+	committed** (`c657694`, epiq `1ZY2Q5Q`): it resolved `ROOT / <library>`
+	while the folders moved under `dev/` in `da1d163` (2026-09-17). **But the
+	script still cannot release anything**, because it imports the bundler at
+	module scope (`release.py:8`) and the bundler was deleted in `5e87ae8` — so
+	it now fails at **import**, before reaching `bundler.bundle(...)` at line 74.
+	Nothing releasable before either; what changed is that this break is no
+	longer a one-tab fix and now waits on `6MFX0Z1`. Still unaddressed on that
+	ticket: `release.py:58` still prints `each library lives in
+	{library}/{library}.py` without the `dev/` prefix; `tools/release/README.md:58`
+	still tells the reader to inspect output with `bundler.py <dev-folder>`, a
+	file that no longer exists, so **the safe inspection route the README offers
+	against its own "never run this to check something" warning is gone**; and
+	the non-atomic write, `release()`'s return type and the tagging question are
+	untouched. All six releases in `xlib/` predate the move and nothing tests
+	the path.
+- **The pybundle rewrite is no longer blocked on a spec — this bullet's gate is
+	gone, and the next stage is delegatable.** The human wrote `DRAFT.md` as
+	intent; `SPEC.md` is derived from it and written by an AI on the condition
+	that every decision traces back to a draft section (`24e1856`, `d9528b0`).
+	**Tests are the next stage** and can be handed to an agent now.
+	**Implementation cannot**, because tests are load-bearing. The human's
+	reasons for the rewrite — pybundle is a tool and carries no versions; its
+	earlier releases were removed before ever being committed; the last agent on
+	it went in circles on the complexity — are in epiq `6MFX0Z1` (why: HISTORY.md
+	2026-09-30 for the original block). **Housekeeping the draft calls for is
+	still undone**: `SPEC_new.md` is to be deleted once the implementation
+	matches the intent, and until then it sits beside `SPEC.md` and `SPEC_old.md`
+	looking equally authoritative.
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
@@ -368,8 +397,11 @@ Two consequences for anyone reading the workspace:
 - **xlint does not lint tests, and the house rule for test folder names is
 	inverted relative to it.** `is_ignored` (`tools/xlint/xlint.py:28`) excludes any
 	path part named `test` — the repo's own convention, so `xlint .` skips every
-	test file and reports 0 while 109 violations sit in `tools/taskview/test/`
-	(103), `tools/pybundle/test/` (5) and `dev/xprod/test/` (1). `tests/` — the name
+	test file and reports 0 while violations sit in `tools/taskview/test/` and
+	`dev/xprod/test/`. **The 109 / 103 / 5 / 1 breakdown recorded here is stale
+	as of 2026-10-14**: `tools/pybundle/test/` and its fixtures were deleted in
+	`5e87ae8`, so that term is out of the sum and the total needs re-measuring
+	before anyone quotes it. `tests/` — the name
 	the rules call wrong — is *not* excluded, so `2VD2XZC`'s rename would move
 	four linted libraries out of coverage. Needs a decision: narrow the
 	exclusion to foreign test data, or write down that tests are exempt.
