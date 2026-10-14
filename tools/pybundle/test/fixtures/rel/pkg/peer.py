@@ -1,2 +1,0 @@
-def who():
-	return "peer"
