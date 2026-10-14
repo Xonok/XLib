@@ -1,188 +1,330 @@
 <!-- spec-origin: ai -->
 > **AI-written spec.** Authored by an AI agent, not by the human.
 
-# pybundle Spec
+# Pybundle
 
-## Overview
+**Pybundle** combines python code defined *within a folder* into a single file.
+Files outside the root folder are never inlined.
 
-**pybundle** turns a multi-file Python project into a single self-contained `.py` file. It does this by:
+## Provenance
 
-1. **Name-mangling** every module's top-level names with a flat prefix (dots → underscores)
-2. **Rewriting** all references to those mangled names
-3. **Hoisting** imports into a preamble, ordered by dependency
-4. **Printing** each module's body with file markers, ending with the entry file
+Derived from `DRAFT.md`, which holds the human's statement of intent. Every
+decision below cites the section of that draft it comes from, so the derivation is
+visible rather than asserted — check a decision against the draft, and check the
+draft against the discussion it records.
 
-## Pipeline (5 Phases)
+Three of the draft's own sections are superseded by later answers recorded in its
+*Open questions*, and this spec follows the later answer. They are listed under
+*Superseded draft text* so the disagreement stays visible instead of being quietly
+resolved.
 
-The bundler operates in five sequential phases, orchestrated by `bundle(entry)` in `tools/pybundle/bundler.py`. Shared state (`root`, `mods`, `entry`, `warnings`) lives on a `Context` passed as the first argument to every phase helper.
+`SPEC_old.md` documents the 5-phase bundler this replaces and is not a source for
+this spec. `SPEC_new.md` is the human's earlier handwritten attempt.
 
-### 1. Locate (`_locate`, `_ensure`, `_ensure_prefixes`)
+## Goal
 
-- `bundle` sets `root` to the entry's directory and registers the entry as module `""` (empty modpath).
-- `_ensure(ctx, dotted)` turns a dotted name into a real file under `root` (`pkg.mod` → `pkg/mod.py` or a package's `__init__.py`), creating a `Mod` per module and caching it in `ctx.mods`.
-- Packages get special treatment (`is_pkg`, dotted path = package path).
-- `_ensure_prefixes(ctx, dotted)` ensures all parent packages are loaded first (e.g., importing `pkg.mod` loads `pkg` then `pkg.mod`). This guarantees package `__init__.py` code runs before submodules.
-- If a module cannot be located, it is recorded as an external import and kept (canonicalized).
-- **SyntaxError handling**: `ast.parse` is wrapped in try/except; on failure, `m.tree = None` and `_analyze` returns early. The module is treated as opaque — its text is emitted as-is without name mangling.
+A bundler simple enough that an agent can edit it safely. The rewrite exists
+because the previous implementation's complexity stopped that, so **structure is a
+requirement here, not an implementation preference.** A spec that described the
+right behaviour while leaving structure open would reproduce the failure.
 
-### 2. Analyze (`_analyze`)
+Concretely: no parse tree, no shared mutable state, and a small set of functions
+each of which can be validated without reading the rest of the codebase.
 
-For each `Mod`:
-- Read the text (binary read, UTF-8 decode with Latin-1 fallback), build four parallel views: raw text, line start-offsets (`line_offsets`), tokens (`tokenize.generate_tokens`), and AST (`ast.parse`).
-- `_scope_frame`: determine which names are locals / globals / nonlocals / imports at each scope. Imports are tracked as their own category. Handles all assignment forms: `Assign`, `AnnAssign`, `AugAssign`, `NamedExpr`, `For`/`AsyncFor`, `With`/`AsyncWith`, `ExceptHandler`, plus function/class defs, lambdas, comprehensions.
-- `_resolve_imports` → `_import_stmt` / `_from_stmt`: walk **all** imports anywhere in the tree (nested ones included), resolve them locally where possible, record bindings (`bindmap`: name → `("mod", Module)` or `("name", "<flat>_<name>)"`), record `depmods` (each module this one depends on, including package prefixes via `_ensure_prefixes`), and mark each import statement as strip-or-keep (`imports_at`).
-	- Strip decision: `strip = local_hit or toplev` where `toplev = node.col_offset == 0`. **Only module-level imports are stripped**; imports inside functions/classes are preserved in the module body.
-	- External imports are **canonicalized** via `_canon_import`/`_canon_from` (preserving aliases, not verbatim).
-- Build `namespace`: classify every module-level binding as `"mod"` or `"value"`, using both the imports and the top-level assignments.
+## Requirements
 
-### 3. Classify (`_classify` / `_walk`)
+### R1 — Inlining
 
-One AST walk with an explicit scope stack (functions, lambdas, comprehensions, classes; `global`/`nonlocal` handled). Scope kinds: `"func"`, `"lambda"`, `"comp"` (comprehensions), `"class"`. Each `Scope` carries `locals`, `globals`, `nonlocals`, `imports`.
+1. The bundler takes a python file to start from. Its parent directory is the
+   **root folder**.
+2. A file is **local** if it is in the root folder or one of its subfolders.
+   Local files are inlined; everything else is left as a normal import.
+3. In each file, initially the root file, every import is checked and inlined if
+   it is local.
+4. **A file's imports are fully processed before that file's own code is
+   translated and written.** This keeps each input file as one contiguous block,
+   so the start and end comments delimit something real.
+5. Non-local imports stay as close to where they were as possible.
+6. Each file is processed once. A second reference to an already-handled file is
+   dropped with an informative message. This is also what handles circular
+   imports: there is no error for them, and code depending on them may break.
+7. The root file's modpath is in the handled set before the loop starts, so a
+   module importing the root does not break — the import is dropped by the
+   ordinary already-handled rule and the root's code is emitted once, last.
 
-For every name reference (`ast.Name`):
+*Draft: The loop, Main and the piping.*
 
-- `_resolve` walks the scope stack (reversed) to find whether the name is shadowed, then which binding it hits.
-	- Function/lambda/comprehension scopes: `globals` passes through; `nonlocals`/`locals` (if not in `imports`) shadows.
-	- Class scope: shadows only if the current node IS the class body (`stack[-1] is f`).
-- `_name_ref` records the final mangled replacement for each reference position (`ownrefs`):
-	- If binding is `("mod", Module)`:
-		- If `store` and module has `flat` prefix: record `("x", "<flat>_<name>")` and add to `topvals` (module assigned to a name).
-		- Else: record `("M", target_module)` for chain folding.
-	- If binding is `("name", mangled)`: record `("x", mangled)`.
-	- If no binding and `store` and `m.flat`: record `("x", "<flat>_<name>")` and add to `topvals` (top-level definition).
-- `_strip_selfalias` kills `x = modulename` aliases **only when the RHS resolves to a `("mod", ...)` binding**. The alias statement is marked for stripping (`strips_at`); the name `x` gets the module's own mangled name.
-- `_global_stmt` rewrites `global x` to the mangled name where `x` is a module-level value. Builds `m.globals_at[lineno][name] = mangled_name` for the rewrite phase.
-- `_defkw_of` maps `def`/`class` **keyword token positions** to their mangled names. Scans **tokens** (not AST) for `NAME` tokens `"def"`/`"class"` followed by a `NAME`; matches against module-level defs/classes in `topvals`.
+### R2 — Output format
 
-**Core mechanism: name mangling.** Every top-level name in module `a.b` is renamed to `a_b_<name>` at its definition site (recorded in `ownrefs` as `("x", flat + "_" + name)`), and every reference to it, from any module, is rewritten to the same mangled name. The entry module has `modpath = ""` → `flat = ""` → **no prefix** (e.g., `run` not `_run`). Names in `SPECIAL` (`True`, `False`, `None`, `__name__`, `__doc__`, `__package__`, `__file__`) survive mangling unchanged.
+A single file containing all inlined files, ordered as python would run them:
+imported code first, then the importing file's own code.
 
-### 4. Rewrite (`_rewrite`)
+Each file's block is bounded by two comments carrying its location, written with
+ordinary file path logic — a directory component carries a leading `/`, and a file
+directly in the root folder carries none.
 
-Reconstruct the source text by walking the token stream and applying replacement spans (`(start, end, newtext)`). Token positions `(lineno, col_offset)` are converted to character offsets via `_on(m, start, end)` using `line_offsets`.
+	## server.py                 ## /server/Command/api.py
 
-- Strip imports marked `strip=True` in `imports_at` (local or top-level) via `_strip_stmt`. Finds statement end by tracking paren depth and `NEWLINE`/`;` tokens.
-- Strip self-aliases marked in `strips_at`.
-- `def`/`class` keywords: when token is `def`/`class`, sets `pending = (next_token_index, mangled_name)` to replace the following identifier.
-- `global` statements: uses `globals_at` map to rewrite each name token.
-- Every `ownrefs` position: if `("x", mangled)` → replace token; if `("M", module)` → gather chain via `_gather_chain` and fold via `_fold`.
-- `_gather_chain`: collects consecutive `NAME . NAME . NAME` tokens.
-- `_fold(ctx, target_module, chain)`: iterates chain segments:
-	- If `cur.namespace.get(seg) == "value"` → return `prefix_seg` (mangled value).
-	- Else → lookup child module in `ctx.mods.get(cur.modpath + "." + seg)`; if **not found, bail (return `None`)** — the disk-child fix. If found, descend, extend prefix, continue.
-	- On success returns `(mangled_text, consumed_count, owner_module)`.
-- Replacements sorted by start offset, applied to original text.
+The start comment begins with `##`. The end comment is the same string beginning
+with `##!`. The root file is not special and gets the same pair as everything else.
 
-### 5. Order & Assemble (`_topo`, `_bundle`)
+Every inlined file emits its block after its imports have been placed, which is
+what makes the block contiguous.
 
-- Collect every module's stripped external imports into a merged preamble via `_merge_imports` (dedup + collapse `import a` + `import b` into `import a,b`, group `from X import Y,Z`).
-- `_topo(ctx)` walks `ctx.entry.depmods.values()` via DFS post-order with cycle detection (`visiting` set). Each module visited after all its dependencies. The entry module is excluded from its own topo sort.
-- Print each dependency module (body = `_rewrite` output) in `_topo()` order, then the entry last.
-- Each module body prefixed with `############   from file: <rel>   ############`.
-- Entry file's body appended last (leading newline stripped if preamble exists).
-- Warnings printed to stderr: star imports, module used as value, unresolved chains.
+*Draft: Output format, The loop.*
 
-## Import Handling
+### R3 — Name translation
 
-- **Plain imports** (`import x`): stripped from module bodies if local or top-level, collected, and merged in the preamble via `_merge_imports`. Regex `_MERGE_IMPORT` matches `^import ([A-Za-z_][A-Za-z0-9_]*)$` — **single name, no alias**. Multi-name imports like `import a, b` and aliased imports `import a as b` fall through and are kept verbatim (in canonical form) in the module body.
-- **From imports** (`from x import y`): stripped from module bodies if local or top-level. Regex `_MERGE_FROM` matches `^from ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*) import ([A-Za-z_][A-Za-z0-9_]*)$` — **single name, no alias**. Star imports (`*`) are kept as-is with a warning. Multi-name / aliased from-imports fall through.
-- **Relative imports** (e.g., `from . import y`): stripped and hoisted; base package computed by `_base_of` from current module's `modpath` and `node.level`.
-- **Package prefixes**: `_ensure_prefixes` loads all parent packages, adding them to `depmods` so they appear before submodules.
-- Non-matching imports are canonicalized (via `_canon_import`/`_canon_from`) and kept in the module body before stripping decision.
+Every processed file has its global names prefixed with its path relative to the
+root folder. `/py/command/api.py` under a root in `/` contributes the prefix
+`py__command__api__`; `server.py` in the root folder contributes `server__`.
 
-## Topological Ordering
+A module's name is always treated as its full modpath. `from . import api` in
+`/py/command/map.py` behaves as `py.command.api`, so the reference `api.run()`
+becomes `py__command__api__run()`.
 
-`_topo(ctx)` walks `ctx.entry.depmods.values()` via DFS post-order with `visiting` set for cycle detection. Each module visited after all its dependencies (recorded in `depmods`). Result is a valid topological order where dependencies always appear before dependents.
+Leading underscores move in front of the prefix, so a name that was private in its
+own file still reads as private in the bundle:
 
-**Note:** `refdeps` was dropped entirely (see Agreed Issues). Presence never changes which modules appear — `refdeps ⊆ ∪depmods` by construction.
+	_foo  ->  _helper__foo
+	__foo ->  _helper____foo
 
-## Known Limitations / Open Issues
+**The root file's own global names are not translated.** This exception is
+specific to the root file, not to files in the root folder: `helper.py` and
+`client.py` are translated even though they sit beside the root. Names the root
+imports *are* translated — only the root's own definitions are exempt.
 
-1. **Import regex limitation**: `_MERGE_IMPORT` and `_MERGE_FROM` only match single-name imports without `as`. `import a, b` and `import a as b` fall through and are kept verbatim (canonicalized).
+*Draft: Name translation, Translating global names.*
 
-2. **CRLF line endings**: `line_offsets` has no Windows (CRLF) support, but this is latent — consumers receive token positions, not raw `\r` bytes.
+### R4 — Scope
 
-3. **Single-pass redesign**: Currently a five-phase pipeline. A single-pass depth-first design is viable for acyclic import graphs (post-order emission IS a topological order), but would need to handle:
-		- The hoisted imports preamble (where do stripped imports go?)
-		- Cycle detection (explicit in-progress set)
-		- Per-module inline imports vs global merge
+Translation is scope-aware. A name defined inside a function or class blocks
+translation of that name within it, so shadowing does not break. Class bodies
+follow the same rule as functions.
 
-4. **`merge_imports` necessity**: Currently serves the hoisted preamble — dedup + collapse of plain imports + group `from X import Y,Z`. It is presentation, not semantics. Open question: keep, drop, or replace with per-module dedup.
+A `global` name refers to module level, so it is translated with the file's own
+prefix and does not block. A `nonlocal` name belongs to an enclosing function, so
+it is not translated and does block.
 
-5. **Entry module exclusion**: The entry module (`Mod("", entry)`) is excluded from its own topo sort, seeding the ordering. This is intentional but could be clarified in the design.
+*Draft: Scope.*
 
-6. **Syntax errors in dependencies**: Modules with `SyntaxError` get `tree = None`, are not analyzed, and their text is emitted as-is (no mangling). This allows bundling projects with broken non-entry modules but may produce incorrect cross-references.
+### R5 — Output destination
 
-7. **Dynamic imports**: `importlib.import_module`, `__import__`, etc. are not analyzed and will not be mangled. They remain as runtime imports.
+The destination is **anything file-like** — stdout, a file, a pipe to another
+program, an in-memory buffer. One code path; only the sink differs. The output is
+identical byte for byte whichever sink is used, and the run does the same work and
+raises the same errors either way.
 
-## API Structure
+**The bundler never closes a sink it did not open.**
 
-Per AGENTS.md, the public API split is:
+*Draft: Not yet in the draft (sink), Q9, `YEBP3QB`.*
 
-- **`tools/pybundle/bundler.py`**: Public API only — `bundle(entry)` and `main()`. No internal classes/functions.
-- **`tools/pybundle/bundler_impl.py`**: All internals — `Context`, `Mod`, `Scope`, and all `_`-prefixed phases (`_analyze`, `_rewrite`, `_topo`, etc.).
-- **No `__init__.py`** — AGENTS.md forbids one in a tool folder, and there is none. `tools/` goes on `sys.path` and `pybundle` resolves as a PEP 420 namespace package, so `from pybundle import bundler` works without a re-export.
+### R6 — Structure
 
-**Public function signatures:**
+1. **No parse tree.** Import detection, scope detection and definition scanning
+   are all statement-based. `ast` is not used. `tokenize` is: lexing is not
+   parsing, and it is what makes statement handling correct rather than
+   approximate.
+2. **State is piped, never global.** There is no shared context object.
+3. **Nothing imports the entry file.** The bundler's own modules do not import
+   `bundler.py`; `main` wires them together. The bundler must still *handle* a
+   module importing the root, which R1.7 covers.
 
-```python
-def bundle(entry: str) -> str:
-		"""Bundle `entry` (a file path) into one self-contained source string."""
-		...
+*Draft: No parse tree, Piped state, Main and the piping.*
 
-def main():
-		"""CLI entry point: bundle the entry script and print/stdout-write the result."""
-		...
-```
+## Technical decisions
 
-## Release Integration
+### D1 — Statements, not lines
 
-The release script (`tools/release/release.py`) calls `bundler.bundle(str(entry))` to produce a versioned file in `xlib/`. The bundled output format matches what the test fixtures expect (module bodies with `############   from file: ...   ############` markers, hoisted imports preamble, mangled name references).
+A **statement** is the unit of processing, taken from the tokenizer's logical-line
+boundaries rather than from raw physical lines.
 
-## Test Fixtures
+This is a correctness requirement, not a convenience. A dict literal spanning
+several lines has continuation lines that look like they sit inside a block by
+indentation alone; treating them that way records the entries as local
+definitions, which silently blocks translations with no error. A multi-line
+string containing a line starting with `def` looks like a function definition.
 
-All 7 fixtures must pass:
-- `single` — helper module + main, imports hoisted
-- `nested` — server package with subpackages, relative imports
-- `collision` — two modules with same name `tag`, both bundled correctly
-- `alias` — import aliases (`import random as rr`, `connect as link`)
-- `rel` — relative package imports (`from . import`, `import pkg.top`)
-- `deep` — deeply nested packages (`from db import core`)
-- `stdlib` — standard library usage (`from urllib.parse import urlparse`, `import math as m`)
+`tokenize` already computes both correctly: it emits `NEWLINE` only at a real
+statement end and `NL` inside brackets, and a multi-line string is a single token.
+Indentation is taken from the first physical line of the statement.
 
-All tests currently pass.
+### D2 — Scope blocks by indentation
 
-## Key Data Structures
+A `def` or `class` statement opens a block. The block runs until a statement
+indents less than the opener. Nested blocks stack.
 
-### `Context`
-- `root`: project root directory
-- `mods`: `modpath → Mod` cache
-- `entry`: entry `Mod` (modpath `""`)
-- `warnings`: list of warning strings
+The binding forms recognised inside a block, because each one defines a name that
+must block translation: plain assignment, augmented assignment, annotated
+assignment, `for` targets, `with ... as`, `except ... as`, walrus (`:=`), the
+`def` name, parameters, function-local `import`, plus `global` and `nonlocal`
+which behave differently as described in R4.
 
-### `Mod`
-- `modpath`: dotted module path (e.g., `"pkg.mod"`, `""` for entry)
-- `flat`: `modpath.replace(".", "_")` — mangling prefix
-- `file`: absolute file path
-- `is_pkg`: `os.path.basename(file) == "__init__.py"`
-- `rel`: relative path from `root` (for file markers)
-- `text`, `line_offsets`, `tokens`, `tree`: four parallel views
-- `topvals`: dict of top-level defined names
-- `bindmap`: name → `("mod", Module)` or `("name", "<flat>_<name>")`
-- `depmods`: modpath → Module (dependencies, including package prefixes)
-- `imports_at`: (lineno, col_offset) → (strip_bool, [canonicalized_external_imports])
-- `namespace`: name → `"mod"` or `"value"` (module-level bindings)
-- `ownrefs`: (lineno, col_offset) → `("x", mangled)` or `("M", Module)`
-- `defkw`: (lineno, col_offset) → mangled_name (for `def`/`class` keywords)
-- `strips_at`: (lineno, col_offset) → True (self-alias statements to strip)
-- `globals_at`: lineno → {name: mangled_name} (for `global` rewriting)
+### D3 — The root exception is the empty prefix
 
-### `Scope`
-- `kind`: `"func"`, `"lambda"`, `"comp"`, `"class"`
-- `locals`, `globals`, `nonlocals`, `imports`: name → True sets
+A non-root file's prefix is never empty, because every file has a basename. So an
+empty prefix identifies the root uniquely, and translating a name with an empty
+prefix returns it unchanged.
 
-## Agreed Issues (Fixed)
+The exception is therefore one expression, evaluated in the loop and nowhere else:
 
-- [x] **Drop `refdeps` entirely** — redundant; `depmods` suffices
-- [x] **`fold` disk-child bail** — returns `None` instead of half-descent
-- [x] **`Bundler` class → free functions** — state on `Context`
-- [x] **API/internal split** — `bundler.py` public only, `bundler_impl.py` internals
+	prefix = "" if modpath == entry else flatten(relative_path(modpath))
+
+No other function knows the root exists. This matters because the exception is
+**per file identity, not per location** — a sibling in the root folder is
+translated, so "is this the root?" cannot be answered from the path alone. It is a
+fact `main` supplies and pipes down.
+
+### D4 — The function set
+
+Each function answers a short description of *what*, so an agent can validate one
+without the rest of the codebase. A function that only makes sense in combination
+with others does not qualify.
+
+| Function | Answers | File |
+|---|---|---|
+| `statements(text)` | what does this text consist of? | `bundler_source.py` |
+| `imports(statements, modpath, root)` | what do these imports bind, and where does it live now? | `bundler_imports.py` |
+| `renamed(name, prefix)` | what is this name called in the bundle? | `bundler_names.py` |
+| `translate(statements, renames)` | what does this file look like with its names moved? | `bundler_names.py` |
+| `inline(modpath, out, seen, entry)` | the loop | `bundler.py` |
+| `main(entry, out)` | the setup and the piping | `bundler.py` |
+
+`statements` is computed once per file by `inline` and handed to both `imports`
+and `translate`, so nothing is computed twice and the two leaves do not depend on
+each other. `translate` calls the block scan internally — passing it in made the
+signature a description of how rather than of what.
+
+`renamed(name, prefix)` is the only pure function and carries the underscore rule,
+so it is the one most worth testing on its own.
+
+### D5 — Call graph
+
+	main(entry_path, out)
+	    root   = dirname(entry_path)
+	    seen   = {entry_modpath}
+	    inline(entry_modpath, out, seen, entry_modpath)
+
+	inline(modpath, out, seen, entry)          # recurses; the only control flow below main
+	    seen.add(modpath)
+	    stmts = statements(read(modpath))
+	    for stmt in stmts where stmt is an import:
+	        for local, bound_name in imports(stmts, modpath, root):
+	            if local.modpath not in seen:
+	                inline(local.modpath, out, seen, entry)
+	    prefix   = "" if modpath == entry else flatten(relative(modpath))
+	    renames  = {own globals  -> renamed(name, prefix)} ∪
+	               {imported names -> renamed(name, their prefix)}
+	    out.write(start_comment)
+	    out.write(translate(stmts, renames))
+	    out.write(end_comment)
+
+`renamed(name, "")` is the identity, which is the whole of the root exception.
+The own-globals half of `renames` is empty for the root, because every entry would
+map a name to itself.
+
+### D6 — Imports
+
+An import statement resolves to zero or more **local** targets, each with a modpath
+and the name it binds, or to a **non-local** result that is left in place.
+
+Relative imports resolve against the importing file's modpath, following ordinary
+python rules. The root file may not use them. A module path is derived literally
+from the file path, so `__init__.py` contributes `__init__` as an ordinary path
+component and needs no special case; importing a folder imports its `__init__.py`.
+
+`import x as y` binds the same names `import x` would, so `y.count` and `x.count`
+reach the same place.
+
+### D7 — Staging
+
+The bundler is not a library and carries no versions, so stages are notes rather
+than numbers.
+
+**Supported from the start:** module imports, relative imports, `__init__.py`,
+`import as`, `global` and `nonlocal`, file-like sinks.
+
+**Planned for a later stage:** name imports (`from x import name`) and star imports
+(`from x import *`) — neither is supported initially. `from xlib import blah`, and
+a generic "also treat that folder as root".
+
+**Excluded on purpose:** dynamic imports (`__import__`, `importlib`); detecting
+whether a circular import would cause real issues; detecting or fixing name
+collisions between globals of different files.
+
+The third list exists so that readding an excluded feature is a decision rather
+than drift. The second list exists so that a planned change is not mistaken for
+one.
+
+## Edge cases
+
+**Conditional imports.** All imports are handled as if at the top of the file, so
+an indented import is hoisted with the rest. A `pass` statement is left where the
+import was. The bundler does not analyse why an import is indented. `if False:
+import blah` will import `blah`; behaviour depending on it is not supported, and
+`importlib` is the way around it.
+
+**Circular imports.** Handled by R1.6. No error.
+
+**Name collisions.** Between globals of different files, assumed not to happen and
+neither detected nor fixed. Putting `__` in front of a name is not a pattern
+anyone writes by hand, and a collision may be avoided anyway by the prefix rule
+moving extra underscores to the front.
+
+**Errors in source.** Only errors that affect the bundler are relevant. Problems
+in the code being bundled are not supported.
+
+## Errors
+
+Ordinary errors — file not found, permission denied — pass through and are not
+listed.
+
+**IMPORT_FILE_NOT_FOUND** — a file was not found and it is definitely not a
+global, for example from a relative import. Suspected globals do not raise it.
+
+**RELATIVE_IMPORT_IN_ROOT** — the root file used a relative import, which python
+does not allow.
+
+**NOT_A_MODULE** — an import of a specific name, which is a later-stage feature.
+Reported rather than silently treated as a missing file.
+
+## Command line
+
+	--in <path>    root file path
+	--out <path>   bundled result path, or - for stdout
+
+Both are required, and no other arguments are accepted; otherwise usage is
+printed. Exit code is 0 on success and 1 on any error.
+
+`main` does the transformations the core does not: `--out -` or an absent output
+becomes `sys.stdout`, and a path becomes an opened file. The core takes the
+file-like object and never opens or closes it itself.
+
+## Superseded draft text
+
+The draft carries three statements that its own later answers contradict. This spec
+follows the later answer in each case.
+
+| Draft text | Superseded by |
+|---|---|
+| **IMPORT_AS** — "Will exist for as long as 'import as' is not supported." | `import as` is required, because it has to define a name in the importing file. Q22 |
+| **Future development / Import as** — "Not supported initially." | Same. D7, D6 |
+| **Control flow** — `main`, `file.process`, `file.inline`, `import.resolve` | D4's function set, which answers the same questions in six functions across four files |
+
+`file.process` has no successor: its work — setting up state and calling the
+per-file function — is what `main` does.
+
+## Terms
+
+**root** — the file path first passed to the program.
+
+**root folder** — the parent folder of the root.
+
+**modpath** — a project's module path, derived literally from the file path.
+
+**local** — inside the root folder or one of its subfolders.
+
+**statement** — one logical line, from the tokenizer's boundaries.
+
+**prefix** — a file's modpath relative to the root folder, flattened with `__`.
+Empty for the root.
