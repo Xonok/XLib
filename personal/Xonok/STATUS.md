@@ -185,15 +185,17 @@ Also standing, from the abandoned single-pass attempt:
 	module scope (`release.py:8`) and the bundler was deleted in `5e87ae8` — so
 	it now fails at **import**, before reaching `bundler.bundle(...)` at line 74.
 	Nothing releasable before either; what changed is that this break is no
-	longer a one-tab fix and now waits on `6MFX0Z1`. Still unaddressed on that
-	ticket: `release.py:58` still prints `each library lives in
-	{library}/{library}.py` without the `dev/` prefix; `tools/release/README.md:58`
-	still tells the reader to inspect output with `bundler.py <dev-folder>`, a
-	file that no longer exists, so **the safe inspection route the README offers
-	against its own "never run this to check something" warning is gone**; and
-	the non-atomic write, `release()`'s return type and the tagging question are
-	untouched. All six releases in `xlib/` predate the move and nothing tests
-	the path.
+	longer a one-tab fix and now waits on `6MFX0Z1`. **The documentation half of
+	that ticket is now done** (`d908568`): `release.py:58` says
+	`dev/<library>/<library>.py` and the README marks its bundler citation
+	unavailable rather than leaving a reader to run it. Still unaddressed: the
+	non-atomic write, `release()`'s return type and the tagging question. **And
+	the consequence worth stating plainly** — the README's "never run this to
+	check something" warning exists because a stray `release.py <library>`
+	leaves a real file in `xlib/`, and its answer, inspect the bundler
+	directly, no longer works. **There is currently no way to look at a bundle
+	without writing one.** All six releases in `xlib/` predate the move and
+	nothing tests the path.
 - **The pybundle rewrite is no longer blocked on a spec — this bullet's gate is
 	gone, and the next stage is delegatable.** The human wrote `DRAFT.md` as
 	intent; `SPEC.md` is derived from it and written by an AI on the condition
