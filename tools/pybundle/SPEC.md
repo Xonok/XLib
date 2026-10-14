@@ -36,21 +36,21 @@ each of which can be validated without reading the rest of the codebase.
 ### R1 — Inlining
 
 1. The bundler takes a python file to start from. Its parent directory is the
-   **root folder**.
+	**root folder**.
 2. A file is **local** if it is in the root folder or one of its subfolders.
-   Local files are inlined; everything else is left as a normal import.
+	Local files are inlined; everything else is left as a normal import.
 3. In each file, initially the root file, every import is checked and inlined if
-   it is local.
+	it is local.
 4. **A file's imports are fully processed before that file's own code is
-   translated and written.** This keeps each input file as one contiguous block,
-   so the start and end comments delimit something real.
+	translated and written.** This keeps each input file as one contiguous block,
+	so the start and end comments delimit something real.
 5. Non-local imports stay as close to where they were as possible.
 6. Each file is processed once. A second reference to an already-handled file is
-   dropped with an informative message. This is also what handles circular
-   imports: there is no error for them, and code depending on them may break.
+	dropped with an informative message. This is also what handles circular
+	imports: there is no error for them, and code depending on them may break.
 7. The root file's modpath is in the handled set before the loop starts, so a
-   module importing the root does not break — the import is dropped by the
-   ordinary already-handled rule and the root's code is emitted once, last.
+	module importing the root does not break — the import is dropped by the
+	ordinary already-handled rule and the root's code is emitted once, last.
 
 *Draft: The loop, Main and the piping.*
 
@@ -63,7 +63,8 @@ Each file's block is bounded by two comments carrying its location, written with
 ordinary file path logic — a directory component carries a leading `/`, and a file
 directly in the root folder carries none.
 
-	## server.py                 ## /server/Command/api.py
+	## server.py
+	## /server/Command/api.py
 
 The start comment begins with `##`. The end comment is the same string beginning
 with `##!`. The root file is not special and gets the same pair as everything else.
@@ -86,8 +87,8 @@ becomes `py__command__api__run()`.
 Leading underscores move in front of the prefix, so a name that was private in its
 own file still reads as private in the bundle:
 
-	_foo  ->  _helper__foo
-	__foo ->  _helper____foo
+	_foo -> _helper__foo
+	__foo -> _helper____foo
 
 **The root file's own global names are not translated.** This exception is
 specific to the root file, not to files in the root folder: `helper.py` and
@@ -122,13 +123,13 @@ raises the same errors either way.
 ### R6 — Structure
 
 1. **No parse tree.** Import detection, scope detection and definition scanning
-   are all statement-based. `ast` is not used. `tokenize` is: lexing is not
-   parsing, and it is what makes statement handling correct rather than
-   approximate.
+	are all statement-based. `ast` is not used. `tokenize` is: lexing is not
+	parsing, and it is what makes statement handling correct rather than
+	approximate.
 2. **State is piped, never global.** There is no shared context object.
 3. **Nothing imports the entry file.** The bundler's own modules do not import
-   `bundler.py`; `main` wires them together. The bundler must still *handle* a
-   module importing the root, which R1.7 covers.
+	`bundler.py`; `main` wires them together. The bundler must still *handle* a
+	module importing the root, which R1.7 covers.
 
 *Draft: No parse tree, Piped state, Main and the piping.*
 
@@ -200,24 +201,26 @@ so it is the one most worth testing on its own.
 
 ### D5 — Call graph
 
-	main(entry_path, out)
-	    root   = dirname(entry_path)
-	    seen   = {entry_modpath}
-	    inline(entry_modpath, out, seen, entry_modpath)
+```python
+main(entry_path, out)
+    root = dirname(entry_path)
+    seen = {entry_modpath}
+    inline(entry_modpath, out, seen, entry_modpath)
 
-	inline(modpath, out, seen, entry)          # recurses; the only control flow below main
-	    seen.add(modpath)
-	    stmts = statements(read(modpath))
-	    for stmt in stmts where stmt is an import:
-	        for local, bound_name in imports(stmts, modpath, root):
-	            if local.modpath not in seen:
-	                inline(local.modpath, out, seen, entry)
-	    prefix   = "" if modpath == entry else flatten(relative(modpath))
-	    renames  = {own globals  -> renamed(name, prefix)} ∪
-	               {imported names -> renamed(name, their prefix)}
-	    out.write(start_comment)
-	    out.write(translate(stmts, renames))
-	    out.write(end_comment)
+inline(modpath, out, seen, entry)   # recurses; the only control flow below main
+    seen.add(modpath)
+    stmts = statements(read(modpath))
+    for stmt in stmts where stmt is an import:
+        for local, bound_name in imports(stmts, modpath, root):
+            if local.modpath not in seen:
+                inline(local.modpath, out, seen, entry)
+    prefix = "" if modpath == entry else flatten(relative(modpath))
+    renames = {own globals -> renamed(name, prefix)} ∪
+              {imported names -> renamed(name, their prefix)}
+    out.write(start_comment)
+    out.write(translate(stmts, renames))
+    out.write(end_comment)
+```
 
 `renamed(name, "")` is the identity, which is the whole of the root exception.
 The own-globals half of `renames` is empty for the root, because every entry would
@@ -290,8 +293,11 @@ Reported rather than silently treated as a missing file.
 
 ## Command line
 
-	--in <path>    root file path
-	--out <path>   bundled result path, or - for stdout
+```
+--in <path>  root file path
+--out <path>  bundled result path, or - for stdout
+
+```
 
 Both are required, and no other arguments are accepted; otherwise usage is
 printed. Exit code is 0 on success and 1 on any error.
