@@ -52,7 +52,7 @@ def release(library, bump, force):
 	if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", library) is None:
 		msg = f"not a valid library name: {library!r}"
 		raise ValueError(msg)
-	devdir = ROOT / library
+	devdir = ROOT / "dev" / library
 	entry = devdir / f"{library}.py"
 	if not entry.is_file():
 		msg = f"no entry point {entry}: each library lives in {library}/{library}.py"
