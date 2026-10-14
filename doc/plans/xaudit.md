@@ -15,11 +15,14 @@ issues. xlint remains runnable standalone for style-only checks.
 xAudit classifies paths it's given:
 
 - **Tool**: anything under `tools/` (e.g. `tools/xaudit/`, `tools/skynet.py`)
-- **Library**: top-level `<name>/<name>.py` (e.g. `xcsv/xcsv.py`, `xtest/xtest.py`)
+- **Library**: `<name>/<name>.py` under `dev/` (e.g. `dev/xcsv/xcsv.py`,
+	`dev/xtest/xtest.py`)
 - **Other**: anything else — ignored by library/tool checks, only xlint runs
 
-**Decided:** `xlint/` and `release/` move into `tools/`. `pybundle/` stays at
-root (it's a dependency of the release tool, not a standalone tool).
+**Decided:** `xlint/` and `release/` move into `tools/`. `pybundle/` was to stay
+at root (it's a dependency of the release tool, not a standalone tool) — **that
+part did not happen**: the 2026-09-17 moves put both `xlint/` and `release/`
+*and* `pybundle/` under `tools/`, so all three are tools by this rule today.
 
 ### Blast radius of the move
 
@@ -50,10 +53,10 @@ to commit first.
 
 | # | Check | Scope | Pattern |
 |---|-------|-------|---------|
-| 1 | No `__init__.py` in library root | libs only | `<lib>/__init__.py` must not exist |
-| 2 | VERSIONS.md exists | libs only | `<lib>/VERSIONS.md` must exist |
+| 1 | No `__init__.py` in library root | libs only | `dev/<lib>/__init__.py` must not exist |
+| 2 | VERSIONS.md exists | libs only | `dev/<lib>/VERSIONS.md` must exist |
 | 3 | No unversioned xlib imports | libs only | `from xlib import <name>` where `<name>` has no `_X_Y_Z` suffix |
-| 4 | Library entry file = re-exports only | libs only | `<lib>/<lib>.py` must not contain `def `, `class `, or control flow (`if `, `for `, `while `) at top level. Allowed: `from ... import ... as ...`, assignments, docstrings |
+| 4 | Library entry file = re-exports only | libs only | `dev/<lib>/<lib>.py` must not contain `def `, `class `, or control flow (`if `, `for `, `while `) at top level. Allowed: `from ... import ... as ...`, assignments, docstrings |
 | 5 | Tool entry file = has code | tools only | `tools/<name>/<name>.py` (or `.sh`, `.js`) must contain actual logic, not just imports |
 | 6 | `._` prefix access | all `.py` files | Flag `._` that isn't `.__` (dunder exception). Warning. |
 

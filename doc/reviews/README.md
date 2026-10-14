@@ -21,10 +21,15 @@ files exist. The attempt was real, it stalled on the complexity of the existing
 bundler, and the reviews record a genuine round of work; they are **not a
 verdict on the code that is in the tree**.
 
-The bundler that exists is the five-phase implementation in
-`tools/pybundle/bundler.py` + `bundler_impl.py`, described by
-`tools/pybundle/SPEC.md`, with 7 fixtures that pass. The human is writing a new
-spec for a rewrite from scratch (epiq `6MFX0Z1`); the discussion the reviews
+The bundler that existed when these were written — the five-phase implementation
+in `tools/pybundle/bundler.py` + `bundler_impl.py`, with 7 fixtures — **was
+deleted on 2026-10-14** (`5e87ae8`), ahead of the rewrite. So the warning above
+now applies twice over: these reviews describe files that were never committed,
+and the code they were written against no longer exists either.
+`tools/pybundle/` holds documents and no code — `DRAFT.md` (the human's intent),
+`SPEC.md` (derived from it, and the spec the rewrite follows), `SPEC_old.md`
+(this old spec, renamed, describing the deleted bundler) and `SPEC_new.md` (an
+earlier handwritten attempt). See epiq `6MFX0Z1`; the discussion the reviews
 belong to is in `doc/plans/bundler.md`.
 
 Kept deliberately, on the human's ruling (2026-09-30): note the facts, leave the
