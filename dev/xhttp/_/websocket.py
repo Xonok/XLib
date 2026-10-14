@@ -12,7 +12,10 @@ def handshake(client,key):
 		"content-length": 0
 	}
 	try:
-		return response.send_response(client,101,**headers_response) or False
+		resp = response.send_response(client,101,**headers_response)
+		if resp:
+			client.settimeout(None)
+		return resp or False
 	except Exception as e:
 		print(traceback.format_exc(),flush=True)
 		return False
