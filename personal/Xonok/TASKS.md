@@ -88,20 +88,20 @@ needed when there is no due date.
 	see a way around it either."*
 - [ ] **#127 — pybundle: re-derive and write in the spec edits** (by
 	decision needed, medium) — board: epiq `R9H4PVD` + `EZAVYNM` (Todo).
-	**⛔ Do not execute as written — its main item is now wrong in direction.**
-	`R9H4PVD` repairs D9/D19 by removing rebinding language, on the grounds that
-	F13 deleted rebindings; **F13 was reversed on 2026-10-15** (alias, every
-	import rebinds). Both tickets need re-deriving against the alias ruling
-	before anyone writes a line. **What survives unchanged and is ready now:**
-	D16's two field names (`text`, `indent` — the string form is the hinge the
-	indentation question turned on), D13's argv clause, D1's empty-line clause,
-	F18, the counting correction (six, not nine), and the fully-ruled
-	indentation-warning paragraph. **New from the alias ruling:** `import a.b`
-	binds `a`, not `a.b`, and the alias form cannot express it — 1 occurrence,
-	`dev/xhttp/_/helper.py:2`. **D19's declined warning may be moot** — three of
-	its four collision sources are now structurally prevented rather than merely
-	unlikely; only the non-local star import survives, which D9 already warns
-	about separately.
+	**Spec half DONE 2026-10-15.** New section *Decisions — 2026-10-15, after
+	test pass 2* appended to `SPEC.md`: 268 insertions, **0 deletions**, and the
+	first 730 lines verified byte-identical, so the append-only discipline of
+	`03c0e75` holds. **D20** alias, reversing D9 and F13 · **D21** INDENT/DEDENT
+	· **D22** `text`/`indent` plus the argv, empty-line and `pass` clauses ·
+	**D23** D14's fourth diagnostic, fully specified · **D24** collisions ·
+	**D25** the blocking count is six. The section opens by saying **read D20
+	first — it reverses D9 two hundred lines up**, because an implementer working
+	top to bottom would otherwise build the withdrawn mechanism.
+	**What remains is the tests, not the spec.** The 138 were derived against D9
+	as it stood *before* D20: six come back from the F13 deletion and every
+	import-shape test needs re-deriving. The spec's own *What the tests must now
+	cover* lists the seven cases. That re-derivation is the reviewer's, and it
+	should not start until the reader it hands to has this section.
 - [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
 - [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done

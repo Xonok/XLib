@@ -728,3 +728,271 @@ import join as A__join` — so its bound name cannot collide with anything. A no
 in the file, including the uses that are not attribute accesses, which is a larger
 change than the collision it would prevent. The asymmetry is the price of leaving
 non-local module imports exactly as the source wrote them.
+
+## Decisions — 2026-10-15, after test pass 2
+
+Added 2026-10-15, from `doc/reviews/pybundle-tests-pass1-2.md` and from the rulings the
+human gave while that pass was under review. Same discipline as the section above:
+**append-only, nothing above it was edited**, and each decision below names what it
+supersedes and restates the corrected text so this section reads on its own.
+
+**Read D20 first. It reverses D9, which is in this same document and only two hundred
+lines up.** An implementer working top to bottom will reach D9 first and build the
+mechanism F13 installed — rebindings deleted, uses rewritten — which is no longer the
+design. D9 is not wrong by accident; it was correct when written and the ruling moved.
+
+The rulings are recorded verbatim on epiq `S1G5037` (indentation) and `F7KHKM8`
+(imports), with the evidence behind each.
+
+### What supersedes what
+
+| Section above | Changed by | Effect |
+|---|---|---|
+| D2 — Scope blocks by indentation | human, 2026-10-15 | comparison of strings replaced by matching the tokenizer's INDENT/DEDENT; restated in D21 |
+| D9 — Name imports and star imports | human, 2026-10-15 | **reversed**; rebindings return for every import, F13 is undone; restated in D20 |
+| D13 — Command line | F14 | one clause: `cli` takes argv, not a program name |
+| D14 — Diagnostics | human, 2026-10-15 | three diagnostics become four; the fourth is specified in D23 |
+| D16 — The leaves' return shapes | F16 | the two field names are fixed; restated in D22 |
+| D1 — Statements, not lines | F17 | one clause: empty lines and comment-only lines pass through |
+| D19 — Name collisions | human, 2026-10-15 | three of four collision sources are structurally prevented; restated in D24 |
+| *Open, and deliberately so* | F-count | the blocking count is six, not nine; the paragraph is corrected in D25 |
+
+### D20 — Every import rebinds (alias form). Supersedes D9; reverses F13.
+
+**Every import statement binds a name, because that is what python does. The bundler
+preserves that binding rather than dissolving it.**
+
+The F13 ruling in D9 — *no rebinding; a name imported from a module is reached by
+rewriting each use* — is **withdrawn**. The human's reasoning, verbatim: *"every import
+in python actually creates a name and I've been trying to avoid turning that into
+guaranteed bloat. Essentially, following python behaviour strictly would be the correct
+choice and would mean that every import involves a rebind."*
+
+**The mechanism, by case.**
+
+| Import | Emitted |
+|---|---|
+| `from helper import count`, `helper` local | statement deleted; `A__count = helper__count` |
+| `from pathlib import join`, non-local | statement rewritten in place: `from pathlib import join as A__join` |
+| `import math`, non-local | `import math as A__math` |
+| `from helper import *`, `helper` local | one rebind per **defined** global: `A__count = helper__count`, … |
+| `import email.utils` | statement **kept**, then one rebind: `A__email = email` |
+
+**Why the split on the last row.** `import a.b` binds `a`, not `a.b`. `import a.b as X`
+binds `X` to `a.b` — a different object — so aliasing it hands the file the leaf and every
+`a.something` that reaches past the leaf breaks:
+
+```python
+import email.utils                       # binds `email`
+email.utils.parseaddr(s)                 # works — email.utils exposes parseaddr
+email.message_from_string(s)             # AttributeError under a naive alias
+```
+
+The failure is **half-silent**: the leaf use survives by coincidence, so a test written
+against it reports green on a file broken for the other. The parent is unreachable from
+the child without `sys.modules`, so the statement is kept and one rebind is added. **The
+condition is general, not a carve-out for dotted imports: the alias rule applies except
+where python binds a name the statement does not spell.**
+
+**A rebind's left-hand side is already prefixed and is not prefixed again.** R3 must skip
+these statements. Without the exemption `A__count = helper__count` inside a function is
+re-prefixed and breaks; with it, a name imported at function scope stays function-local in
+the bundle exactly as it was in the source. This also settles what D2's binding-form list
+means: a function-local name import is a **binding**, not a use, and belongs in that list.
+
+**A rebind travels with its import.** R1.4 places each inlined block before the importing
+file's own code, so `A__count = helper__count` must be emitted immediately after that
+block, not collected and flushed at the end — the right-hand name may not be defined yet.
+
+**A star import gets the same answer as a name import, not a special one.** The human:
+*"star imports are just a more concise version of `from x import a,b,c...` (with all names
+mentioned). Therefore they should in practice have the same solutions."* This resolves what
+the test pass could not: because the rebind is a **statement**, a later definition of the
+same name overrides it in source order, which is python's own behaviour. Under F13 — uses
+rewritten, nothing emitted — that case had no correct reading at all.
+
+**A name the inlined module does not define now resolves.** `from helper import Path`,
+where `Path` is `helper`'s own non-local import, becomes `A__Path = server__Path` because
+that import was itself prefixed on the way in. **D9's stated divergence survives unchanged
+and stays benign**: a local star import still carries only the module's *defined* globals,
+so it does not re-export what the module imported — but an explicit name import reaches it.
+
+**A star import of a non-local module keeps D9's existing treatment** — left in place, on
+stderr, behaviour assumed correct. It is the one import shape the alias rule cannot reach,
+because the names are not knowable without reading a module the bundler never sees. D24
+keeps this as the sole surviving collision source.
+
+**Verified against real python**, all three of the cases the test pass had left open:
+
+| Case | Bundle | Real python |
+|---|---|---|
+| local star import, then shadowing (`count = 2`) | `2` | `2` |
+| `from helper import Path`, `Path` being `helper`'s import | resolves | resolves |
+| name import at function scope | `1`, function-local | `1` |
+
+**Accepted cost.** Prefix lengthens **every reference**, not only the import statements.
+Across the bundled corpus measured 2026-10-15: **+3% bytes** (1 618 on 44 807), tracking
+*reference count* rather than lines, imports, or file size — 0% in a module with 10
+imports and 10% in one with 18 references in 832 bytes. That corpus is shallow and
+understates it; the human's own case prefixes 4-character names with 13. Recorded as a
+cost the design accepts, not an oversight: *"I don't really see a way around it either."*
+
+### D21 — Blocks are tracked by INDENT/DEDENT. Supersedes D2's comparison.
+
+**A block is closed by a DEDENT token, not by a statement that indents less than its
+opener.** D2's wording is withdrawn in favour of matching the tokenizer's own
+INDENT/DEDENT stream. Verbatim: *"Using the tokenizer's INDENT/DEDENT is a reasonable way
+of interpreting my intent. Checking strings exactly is not necessary, or should come with
+the understanding that spaces and tabs need different handling."*
+
+The reason is a silent-wrong-answer failure, not a cosmetic one. Python accepts a module
+whose functions are indented with different conventions in different blocks, and
+`tokenize` reports that structure correctly. But D16's `indent` is a **string**, and in
+python `'\t' < '    '` is **True** — tab is 0x09, space is 0x20. So a tab-indented body
+under a space-indented opener reads as *less than* the opener, the block closes on its own
+first line, and everything inside is recorded as module scope. **R4 then translates names
+that are local, and nothing raises.** A wrong bundle is the failure class this tool can
+least afford, and it is silent.
+
+D2's **list of binding forms is unchanged**, plus the function-local name import D20 adds.
+
+### D22 — The leaves' return shapes, and three clauses already answered (F14, F16, F17, F18)
+
+**`statements(text)` returns a list of dictionaries.** F16 asked for the field names and
+this is the proposal, now fixed:
+
+| Field | Holds |
+|---|---|
+| `text` | the statement's source text, first line's indentation included, **every line of a multi-line statement**, no trailing newline |
+| `indent` | that same leading whitespace **as a string** — the first physical line's, which D1 already states |
+
+Two choices inside that are load-bearing rather than cosmetic. The text carries **every**
+line of a multi-line statement, because R7 requires the text to survive unchanged and
+joining statements has to be able to put the file back. The indentation is a **string and
+not a column count**, which is precisely what makes D21 necessary: a string is comparable
+and a count is not, so D21 states which of the two is used and why.
+
+**`indent` is the callee's text as written.** It is carried, never converted — see D23.
+
+**`cli(argv)` takes argv, not a program name** (F14). Verbatim: *"The program name does
+not matter to the person running it."* So the call is `cli(sys.argv[1:])` and a test calls
+`cli(["--in", p, "--out", "-"])`, which is what `argparse.parse_args` takes. If the
+implementation uses `argparse` the choice is made for it and this clause is belt and
+braces.
+
+**Empty lines and comment-only lines pass through unchanged** (F17). The rules about what
+a statement is exist **so a multi-line statement is not broken apart, not so that anything
+is removed.** Without this clause D1 reads as a licence to drop "unnecessary" parts.
+
+**An indented local import leaves a `pass` where it was** (F18, the last shape D8 and the
+*Edge cases* section disagreed on). The import is removed and the one-line compound body
+keeps its statement.
+
+### D23 — The indentation warning. D14's fourth diagnostic.
+
+D14 says *"Three of them exist"* and enumerates them. **There are four.** The fourth:
+
+- **Anchor** — the convention of the **root file**, or of the **first file that has
+	indentation** where the root has none. The human's reason: *"the root file is the most
+	likely to match whatever the project conventions are"*, and it is the cheapest option,
+	needing no per-file convention.
+- **Trigger** — any **code** line whose leading whitespace carries an indentation type
+	other than the anchor's. Both types on one line counts.
+- **Ignored** — whitespace-only lines. Verbatim: *"they don't affect how python runs in
+	any case."* The same reasoning reaches **multi-line string interiors**, which are one
+	token to the tokenizer and are not indentation; this is recorded as the same principle
+	rather than as a separate ruling, since it was not stated separately.
+- **Report** — one entry per offending file, naming that file's **first** offending line.
+	Verbatim: *"good enough, since this is generally not the bundler's purpose."*
+- **Never refuse.** The bundle is written.
+
+**The anchor is what makes the warning reach the inline hazard**, which is not obvious from
+the trigger's wording. A module and its importer can each be internally consistent and
+still collide: a tabs-module imported into a space-indented caller is two clean files.
+Anchored on the root, the callee disagrees by construction and every one of its lines
+trips the warning. **It is a red flag, not a hazard detector** — the human declined the
+analysis explicitly: *"we don't try to figure out whether a particular pattern would break
+things. It only matters that tabs and spaces are both used... Putting any serious effort
+into dealing with cases where spaces and tabs are used in the same project doesn't seem
+sensible, because the user can most likely solve this defect."* Over-firing is accepted; a
+tabs-module inlined at depth 4 produces a bundle that **runs correctly** and still warns,
+and the wording must not claim otherwise.
+
+**Inlining across conventions is not handled.** A tabs-module inlined at depth 8 with a
+sibling at column 16 written with spaces raises `TabError` in the consumer's import. The
+bundle is written anyway, with the warning above it. This is D9's posture applied to a
+second case, and the reason is *not* the same — D9's cause is the bundler's own inlining,
+this one's is a defect in the user's source, which is what makes "the user can fix it" an
+argument rather than an excuse.
+
+**Calibrated against this repo, so the rule is known to be quiet rather than merely
+assumed to be:** across the 21 files under `dev/` that actually get inlined, and across the
+six bundles in `xlib/` the old bundler produced, **0 files are reported**. The 7
+whitespace-only lines the ignore clause excludes are all bare tabs in `dev/xhttp/_/` and
+were the only thing a literal scan would ever have tripped on.
+
+### D24 — Name collisions under aliasing. Supersedes D19's analysis.
+
+D19 lists four sources of collision between unprefixed names. Under D20, **three of them
+are structurally prevented** rather than merely unlikely:
+
+- `import math` binding `math` unprefixed — now `A__math`.
+- `import cmath as m` and `import math as m` in two files — now `a__m` and `b__m`.
+- a **root-level** name-import rebinding, unprefixed because the root's prefix is empty —
+	still unprefixed, but nothing else in the bundle is unprefixed any more, so it has
+	nothing to collide with.
+
+**The survivor is the non-local star import**, which D9 already warns about separately, and
+which no rewrite reaches because the names are not knowable.
+
+**D19's declined warning may therefore be moot.** Its paragraph records that a warning was
+considered and declined — *"considered a warning optional and not necessary"* — on the
+grounds that the bundler is *"opinionated about what it bundles, not about what it can
+prove about the result."* That reasoning was sound when collisions were undetectable in
+practice. Most of them are now **prevented by construction**, so there is less to warn
+about rather than more. Whether the paragraph stays is editorial, not a decision, and is
+left to the implementer with the reasoning attached.
+
+**Why the two-statement form was rejected for non-local imports**, since it looks like the
+cautious choice and is not. Keeping `from x import defs` verbatim and appending
+`A__defs = defs` does not remove the collision — it **relocates** it, because that import
+binds `defs` at top level whether or not anyone rebinds it, and the rebind copies whichever
+import won. Measured with two files importing `defs` from different modules: two-statement
+yields `A__defs → FROM-Y` and `B__defs → FROM-Y`; alias yields `A__defs → FROM-X` and
+`B__defs → FROM-Y`. The split in D20 keeps the two-statement form only where it is needed.
+
+### D25 — The blocking count
+
+`pybundle-tests-pass1.md`'s summary says six of twelve are blocking; nine carry a blocking
+label in the body and seven are grouped as such in its own list. The count does not
+reconcile. Reconciled in pass 2:
+
+| Group | Flaws | Count |
+|---|---|---|
+| blocked tests entirely — no test could be written at all | F4, F5, F6, F7, F8, F12 | 6 |
+| blocked direct tests only — resolved by a stated workaround, not a decision | F1, F2, F3 | 3 |
+| needed no decision to proceed | F9, F10, F11 | 3 |
+| | | **12** |
+
+**Six** is the number that describes what actually stopped the work. The *Open, and
+deliberately so* paragraph above quotes the unreconciled figure and should be read against
+this one.
+
+### What the tests must now cover
+
+The 138 tests committed in `247eaba` were derived against D9 **as it stood before D20**.
+Six of them were deleted or rewritten for F13 and return, and every import-shape test
+needs re-deriving against the table in D20. The cases the tests must now pin:
+
+- `from helper import count` emits `A__count = helper__count`, and **nothing** rewrites
+	the use — the opposite of what `test_a_root_name_import_rewrites_the_use` asserts.
+- `from pathlib import join` emits `from pathlib import join as A__join`, replacing the
+	test that asserted `pathlib.join`.
+- `import email.utils` emits the statement **and** `A__email = email`, and both
+	`A__email.utils.parseaddr` and `A__email.message_from_string` resolve.
+- a local star import followed by a shadowing definition resolves to the shadow.
+- a name import at function scope stays function-local, which is the rebind-LHS exemption.
+- the indentation warning fires on the four specified conditions and not on the two
+	excluded ones, with the first offending line named per file.
+
+`NOT_A_MODULE` stays retired (D15). `RELATIVE_IMPORT_IN_ROOT` stays in `inline` (D15).
