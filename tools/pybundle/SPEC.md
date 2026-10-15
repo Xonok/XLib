@@ -680,3 +680,51 @@ which is a one-line change to D9 and costs `from pathlib import *`.
 summary says six of the twelve flaws are blocking. Nine carry a blocking label in the
 body and seven are grouped as such in its own list of what the human has to do. The
 count does not reconcile and should not be quoted until it does.
+
+### D19 — Name collisions, restated (extends *Edge cases*)
+
+The *Edge cases* section above says name collisions "between globals of different
+files" are assumed not to happen and are neither detected nor fixed. **That names the
+wrong surface.** A global a file *defines* is prefixed with that file's prefix, and
+prefixes are unique per file because R1.6 processes each file once — so two defined
+globals cannot collide. That class is empty by construction.
+
+The names that are **not** prefixed are the ones a file binds through a non-local
+import, and every one of them lands in the same namespace, because the bundle is one
+file:
+
+- `import math` binds `math`, unprefixed.
+- `import cmath as m` in one file and `import math as m` in another both bind `m`.
+- a non-local star import binds whatever it brings, unprefixed — the worst case, and
+	the one D9 warns about.
+- a **root-level** name-import rebinding is unprefixed, because the root's prefix is
+	empty. The root doing `from local_func import math` writes `math = local_func__math`,
+	which overwrites the `math` another file bound with `import math`.
+
+In a directory of ordinary modules each of those is confined to its own file, and the
+names never meet. Bundling puts them all in one, so two files that are entirely
+unrelated — they may share nothing but a habit of naming things `math` — now conflict,
+and whichever is inlined second wins. Every use of the first one in its own file then
+reaches the second one's binding.
+
+**None of that is fixed, and none of it is detected.** It is written down so that it
+reads as a decision rather than an oversight, and so that a broken bundle has
+somewhere to point:
+
+> **Names bound by non-local imports are not prefixed, and the bundler does not detect
+> when two files bind the same one.**
+
+A warning was considered and **declined**. The bundler does see every import statement
+in every file it inlines, so collecting the unprefixed bound names and reporting a
+duplicate is cheap — the cost is not the collection but the bookkeeping, and the tool's
+position is that it is opinionated about what it bundles, not about what it can prove
+about the result. The human who ruled on this considered a warning optional and not
+necessary; that is the decision, and this is where it is recorded.
+
+**One import is the exception, and the exception is not accidental.** A non-local
+**name** import is aliased to the importing file's prefixed global — `from pathlib
+import join as A__join` — so its bound name cannot collide with anything. A non-local
+**module** import is not, because prefixing it means rewriting every use of that name
+in the file, including the uses that are not attribute accesses, which is a larger
+change than the collision it would prevent. The asymmetry is the price of leaving
+non-local module imports exactly as the source wrote them.
