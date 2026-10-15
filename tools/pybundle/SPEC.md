@@ -334,3 +334,349 @@ per-file function — is what `main` does.
 
 **prefix** — a file's modpath relative to the root folder, flattened with `__`.
 Empty for the root.
+
+## Decisions — test pass 1
+
+Added 2026-10-15, from `doc/reviews/pybundle-tests-pass1.md`, which derived 65 tests
+from this spec and found twelve places where a test could not be written without a
+decision the spec did not contain. Those places are F1–F12 in that review; they are
+cited here by the same numbers so the two documents can be read against each other.
+
+Per the process in epiq `6MFX0Z1`, this is an appended section and **nothing above it
+was edited.** Several decisions change what an earlier section says — the function
+set gains a function, an error is retired, two requirement sentences are reworded.
+Rather than edit those sections in place, each decision below names the lines it
+supersedes and **restates the corrected text**, so this section is readable on its own
+and an agent implementing from it has one place to read. Folding this section back
+into the body is a consolidation pass for later, after implementation settles.
+
+### What supersedes what
+
+| Section above | Changed by | Effect |
+|---|---|---|
+| D4 — the function set | F7.1 | six functions become seven; `cli` added, `inline` and `translate` signatures change |
+| D5 — call graph | F4, F5 | restated in full below |
+| D6 — Imports | F8 | relative-import restriction and the return shape are decided; name imports become supported |
+| D7 — Staging | F8 | name imports and star imports are supported from the start; the staging list is empty |
+| R3 — Name translation | F12 | the last sentence is reworded; it means the names a file imports, not only module names |
+| R5 — Output destination | F9 | diagnostics are named alongside the sink, and go to stderr |
+| Errors | F6, F8 | `RELATIVE_IMPORT_IN_ROOT` gains a home; `NOT_A_MODULE` is **retired** |
+| Command line | F7 | restated in full below |
+| Draft *Key constraints* | F11 | constraint 3 becomes R7 |
+
+### D8 — Removal of inlined import statements (F4)
+
+**Every local import statement is removed from a file's block before it is written.
+Every non-local one stays where it was (R1.5).**
+
+The rule is uniform and does not depend on which files have been handled already.
+R1.6's "a second reference is dropped" follows from it rather than being a second
+rule: the first reference's statement is removed by the same rule that removes the
+second's.
+
+A statement with both local and non-local targets keeps the non-local ones and loses
+the local ones, so `import helper, os` becomes `import os`. A statement whose targets
+are all local is removed entirely.
+
+To make this possible, `imports` returns **one entry per import statement, in source
+order**, rather than a flat list of resolved targets. Each entry carries the statement,
+what kind of import it is, its targets — each target a modpath, `None` when the target
+is non-local, and the name it binds — and whether the statement was relative.
+
+This replaces D6's "zero or more **local** targets, each with a modpath and the name it
+binds, **or** to a **non-local** result that is left in place", which described two
+return shapes and said nothing about which statement produced what. Without that link
+a specific line cannot be deleted, and `import helper, os` cannot be expressed at all.
+
+`translate` performs the removal, so it takes the per-statement result as a third
+parameter. This supersedes D4's description of `translate`, which said it only moved
+names: it also drops the statements of imports that were inlined, and — see D9 — emits
+the statements a name import needs.
+
+### D9 — Name imports and star imports (F8, F12)
+
+**Every import binds local names**, because that is what python does, not something
+this tool invents:
+
+- `import x` binds the name `x`.
+- `import x as y` binds `y` instead, and `y` reaches the same place `x` would.
+- `from x import *` binds the whole namespace of the target, exactly as
+	`from x import name` binds one name.
+
+Two consequences follow, and they are the whole of this decision.
+
+**A name imported into a file becomes that file's global**, so R3's prefix applies to
+it. A file A doing `from helper import count` binds `A__count`; the root doing the same
+binds `helper__count`, because the root's own prefix is empty (D3). The statement is
+rewritten to bind the prefixed name:
+
+- **local module** — the module is inlined as an ordinary import would be, and the
+	importing file gains a rebinding: `count = helper__count`.
+- **non-local module** — the statement stays, with the bound name aliased:
+	`from pathlib import join as A__join`.
+
+**A star import of a local module works**, by the same mechanism applied to every
+global the inlined module defines: `from helper import *` in A emits one rebinding per
+global of `helper`. The globals a module defines are already known to the loop, so this
+costs nothing that is not already being computed.
+
+> **Stated divergence:** rebindings are emitted for the inlined module's **defined**
+> globals only. Real `from x import *` also re-exports whatever `x` itself imported. The
+> bundler does not do that, and a star import therefore does not carry through a
+> module's own imports. This is a limit, like the name-collision exclusion in D7, and
+> not an oversight.
+
+**A star import of a non-local module is left in place and warns.** The names it binds
+are not known and cannot be translated, so the invariant R3 rests on — that a name a
+file binds is renamed to `<prefix><name>` — cannot be enforced for them. The names
+land at the bundle's top level unreferenced-but-correct, which is why the import itself
+usually works.
+
+It breaks in exactly one way: **a name bound by a star import cannot be reached through
+the module that imported it.** Another file doing `import A` and then `A.foo()` expects
+`A__foo`, which nothing defines. There is no rewrite that fixes this, because the two
+other spellings are both unavailable — `from A import foo` and `from A import *` name a
+*local* module and are supported by rebinding, not by referencing the module — and the
+only spelling that does work is using the bare leaked name at bundle top level, which
+relies on no two modules star-importing a collision.
+
+So: **a warning on stderr, and the behaviour is assumed correct.** It is correct
+whenever the file that star-imports is the only file that uses those names, which is the
+common case. The remaining case is not worth supporting, because making it correct
+requires reading through import lines that would otherwise be left alone — the analysis
+this rewrite exists to remove, for a construct that pollutes a namespace so heavily that
+collisions become practically inevitable once it is used more than once or twice.
+
+**D7's staging list is now empty.** Name imports and star imports are supported from the
+start. D7's third list — dynamic imports, circular-import problem detection, name
+collision detection — is unchanged and still stands.
+
+### D10 — The root exception, restated (F12)
+
+R3's closing sentence reads "Names the root imports *are* translated — only the root's
+own definitions are exempt." It is reworded, because under D9 it was true of more than
+module names and could be read as meaning only those:
+
+> **The names a file imports carry the prefix of the file they came from.** The root's
+> own definitions are exempt: an empty prefix translates a name to itself. So a root
+> doing `import helper` binds `helper__count` for a count defined in `helper`, while a
+> `count = 1` of its own stays `count`.
+
+The exception remains per file identity, not per location (D3), and a sibling in the
+root folder is still translated.
+
+### D11 — `inline` takes the root folder (F5)
+
+D4's signature read `inline(modpath, out, seen, entry)`, and D5's body for it read a
+file and passed `root` to `imports` — so the signature could not be called as written,
+and the spec's one call graph could not be executed.
+
+`root` is not derivable from what `inline` already holds. It is needed to read a file,
+to decide locality, and to compute a file's path relative to the root folder; `modpath`
+is a module path, not a filesystem path. R6.2 rules out a module-level global, so it has
+to be piped.
+
+> **`inline(modpath, root, out, seen, entry)`** — D4's table, corrected.
+
+Batching `root` and `entry` into a small record was rejected: it reads better at five
+parameters and is the context object R6.2 exists to remove.
+
+### D12 — The function set, restated (F4, F7.1)
+
+D4's table is superseded by this one. It answers the same question — what each function
+is for — and adds the seventh function the command line needs.
+
+| Function | Answers | File |
+|---|---|---|
+| `statements(text)` | what does this text consist of? | `bundler_source.py` |
+| `imports(statements, modpath, root)` | what does each import bind, where does it live, and is what it names local? | `bundler_imports.py` |
+| `renamed(name, prefix)` | what is this name called in the bundle? | `bundler_names.py` |
+| `translate(statements, renames, resolved)` | what does this file look like once its inlined imports are gone and its names moved? | `bundler_names.py` |
+| `inline(modpath, root, out, seen, entry)` | the loop | `bundler.py` |
+| `main(entry, out)` | the setup and the piping | `bundler.py` |
+| `cli(argv)` | what did the arguments say, and what should the program do about it? | `bundler_cli.py` |
+
+The call graph, corrected in full:
+
+```python
+main(entry_path, out)
+    root = dirname(entry_path)
+    seen = {entry_modpath}
+    inline(entry_modpath, root, out, seen, entry_modpath)
+
+cli(argv) -> int
+    parse argv; on anything unrecognised, print usage and return 1
+    out = sys.stdout if --out is - else open(path, "w")
+    try:
+        main(entry_path, out)
+    except <bundler errors> as e:
+        print(e, file=sys.stderr); return 1
+    finally:
+        out.close() if cli opened it
+    return 0
+
+inline(modpath, root, out, seen, entry)   # recurses; the only control flow below main
+    seen.add(modpath)
+    stmts = statements(read(join(root, modpath)))
+    resolved = imports(stmts, modpath, root)
+    for target in resolved that is local:
+        if target.modpath not in seen:
+            inline(target.modpath, root, out, seen, entry)   # returns its globals
+    prefix = "" if modpath == entry else flatten(relative(modpath))
+    renames = {own globals -> renamed(name, prefix)} u
+              {imported names -> renamed(name, their prefix)}
+    out.write(start_comment)
+    out.write(translate(stmts, renames, resolved))
+    out.write(end_comment)
+```
+
+`inline` returns the global names it defined, which is what lets a star import rebind
+them (D9). `renames` keeps its two halves precisely so they do not collide: a name the
+file both imports and defines is a collision, and D7 excludes detecting those.
+
+### D13 — Command line, restated (F7)
+
+Three problems were folded into one section above, and they are answered separately.
+
+**The command line has a home.** `main` was named for two different functions: D5's,
+which takes a file-like sink, and the *Command line* section, which also turns a path
+into an opened file. It cannot be both, because `inline` writes to `out`. So there are
+two, and `cli(argv) -> int` is the new one:
+
+- `main(entry, out)` is unchanged and still takes a file-like. This is what R5 requires.
+- `cli(argv)` parses argv, opens and closes the sink, calls `main`, and turns an
+	unrecognised argument, a missing file, or a bundler error into exit code 1.
+
+This is what R5's "the bundler never closes a sink it did not open" is for. Before this,
+the rule had nothing to distinguish: `cli` closes what it opened, and `main` never closes
+anything.
+
+**Nothing parsed argv, printed usage, or returned an exit code.** The draft's superseded
+`main() -> int` did all three and D4's table replaced it without naming a successor.
+`cli` is the successor. A `__main__` block calls it.
+
+**`--out` was both required and allowed to be absent.** One of the two sentences was
+unreachable. It is settled as:
+
+```
+--in <path>   root file path, required
+--out <path>  bundled result path, required; - for stdout
+```
+
+Both flags are required, `-` means stdout, and the absent-output sentence is deleted.
+`--out -` opens nothing; the sink is `sys.stdout` itself, and `main` never closes it.
+
+### D14 — Diagnostics (F9)
+
+R1.6 requires an "informative message" when a second reference to a file is dropped,
+without saying where it goes. It cannot go to the sink: a message written to stdout
+would corrupt the bundle whenever the sink *is* stdout, which R5's byte-for-byte
+identity forbids.
+
+**Every diagnostic and warning the bundler produces goes to stderr, and none reaches
+the sink.** Three of them exist:
+
+- a dropped second reference to an already-handled file (R1.6)
+- a star import of a non-local module (D9)
+- usage, when the arguments are not understood (D13)
+
+### D15 — Errors, restated (F6, F8)
+
+**`RELATIVE_IMPORT_IN_ROOT` now has a home.** It is the one error above with no function
+able to raise it: `imports` receives the root *folder* and never the entry, and D3 is
+explicit that "is this the root?" is per file identity and cannot be answered from the
+path. Only `inline` knows `entry`.
+
+It is raised there, using the relative flag D8 already puts in `imports`'s return:
+
+```python
+if modpath == entry and any(entry.is_relative for entry in resolved):
+    raise RELATIVE_IMPORT_IN_ROOT
+```
+
+Adding `entry` to `imports`' signature was rejected — every caller would thread a
+parameter that one check uses.
+
+**`NOT_A_MODULE` is retired.** It existed because `from x import name` was a later-stage
+feature that had to be *reported* rather than silently treated as a missing file. D9
+supports name imports instead, by rebinding the name (D6's phrasing above is
+superseded: the "or" it described described two return shapes, and there is one). The
+error has no remaining case and is removed from the Errors section.
+
+`IMPORT_FILE_NOT_FOUND` is unchanged, including its rule that suspected globals do not
+raise it.
+
+### D16 — The leaves' return shapes (F1, F2, F3)
+
+**`statements(text)`** returns a list of statements, each carrying its text and its
+indentation, because D1 and D2 both depend on the latter. The container is a
+cross-module contract — `inline` hands the same value to `imports` and `translate` — so
+it is fixed here rather than left to each implementer. **Line numbers are not carried**:
+nothing in this spec needs them, and a shape that grows is harder to keep an agent
+honest against.
+
+**`translate(statements, renames, resolved)`** returns a single string. Statements are
+joined with newlines and **no trailing newline is added**; `inline` composes the comment
+lines and the separators around it. D5's `out.write(translate(...))` is a string write.
+
+**`imports(statements, modpath, root)`** returns the per-statement list D8 specifies.
+The remaining ambiguity — whether a non-local statement yields an entry or nothing — is
+resolved by the choice of shape: **every import statement yields an entry**, and what
+happens to it is decided by the table in D9.
+
+### D17 — Bare module references (F10)
+
+A module reference used as anything other than the base of an attribute has no rewrite.
+The module object exists in the bundle under no name at all, because inlining is done by
+prefixing names rather than by constructing an object.
+
+> **A module name used other than as an attribute base is not supported.** The bundler
+> does not detect it and does not raise; a bundle referring to one will fail at run time.
+
+`import helper.sub` binds a bare module name and falls under this. It is stated rather
+than left implicit because D2 lists function-local `import` as a binding form, and that
+form establishes exactly such a name.
+
+### D18 — Non-name text survives unchanged (F11)
+
+The draft's *Key constraints* were never turned into requirements. Three of the four are
+already covered — once-only processing is R1.6, the comment marking each inlined file is
+R2. Constraint 3 is not, and it is the load-bearing one, because it is what says that
+text which is not a name reaches the bundle untouched:
+
+> **R7 — only names are rewritten.** Comments, blank lines, spacing, and the text of
+> every expression are carried into the bundle unchanged. The only edits are: a name
+> replaced by its bundled name, an import statement of an inlined module removed or
+> trimmed, and the statements D9 adds for a name or star import.
+
+Constraint 2 — "the combined file preserves original behaviour when possible" — is not
+carried in. It is not testable as written, and R1.6 already says plainly where behaviour
+is not preserved: code depending on circular imports may break.
+
+### What the tests must now cover
+
+The existing 65 were derived before these decisions. Most still hold; four changes and a
+few additions follow from this section.
+
+- `test_a_name_import_raises` is **wrong and must be replaced.** Name imports are
+	supported now. It becomes a test that `from helper import count` produces
+	`count = helper__count`, plus the non-local form `from pathlib import join as A__join`.
+- Nothing tests the mixed statement `import helper, os`, which D8 now defines.
+- Nothing tests a star import of a local module, which D9 now supports.
+- Nothing tests a star import of a non-local module warning on stderr, which D9 now
+	requires.
+- Nothing tests the command line at all, and D13 makes it reachable.
+- Nothing tests `inline` directly, and D11 gives it a signature it can be called with.
+
+## Open, and deliberately so
+
+**Two of the review's twelve are settled by accepting a documented limit rather than by
+fixing something.** D9's non-local star import is the clearest: the bundler will
+sometimes produce a bundle that does not work, and says so on stderr rather than
+refusing. If that trade is wrong, the alternative is to raise for every star import,
+which is a one-line change to D9 and costs `from pathlib import *`.
+
+**`doc/reviews/pybundle-tests-pass1.md` has one arithmetic problem worth fixing.** Its
+summary says six of the twelve flaws are blocking. Nine carry a blocking label in the
+body and seven are grouped as such in its own list of what the human has to do. The
+count does not reconcile and should not be quoted until it does.
