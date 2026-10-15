@@ -20,11 +20,14 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `d412f9a` (2026-10-15). **The working tree is dirty, and
-every path in it is pybundle** — three modified test files, two untracked test
-files, and the untracked `doc/reviews/pybundle-tests-pass1-2.md` that is the
-test pass 2 review. Nothing else is touched, and none of it is committed; that
-is the pass-2 deliverable, unclosed. xhttp arrived in
+Basis: `master` at `247eaba` (2026-10-15), **one commit ahead of
+`origin/master` and unpushed** — the human authorised the commit, not the push.
+The working tree is clean. The
+pybundle test pass 2 is committed — 138 tests in five files plus
+`doc/reviews/pybundle-tests-pass1-2.md`, 9 files and 1102 insertions — and the
+commit body records the four rulings that landed while that pass was under
+review, including that **F13 was reversed**, so the 138 is not a stable number.
+xhttp arrived in
 `dev/` from Space-Traveller on 2026-10-10; its root is clean — documentation,
 `xhttp.py`, the internals in `_/`, the suite in `test/`, and `compare/` holding
 the temporary RFC comparison material (`ba84849`). The suite is at **223 tests /
@@ -78,7 +81,7 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **The tests have been re-derived and the pass is closed; the spec edits it produced are not written in.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files**, re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2's output is uncommitted**: 3 modified + 2 untracked test files and the untracked `doc/reviews/pybundle-tests-pass1-2.md`. Five of the pass-1 flaws are closed, three remain open (`S1G5037`, `F7KHKM8`), and five answered edits nobody has written in (`R9H4PVD`, `EZAVYNM`). Implementation is the stage after all of that | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
+| **pybundle rewrite** | human (intent) / AI (spec) | **The tests have been re-derived and the pass is closed; the spec edits it produced are not written in.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files**, re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2 is committed** (`247eaba`). **Every decision it prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings, so neither will send anyone back to a settled question. **The spec has not caught up, and that is now the only thing between here and implementation.** The human's stated next step is *"getting the bundler into a working state again"* via *"letting the reviewer derive tests once again"* — **which is the right instinct and the wrong order**: `SPEC.md` still describes F13, which today's ruling reversed, so a reviewer re-deriving against it would hit the same confusion this pass just spent a day resolving. **`#127` — re-derive the spec edits against the alias ruling and write them in — lands before the reviewer does.** | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
 | **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
