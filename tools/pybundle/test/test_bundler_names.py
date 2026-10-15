@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Tests for `renamed(name, prefix)` — R3, D3.
+Tests for `renamed(name, prefix)` and `translate(statements, renames, resolved)`
+— R3, D3, D16.
 
 Run with: python3 -m unittest tools.pybundle.test.test_bundler_names -v
 
-`renamed` is the only function in the set whose signature and return the spec
-fixes exactly — D4 calls it "the only pure function" and "the one most worth
-testing on its own" — so it is the only one tested directly here. Everything
-else is tested through the bundle `main` produces, in `test_bundler.py`,
-because the shapes the other three functions hand back are not settled by the
-spec (flaws F1-F3 in `doc/reviews/pybundle-tests-pass1.md`).
+`renamed` is the only pure function in the set — D4 calls it that, and "the one
+most worth testing on its own" — so its tests are direct by choice. `translate`
+joins the suite now that D16 fixes its return: a single string, statements joined
+with newlines, no trailing newline. Only the cases needing no filesystem are
+here; everything that does is driven through `main` in `test_bundler.py`, because
+R1.2 makes locality a question about location on disk.
 """
 
 import unittest
-from tools.pybundle.bundler_names import renamed
+from tools.pybundle.bundler_names import renamed,translate
+from tools.pybundle.bundler_source import statements
 
 class TestPrefixApplied(unittest.TestCase):
 	"""R3: a file's globals are prefixed with its path below the root folder."""
@@ -61,6 +63,34 @@ class TestNonAsciiNames(unittest.TestCase):
 
 	def test_non_ascii_name_gets_the_prefix(self):
 		self.assertEqual(renamed("функция", "helper__"), "helper__функция")
+
+class TestTranslateD16(unittest.TestCase):
+	"""D16: `translate` returns one string — statements joined with newlines, and
+	no trailing newline. `inline` composes the comments and separators around it.
+
+	`resolved` is empty in every test here, which is what `imports` returns for a
+	file that has no imports.
+	"""
+
+	def test_statements_come_back_joined_by_newlines(self):
+		result = translate(statements("a = 1\nb = 2\n"), {}, [])
+		self.assertEqual(result, "a = 1\nb = 2")
+
+	def test_no_trailing_newline_is_added(self):
+		result = translate(statements("a = 1\n"), {}, [])
+		self.assertFalse(result.endswith("\n"))
+
+	def test_a_name_in_the_rename_table_is_replaced(self):
+		result = translate(statements("count = 1\n"), {"count": "helper__count"}, [])
+		self.assertEqual(result, "helper__count = 1")
+
+	def test_a_name_absent_from_the_rename_table_is_left_alone(self):
+		result = translate(statements("count = 1\n"), {}, [])
+		self.assertEqual(result, "count = 1")
+
+	def test_indentation_of_a_statement_is_kept(self):
+		result = translate(statements("if True:\n\tcount = 1\n"), {}, [])
+		self.assertEqual(result, "if True:\n\tcount = 1")
 
 if __name__ == "__main__":
 	unittest.main()

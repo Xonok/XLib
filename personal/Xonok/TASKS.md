@@ -10,6 +10,98 @@ needed when there is no due date.
 
 ## Open
 
+- [x] **#128 — pybundle: inlining across indentation conventions — CLOSED by
+	ruling, 2026-10-15** (done 2026-10-15, high) — board: epiq `S1G5037` (Todo).
+	Opened 2026-10-15 when a tab-indented module inlined into a space-indented
+	caller at depth 8 was found to produce a bundle that **does not parse**
+	(`TabError`, reproduced) — worse than the wrong bundle the ticket before it
+	predicted. **Closed by not fixing it**, which is the ruling: *"we don't try
+	to figure out whether a particular pattern would break things. It only
+	matters that tabs and spaces are both used... Putting any serious effort into
+	dealing with cases where spaces and tabs are used in the same project doesn't
+	seem sensible, because the user can most likely solve this defect and would
+	most likely appreciate the notice."* The bundle is written and ships; a stderr
+	line says why. Same posture as D9's non-local star import, and the
+	justification differs in a way the spec should record: there the cause is the
+	bundler's own inlining, here it is a defect in the user's source. The root
+	anchor catches this case for free — the callee disagrees with the root by
+	construction.
+- [x] **#126 — pybundle: mixed tab/space indentation — RULED twice, 2026-10-15**
+	(done 2026-10-15, high) — board: epiq `S1G5037` (Todo). **Ruling 1, the
+	mechanism**: *"Using the tokenizer's INDENT/DEDENT is a reasonable way of
+	interpreting my intent. Checking strings exactly is not necessary."* D2 tracks
+	blocks by matching INDENT/DEDENT, so the scope-tracking failure cannot happen
+	and the `'\t' < '    '` hazard goes with it. This also settles D16's
+	`indent`-as-a-string choice, which was made for exactly this reason. **Ruling
+	2, the trigger**: anchor on the **root file** (or the first file that has
+	indentation), warn if **any line** carries a different indentation type, and
+	list every file that differs — over-firing deliberately. Two things the
+	implementer needs that the ruling does not say: **scan statements, not
+	lines**, or the warning fires on bracket continuation lines whose indentation
+	Python ignores — six real ones in `dev/xhttp/test/test_parity.py` — and **D1
+	already provides the fix**, since `NL` vs `NEWLINE` is exactly that
+	distinction; and the **root anchor is what makes it catch the inline hazard**
+	in #128. **Cost on XLib is zero**: across the 21 files that actually get
+	inlined, mixed-leading lines are 0 and every one is unanimously tab-led.
+	**Ruling 3, what the warning is for**: *"we don't try to figure out whether a
+	particular pattern would break things. It only matters that tabs and spaces are
+	both used"* — a red flag, not a hazard detector, with over-firing accepted and
+	"serious effort" into mixed-convention handling explicitly declined.
+	**Rulings 4 and 5, the shape**: whitespace-only lines are **ignored** (*"they
+	don't affect how python runs in any case"*), and the report is **the first
+	unexpectedly indented line per file** (*"this is generally not the bundler's
+	purpose"*). **Calibration: silent on everything this repo has produced** —
+	0 reported files across the 21 inlined sources *and* the 6 bundles in `xlib/`
+	that the old bundler already produced; the 7 whitespace-only lines just
+	excluded were the only thing in the repo a literal scan would ever have
+	tripped on. Left is **wording only**, now folded into #127.
+- [x] **#125 — pybundle: name-import shapes — RULED 2026-10-15, alias form**
+	(done 2026-10-15, high) — board: epiq `F7KHKM8` (Todo). **Reverses F13.**
+	*"following python behaviour strictly would be the correct choice and would
+	mean that every import involves a rebind"*, then *"let's just say that every
+	import, even non-local ones, gets a rebind"*, and finally **"okay, let's go
+	with the alias solution"** after the collision evidence. **local** — import
+	line deleted, one rebind per name (`server__ship__defs = server__defs`);
+	**non-local** — import line rewritten with an alias
+	(`from x import defs as A__defs`), no second statement; **local star import**
+	— the same rebind, one per defined global, because a star import is *"just a
+	more concise version of `from x import a,b,c...`"*. The two-statement form
+	was tried first and dropped: it does not remove the collision, it relocates
+	it, because `from x import defs` binds `defs` at top level whether or not
+	anyone rebinds it. **All three questions answered by the one ruling, and
+	verified together against real Python — 3 of 3 match**: star import then
+	shadowing gives 2, a name the module does not define now traces because the
+	callee's own import was prefixed on the way in, and function scope works
+	provided **a rebind's LHS is already prefixed and must not be prefixed
+	again**. Bloat measured at **+2%** (43 names, 1551 lines) and under the alias
+	form non-local imports cost nothing extra. **The last undetermined shape is
+	settled** — the split rule: **dotted module imports** (`import a.b`) keep the
+	statement and add one rebind (`import email.utils` + `A__email = email`);
+	**everything else** aliases in place. Reason: the alias hands the file the
+	*leaf* instead of the *parent*, so `email.utils.parseaddr` keeps working by
+	luck while `email.message_from_string` raises `AttributeError` — half-silent,
+	and a test written against the working half reports green. **Bloat measured in
+	bytes, not lines**: +3% over 44 807 B, ranging 0% (`_/server.py`, 10 imports)
+	to 10% (`_/err.py`, 18 refs in 832 B). It tracks *references*, not lines, and
+	flatters XLib — `dev/` is shallow, while the human's traveller example
+	prefixes 4-character names with 13 characters. Accepted cost: *"I don't really
+	see a way around it either."*
+- [ ] **#127 — pybundle: re-derive and write in the spec edits** (by
+	decision needed, medium) — board: epiq `R9H4PVD` + `EZAVYNM` (Todo).
+	**⛔ Do not execute as written — its main item is now wrong in direction.**
+	`R9H4PVD` repairs D9/D19 by removing rebinding language, on the grounds that
+	F13 deleted rebindings; **F13 was reversed on 2026-10-15** (alias, every
+	import rebinds). Both tickets need re-deriving against the alias ruling
+	before anyone writes a line. **What survives unchanged and is ready now:**
+	D16's two field names (`text`, `indent` — the string form is the hinge the
+	indentation question turned on), D13's argv clause, D1's empty-line clause,
+	F18, the counting correction (six, not nine), and the fully-ruled
+	indentation-warning paragraph. **New from the alias ruling:** `import a.b`
+	binds `a`, not `a.b`, and the alias form cannot express it — 1 occurrence,
+	`dev/xhttp/_/helper.py:2`. **D19's declined warning may be moot** — three of
+	its four collision sources are now structurally prevented rather than merely
+	unlikely; only the non-local star import survives, which D9 already warns
+	about separately.
 - [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
 - [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done

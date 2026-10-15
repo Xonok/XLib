@@ -20,9 +20,11 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `608621e` (2026-10-15). **The working tree is clean and
-nothing is untracked** — the last two were `doc/reviews/pybundle-tests-pass1.md`
-and `tools/pybundle/test/`, committed in `608621e`. xhttp arrived in
+Basis: `master` at `d412f9a` (2026-10-15). **The working tree is dirty, and
+every path in it is pybundle** — three modified test files, two untracked test
+files, and the untracked `doc/reviews/pybundle-tests-pass1-2.md` that is the
+test pass 2 review. Nothing else is touched, and none of it is committed; that
+is the pass-2 deliverable, unclosed. xhttp arrived in
 `dev/` from Space-Traveller on 2026-10-10; its root is clean — documentation,
 `xhttp.py`, the internals in `_/`, the suite in `test/`, and `compare/` holding
 the temporary RFC comparison material (`ba84849`). The suite is at **223 tests /
@@ -76,10 +78,10 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **The spec's decisions are appended** — process step 3, `03c0e75`. All twelve flaws from the test pass are resolved in a new *Decisions — test pass 1* section at the end of `SPEC.md`; nothing above it was edited. **Tests are written and committed** — 65 in `tools/pybundle/test/` (`608621e`), derived before those decisions and therefore needing re-derivation: one of the 65 asserts the opposite of D9 and must be replaced, and five additions are listed in the append. Implementation is the stage after that | epiq `6MFX0Z1`, `YEBP3QB` |
+| **pybundle rewrite** | human (intent) / AI (spec) | **The tests have been re-derived and the pass is closed; the spec edits it produced are not written in.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files**, re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2's output is uncommitted**: 3 modified + 2 untracked test files and the untracked `doc/reviews/pybundle-tests-pass1-2.md`. Five of the pass-1 flaws are closed, three remain open (`S1G5037`, `F7KHKM8`), and five answered edits nobody has written in (`R9H4PVD`, `EZAVYNM`). Implementation is the stage after all of that | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
 | **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib 31 open (28 Todo, 2 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
+| **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -146,8 +148,10 @@ Also standing, from the abandoned single-pass attempt:
 	in the tree (`pybundle.py`, `BUG_FIX_SPEC.md`, `VERSIONS.md`, three fixtures).
 	They are the record of a real attempt, not a verdict on anything.
 - `tools/pybundle/_/` is an empty directory left behind, and
-	`tools/pybundle/test/` no longer is — it holds the 65 tests committed in
-	`608621e`. Git does not track empty directories, so `_/` exists on disk and
+	`tools/pybundle/test/` no longer is — it held the 65 tests committed in
+	`608621e` and now holds **138 in five files, of which two files are untracked
+	and three more are modified**; nothing from the pass-2 derivation is
+	committed. Git does not track empty directories, so `_/` exists on disk and
 	not in the repository.
 
 ## Blocked / needs attention
@@ -197,29 +201,112 @@ Also standing, from the abandoned single-pass attempt:
 	directly, no longer works. **There is currently no way to look at a bundle
 	without writing one.** All six releases in `xlib/` predate the move and
 	nothing tests the path.
-- **The pybundle rewrite has left the decision stage; the tests are next.** The
-	human wrote `DRAFT.md` as intent; `SPEC.md` is derived from it and written by an
-	AI on the condition that every decision traces back to a draft section
-	(`24e1856`, `d9528b0`). The test pass then found **12 spec flaws**
-	(`doc/reviews/pybundle-tests-pass1.md`, `608621e`) — twelve places where a test
-	could not be written without a decision the spec did not contain. **All twelve are
-	now appended to `SPEC.md` as *Decisions — test pass 1*** (`03c0e75`), written
-	append-only: 346 insertions, 0 deletions, so nothing above the new section moved.
-	**The tests were derived before those decisions and must be re-derived**: one of
-	the 65 (`test_a_name_import_raises`) asserts the opposite of D9 and has to be
-	replaced, and five additions are listed in the append's *What the tests must now
-	cover*. **Three decisions changed the tool's scope, not just its wording, so they
-	are worth a second reader**: name imports are now supported, both local
-	(`count = helper__count`) and non-local (`from pathlib import join as A__join`),
-	which **retires `NOT_A_MODULE`**; the function set grows from six to seven with
-	`cli(argv) -> int`, which is what R5's "never closes a sink it did not open" was
-	waiting for; and a **star import of a non-local module is left in place with a
-	warning rather than refused** — the bundler will sometimes produce a bundle that
-	does not work and says so on stderr. That last one is a deliberate accepted limit,
-	and the append names the one-line change that reverses it. The human's reasons for
-	the rewrite — pybundle is a tool and carries no versions; its earlier releases
-	were removed before ever being committed; the last agent on it went in circles on
-	the complexity — are in epiq `6MFX0Z1` (why: HISTORY.md 2026-09-30 for the
+- **The pybundle rewrite is at the spec-edit stage: the tests are re-derived, and
+	the spec has not caught up with what they proved.** The human wrote `DRAFT.md`
+	as intent; `SPEC.md` is derived from it and written by an AI on the condition
+	that every decision traces back to a draft section (`24e1856`, `d9528b0`). The
+	first test pass found **12 spec flaws** (`doc/reviews/pybundle-tests-pass1.md`,
+	`608621e`) — places where a test could not be written without a decision the
+	spec did not contain. All twelve are appended to `SPEC.md` as *Decisions — test
+	pass 1* (`03c0e75`), written append-only: 346 insertions, 0 deletions, so
+	nothing above the new section moved. The tests were then **re-derived on
+	2026-10-15** against those decisions — 138 in five files, superseding the 65 —
+	which is what pass 2's review (`doc/reviews/pybundle-tests-pass1-2.md`) records.
+	**Two things follow from that and neither is done.** First, five of the pass-1
+	flaws are closed and **three are not**, all needing the human: the three
+	name-import shapes with no stated answer (`F7KHKM8`), and mixed tab/space
+	indentation (`S1G5037`). **Both halves of the indentation question were ruled
+	on 2026-10-15.** *Mechanism*: *"Using the tokenizer's INDENT/DEDENT is a
+	reasonable way of interpreting my intent. Checking strings exactly is not
+	necessary"* — so D2 tracks blocks by matching the tokenizer's own INDENT/DEDENT
+	tokens rather than comparing indentation strings, and the scope-tracking
+	failure the string comparison caused cannot happen. That also settles D16's
+	`indent`-as-a-string choice, which was made for precisely this reason
+	(`EZAVYNM` records it). *Trigger*: anchor on the **root file** (or the first
+	file that has indentation), warn if **any line** carries a different
+	indentation type, and list every file that differs — over-firing deliberately,
+	since the human calls it the simple approach to warning a user.
+	**Two things the ruling does not say, both now on the record:** the scan
+	should be over **statements, not lines**, or the warning fires on bracket
+	continuation lines whose indentation Python ignores — six real ones in
+	`dev/xhttp/test/test_parity.py` — and **D1 already provides the fix**, since
+	`NL` vs `NEWLINE` is exactly that distinction; and the **root anchor is what
+	makes the trigger catch the inline hazard**, because the callee disagrees with
+	the root by construction. **Cost on XLib is zero**: across the 21 files under
+	`dev/` that actually get inlined, mixed-leading lines are 0 and every one is
+	unanimously tab-led, so the warning is silent here and matters when a foreign
+	library is bundled. **Two further rulings completed the shape.** Whitespace-only
+	lines are **ignored** — *"they don't affect how python runs in any case"* — and
+	the report is **the first unexpectedly indented line per file**, *"since this
+	is generally not the bundler's purpose"*. **Calibrated, not assumed: the rule
+	is silent on everything this repo has produced** — 0 reported files across the
+	21 inlined sources *and* the 6 bundles in `xlib/` the old bundler already
+	produced; the 7 whitespace-only lines just excluded (all bare tabs in
+	`dev/xhttp/_/`) were the only thing in the repo a literal scan would ever have
+tripped on. One false-positive class remains unruled and costs nothing either
+	way — **multi-line string interiors**, which by the human's own *"does not
+	affect how Python runs"* reasoning should be ignored too, and which measure 0
+	across the inlined files. What remains is **wording**, folded into `#127`.
+	**The name-import questions were then answered by one ruling, and it reversed
+	F13** (`#125`, epiq `F7KHKM8`). The human's chain: *"following python
+	behaviour strictly would be the correct choice and would mean that every
+	import involves a rebind"*, *"let's just say that every import, even
+	non-local ones, gets a rebind"*, and finally **"okay, let's go with the alias
+	solution"** once the collision evidence was on the table. The shape: **local**
+	— import deleted, one rebind per name (`server__ship__defs =
+	server__defs`); **non-local** — import rewritten with an alias (`from x import
+	defs as A__defs`), no second statement; **local star import** — the same
+	rebind per defined global, because a star import is *"just a more concise
+	version of `from x import a,b,c...`"*. The two-statement form was tried
+	first and dropped for a reason worth keeping: it does not remove the
+	collision, it **relocates** it, because `from x import defs` binds `defs` at
+	top level whether or not anyone rebinds it. **All three of the review's
+	unanswered shapes are answered by this, verified together against real Python
+	— 3 of 3 match**: star-import-then-shadowing gives 2 because the rebind is a
+	*statement* and a later definition overrides it; a name the module does not
+	define now traces, because the callee's own import was prefixed on the way in;
+	and function scope works provided **a rebind's LHS is already prefixed and is
+	not prefixed again**. Bloat measured at **+2%** (43 names, 1551 lines), and
+	non-local imports cost nothing extra under the alias form.
+	**Two consequences to carry.** `#127` **must not be executed as written** —
+	its main item repairs D9/D19 by removing rebinding language, which the
+	reversal made wrong in *direction*, and **D19's declined-warning paragraph may
+	now be moot**, since three of its four collision sources are structurally
+	prevented rather than merely unlikely and only the non-local star import
+	survives. **The last undetermined output is closed** — the split rule:
+	**dotted module imports** (`import a.b`) keep the statement and add one rebind
+	(`import email.utils` + `A__email = email`); everything else aliases in place.
+	The condition is precise: **the alias rule except where Python binds a name the
+	statement does not spell.** The failure it avoids is half-silent — the alias
+	hands the file the *leaf* instead of the *parent*, so `email.utils.parseaddr`
+	keeps working by luck while `email.message_from_string` raises
+	`AttributeError`. One occurrence (`dev/xhttp/_/helper.py:2`), so spec
+	completeness rather than a blocker. **Bloat re-measured in bytes, on the
+	human's correction that lines are the wrong unit**: prefixing lengthens every
+	*reference*, not just the import lines, so the inflation tracks references —
+	**+3% over 44 807 B**, from 0% (`_/server.py`, 10 imports, 0%) to 10%
+	(`_/err.py`, 18 references in 832 B). It flatters XLib, whose `dev/` is
+	shallow; the human's traveller example prefixes 4-character names with 13
+	characters. Accepted cost, recorded as such.
+	Second, **five edits the tests
+	already answered are not written in** (`R9H4PVD`, `EZAVYNM`) — D16's field
+	names, D13's argv clause, D1's clause, F18 and the counting correction, all
+	of which stand, while the D9/D19 repair half of that pair is superseded.
+	**Three decisions changed the tool's scope, not just its wording, so they are
+	worth a second reader**: name imports are now supported, and the **alias ruling
+	replaced the F13 mechanism outright** — local ones by a rebinding statement,
+	non-local ones by aliasing the import, which is what **retires
+	`NOT_A_MODULE`**; the function
+	set grows from six to seven with `cli(argv) -> int`, which is what R5's "never
+	closes a sink it did not open" was waiting for; and a **star import of a
+	non-local module is left in place with a warning rather than refused** — the
+	bundler will sometimes produce a bundle that does not work and says so on
+	stderr. That last one is a deliberate accepted limit, and the append names the
+	one-line change that reverses it; it is also the precedent the human's
+	indentation ruling will read against. The human's reasons for the rewrite —
+	pybundle is a tool and carries no versions; its earlier releases were removed
+	before ever being committed; the last agent on it went in circles on the
+	complexity — are in epiq `6MFX0Z1` (why: HISTORY.md 2026-09-30 for the
 	original block). **Housekeeping the draft calls for is still undone**:
 	`SPEC_new.md` is to be deleted once the implementation matches the intent, and
 	until then it sits beside `SPEC.md` and `SPEC_old.md` looking equally

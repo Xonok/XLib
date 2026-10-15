@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for the enforced structure — R6 and D4.
+Tests for the enforced structure — R6 and D12.
 
 Run with: python3 -m unittest tools.pybundle.test.test_bundler_structure -v
 
@@ -8,6 +8,9 @@ SPEC.md's goal section says structure is a requirement here and not an
 implementation preference, so these tests read the sources rather than the
 behaviour. They are the only tests in the suite that do: a source test is only
 worth writing where the spec has forbidden or named something.
+
+D12 supersedes D4's table with seven functions rather than six, adding `cli` in
+`bundler_cli.py`, so the placement map below is D12's.
 """
 
 import re,sys,unittest
@@ -15,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from tools.pybundle import bundler,bundler_imports,bundler_names,bundler_source
+from tools.pybundle import bundler,bundler_cli,bundler_imports,bundler_names,bundler_source
 
 PACKAGE = ROOT / "tools" / "pybundle"
 MODULES = sorted(PACKAGE.glob("*.py"))
@@ -27,6 +30,7 @@ PLACEMENT = {
 	"translate": "bundler_names.py",
 	"inline": "bundler.py",
 	"main": "bundler.py",
+	"cli": "bundler_cli.py",
 }
 
 def _imports(module_name, imported_name):
@@ -38,7 +42,7 @@ def _imports(module_name, imported_name):
 def _placement():
 	"""The file each public function of the set is defined in."""
 	found = {}
-	for module in (bundler, bundler_imports, bundler_names, bundler_source):
+	for module in (bundler, bundler_cli, bundler_imports, bundler_names, bundler_source):
 		for name in dir(module):
 			if name.startswith("_"):
 				continue
@@ -62,8 +66,13 @@ class TestEntryModuleIsImportedByNothingR6(unittest.TestCase):
 		offenders = [path.name for path in MODULES if path.name != ENTRY and _imports(path.name, "bundler")]
 		self.assertEqual(offenders, [])
 
-class TestFunctionPlacementD4(unittest.TestCase):
-	"""D4: six functions, each in the file the table names."""
+class TestFunctionPlacementD12(unittest.TestCase):
+	"""D12: seven functions, each in the file the table names.
+
+	Only the named direction is tested. The reverse — that nothing else public
+	exists — is not, because the spec names no error classes and a class is
+	callable, so a correctly-placed error type would fail such a test.
+	"""
 
 	def test_each_function_of_the_set_lives_in_the_file_the_table_names(self):
 		placement = _placement()

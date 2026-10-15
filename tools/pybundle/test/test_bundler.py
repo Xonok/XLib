@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-Tests for the bundler as a whole — R1, R2, R3, R4, R5, D1, D2, D6 and the errors.
+Tests for the bundler as a whole — R1, R2, R3, R4, R5, R7, D1, D2, D6, D8, D9,
+D14, D15, D17, D19 and the errors.
 
 Run with: python3 -m unittest tools.pybundle.test.test_bundler -v
 
 Every test here runs `main` over a throwaway source tree and asserts on the
-bundle it writes. That is the seam the spec pins down exactly (D5's call graph:
-`main(entry_path, out)`, `out` a file-like sink per R5), so it needs no
-assumption about the shapes the leaves hand back — those are not settled by the
-spec, and the flaws are listed in `doc/reviews/pybundle-tests-pass1.md`.
-`renamed` is the one function tested directly, in `test_bundler_names.py`.
+bundle it writes. `main(entry_path, out)` is that seam because D12's call graph
+fixes both arguments and R5 fixes the sink. The leaves are tested directly where
+their shapes are now settled — `renamed` and `translate` in `test_bundler_names.py`,
+`statements` in `test_bundler_source.py`, and the command line in
+`test_bundler_cli.py`.
 """
 
-import io,os,shutil,sys,tempfile,unittest
+import contextlib,io,os,shutil,sys,tempfile,unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from tools.pybundle.bundler import main
+from tools.pybundle.bundler import inline,main
 
 def _start_comments(text):
 	"""The start comments of a bundle, in order — one per inlined file."""
@@ -44,6 +45,15 @@ class BundleTestCase(unittest.TestCase):
 		sink = io.StringIO() if out is None else out
 		main(str((self.root if root is None else root) / entry), sink)
 		return sink
+
+	def bundle_and_stderr(self, files, entry="server.py"):
+		"""The bundle and whatever reached stderr, in that order. D14 puts every
+		diagnostic on stderr, so a test that wants one captures it there."""
+		sink = io.StringIO()
+		stderr = io.StringIO()
+		with contextlib.redirect_stderr(stderr):
+			self.bundle(files, entry=entry, out=sink)
+		return sink.getvalue(), stderr.getvalue()
 
 class TestInliningR1(BundleTestCase):
 	"""R1: a local module is inlined, and nothing else is."""
@@ -91,8 +101,10 @@ class TestInliningR1(BundleTestCase):
 		self.assertEqual(blocks, ["## helper.py", "## server.py"])
 
 	def test_indented_local_import_leaves_a_pass_where_it_was(self):
-		text = self.bundle({"server.py": "if False: import helper\n", "helper.py": "count = 1\n"}).getvalue()
-		self.assertIn("if False: pass", text)
+		# Edge cases — an indented import is hoisted, so its own line goes and a
+		# pass is left behind at that indentation.
+		text = self.bundle({"server.py": "if False:\n\timport helper\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertIn("\tpass", text)
 
 	def test_indented_non_local_import_stays_indented(self):
 		# R1.5 — the hoisting in the edge cases applies to what gets inlined.
@@ -360,9 +372,35 @@ class TestOutputDestinationR5(BundleTestCase):
 		self.bundle({"other.py": "import stranger\n", "stranger.py": "run = 1\n"}, entry="other.py")
 		self.assertEqual(self.bundle(self.TREE).getvalue(), alone)
 
+class TestInlineD11(BundleTestCase):
+	"""D11 and D12: `inline(modpath, root, out, seen, entry)` is callable as the
+	spec writes it, and `inline` hands back the globals it defined.
+
+	Only root-folder files are used. A nested file's modpath would have to be
+	spelled, and the spec writes a modpath dotted (R3's `py.command.api`) while
+	the call graph joins it to a folder (D12) — flagged as F21.
+	"""
+
+	def test_inline_writes_the_block_for_the_file_it_is_given(self):
+		sink = io.StringIO()
+		self.write_files({"server.py": "count = 1\n"})
+		inline("server", str(self.root), sink, {"server"}, "server")
+		self.assertIn("## server.py", sink.getvalue())
+
+	def test_inline_adds_the_modpath_to_seen(self):
+		seen = set()
+		self.write_files({"server.py": "count = 1\n"})
+		inline("server", str(self.root), io.StringIO(), seen, "server")
+		self.assertIn("server", seen)
+
+	def test_inline_returns_the_global_names_the_file_defines(self):
+		self.write_files({"server.py": "count = 1\n"})
+		returned = inline("server", str(self.root), io.StringIO(), {"server"}, "server")
+		self.assertIn("count", returned)
+
 class TestErrors(BundleTestCase):
-	"""The errors the spec says the bundler raises. RELATIVE_IMPORT_IN_ROOT has
-	none it could be raised from — see flaw F6."""
+	"""The two errors the spec still lists: IMPORT_FILE_NOT_FOUND and
+	RELATIVE_IMPORT_IN_ROOT. NOT_A_MODULE is retired by D15."""
 
 	def test_relative_import_of_a_missing_module_raises(self):
 		# IMPORT_FILE_NOT_FOUND — a relative import is definitely not a global.
@@ -375,12 +413,221 @@ class TestErrors(BundleTestCase):
 		text = self.bundle({"server.py": "import definitely_not_local\n"}).getvalue()
 		self.assertIn("import definitely_not_local", text)
 
-	def test_a_name_import_raises(self):
-		# NOT_A_MODULE — `from x import name` is a later-stage feature, and is
-		# reported rather than treated as a missing file.
+	def test_a_relative_import_in_the_root_file_raises(self):
+		# RELATIVE_IMPORT_IN_ROOT — D15 puts the check in `inline`, which is the
+		# only function that is handed `entry`.
 		with self.assertRaises(Exception) as caught:
-			self.bundle({"server.py": "from helper import count\n", "helper.py": "count = 1\n"})
-		self.assertIn("NOT_A_MODULE", str(caught.exception))
+			self.bundle({"server.py": "from . import helper\n", "helper.py": "count = 1\n"})
+		self.assertIn("RELATIVE_IMPORT_IN_ROOT", str(caught.exception))
+
+	def test_a_relative_import_in_a_non_root_file_does_not_raise(self):
+		# D15 — the check is `modpath == entry`, so an ordinary module may still
+		# use one.
+		blocks = _start_comments(self.bundle({
+			"server.py": "import sub.client\n",
+			"sub/client.py": "from . import api\n",
+			"sub/api.py": "count = 1\n",
+		}).getvalue())
+		self.assertEqual(blocks, ["## /sub/api.py", "## /sub/client.py", "## server.py"])
+
+class TestImportStatementsRemovedD8(BundleTestCase):
+	"""D8: an import of an inlined module is removed from the block that had it."""
+
+	def test_an_entirely_local_import_statement_is_removed(self):
+		text = self.bundle({"server.py": "import helper\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertNotIn("import helper", text)
+
+	def test_a_mixed_import_statement_keeps_the_non_local_half(self):
+		text = self.bundle({"server.py": "import helper, os\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertIn("import os", text)
+
+	def test_a_mixed_import_statement_loses_the_local_half(self):
+		text = self.bundle({"server.py": "import helper, os\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertNotIn("import helper", text)
+
+	def test_a_mixed_statement_keeps_the_remaining_targets_in_source_order(self):
+		text = self.bundle({
+			"server.py": "import helper, os, sys\n",
+			"helper.py": "count = 1\n",
+		}).getvalue()
+		self.assertIn("import os, sys", text)
+
+	def test_a_non_local_import_statement_is_never_removed(self):
+		# R1.5 — the local case above does not become a rule about every import.
+		text = self.bundle({"server.py": "import os\n"}).getvalue()
+		self.assertIn("import os", text)
+
+class TestNameImportsD9(BundleTestCase):
+	"""D9, as revised: `from x import y` needs no rebinding.
+
+	There are two cases and they end up the same. If `y` is a file it is just
+	`import x.y`, and the module path does the work. If `y` is a name inside `x`,
+	every use of `y` is treated as `x.y`, which is the same rewrite with the
+	module path reached separately. Either way the name lands at `x__y`, prefixed
+	by wherever `x` lives.
+	"""
+
+	NAME_IMPORT = {"server.py": "import sub.client\n", "sub/client.py": "from helper import count\nvalue = count\n", "helper.py": "count = 1\n"}
+
+	def test_a_name_imported_from_a_local_module_becomes_the_prefixed_global(self):
+		text = self.bundle(self.NAME_IMPORT).getvalue()
+		self.assertIn("value = helper__count", text)
+
+	def test_a_name_import_from_a_local_module_emits_no_rebinding(self):
+		# One `helper__count` — the definition. A rebinding would make two.
+		text = self.bundle(self.NAME_IMPORT).getvalue()
+		self.assertNotIn("count = helper__count", text)
+
+	def test_a_name_import_statement_is_removed(self):
+		# D8 — the module was inlined, so the statement goes with it.
+		text = self.bundle(self.NAME_IMPORT).getvalue()
+		self.assertNotIn("from helper import", text)
+
+	def test_a_from_import_of_a_module_is_the_module_path(self):
+		# The other half of the two cases: `nested` is a file, so this is
+		# `import helper.nested` wearing different syntax.
+		text = self.bundle({
+			"server.py": "import sub.client\n",
+			"sub/client.py": "from helper import nested\nvalue = nested.run\n",
+			"helper/nested.py": "def run():\n\treturn 1\n",
+		}).getvalue()
+		self.assertIn("value = helper__nested__run", text)
+
+	def test_a_root_name_import_rewrites_the_use(self):
+		text = self.bundle({
+			"server.py": "from helper import count\nvalue = count\n",
+			"helper.py": "count = 1\n",
+		}).getvalue()
+		self.assertIn("value = helper__count", text)
+
+	def test_a_name_import_from_a_non_local_module_becomes_a_module_import(self):
+		# `join` is a name in pathlib, so every use of it becomes `pathlib.join`,
+		# and the statement has to be the one that binds `pathlib`.
+		text = self.bundle({
+			"server.py": "import sub.client\n",
+			"sub/client.py": "from pathlib import join\n",
+		}).getvalue()
+		self.assertIn("import pathlib", text)
+
+	def test_a_use_of_a_non_local_name_import_becomes_an_attribute_of_it(self):
+		text = self.bundle({
+			"server.py": "import sub.client\n",
+			"sub/client.py": "from pathlib import join\nvalue = join(\"a\")\n",
+		}).getvalue()
+		self.assertIn("value = pathlib.join(\"a\")", text)
+
+	def test_a_star_import_of_a_local_module_removes_the_star_statement(self):
+		text = self.bundle({"server.py": "from helper import *\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertNotIn("import *", text)
+
+	def test_a_star_import_of_a_non_local_module_is_left_in_place(self):
+		# D9 — its bound names are not known, so there is nothing to rebind.
+		text = self.bundle({"server.py": "from os import *\n"}).getvalue()
+		self.assertIn("from os import *", text)
+
+	def test_a_star_import_of_a_non_local_module_warns(self):
+		# D9 — the warning is what keeps the known limit visible.
+		_, stderr_text = self.bundle_and_stderr({"server.py": "from os import *\n"})
+		self.assertTrue(stderr_text)
+
+class TestDiagnosticsGoToStderrD14(BundleTestCase):
+	"""D14: every diagnostic reaches stderr, and none reaches the sink."""
+
+	TREE = {
+		"server.py": "import first\nimport shared\n",
+		"first.py": "import shared\n",
+		"shared.py": "count = 1\n",
+	}
+
+	def test_a_dropped_second_reference_writes_a_message_to_stderr(self):
+		_, stderr_text = self.bundle_and_stderr(self.TREE)
+		self.assertTrue(stderr_text)
+
+	def test_a_dropped_second_reference_writes_nothing_to_stdout(self):
+		sink = io.StringIO()
+		stdout = io.StringIO()
+		stderr = io.StringIO()
+		with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+			self.bundle(self.TREE, out=sink)
+		self.assertEqual(stdout.getvalue(), "")
+
+	def test_a_file_with_no_diagnostics_writes_nothing_to_stderr(self):
+		_, stderr_text = self.bundle_and_stderr({"server.py": "count = 1\n"})
+		self.assertEqual(stderr_text, "")
+
+class TestBareModuleReferencesD17(BundleTestCase):
+	"""D17: a module name used other than as an attribute base has no rewrite,
+	and the bundler neither detects it nor raises."""
+
+	def test_a_bare_module_reference_is_carried_into_the_bundle_unchanged(self):
+		text = self.bundle({"server.py": "import helper\nvalue = helper\n", "helper.py": "count = 1\n"}).getvalue()
+		self.assertIn("value = helper", text)
+
+	def test_a_bare_module_reference_is_not_detected(self):
+		# Detection would have raised, as it does for RELATIVE_IMPORT_IN_ROOT.
+		# The shape is the one D17 names: `import helper.sub` binds the bare
+		# name `helper`, and using it bare has no rewrite.
+		text = self.bundle({
+			"server.py": "import helper.sub\nvalue = helper\n",
+			"helper/sub.py": "count = 1\n",
+		}).getvalue()
+		self.assertIn("value = helper", text)
+
+class TestNameCollisionsD19(BundleTestCase):
+	"""D19: names bound by non-local imports are not prefixed, and a collision
+	between two of them is neither detected nor warned about."""
+
+	def test_a_non_local_module_import_binds_an_unprefixed_name(self):
+		text = self.bundle({"server.py": "import math\nvalue = math.pi\n"}).getvalue()
+		self.assertIn("value = math.pi", text)
+
+	def test_two_files_binding_the_same_non_local_name_both_keep_it(self):
+		# The case D19 names: `import cmath as m` here, `import math as m` there.
+		text = self.bundle({
+			"server.py": "import first\nimport second\n",
+			"first.py": "import cmath as m\nvalue = m\n",
+			"second.py": "import math as m\nvalue = m\n",
+		}).getvalue()
+		self.assertEqual(text.count("import cmath as m") + text.count("import math as m"), 2)
+
+	def test_a_non_local_name_collision_is_not_warned_about(self):
+		# D19 — a warning was considered and declined.
+		_, stderr_text = self.bundle_and_stderr({
+			"server.py": "import first\nimport second\n",
+			"first.py": "import math as m\nvalue = m\n",
+			"second.py": "import cmath as m\nvalue = m\n",
+		})
+		self.assertEqual(stderr_text, "")
+
+	def test_a_name_import_from_a_non_local_module_binds_an_unprefixed_name(self):
+		# D19's exception: a non-local name import is linked to the module path,
+		# which is a plain dotted name with no prefix on it.
+		text = self.bundle({
+			"server.py": "import sub.client\n",
+			"sub/client.py": "from math import pi\nvalue = pi\n",
+		}).getvalue()
+		self.assertIn("value = math.pi", text)
+
+class TestNonNameTextSurvivesR7(BundleTestCase):
+	"""R7: comments, blank lines and spacing are carried through untouched."""
+
+	def test_a_comment_is_carried_into_the_bundle_unchanged(self):
+		text = self.bundle({
+			"server.py": "import helper\n# keep me\n",
+			"helper.py": "count = 1\n",
+		}).getvalue()
+		self.assertIn("# keep me", text)
+
+	def test_a_blank_line_inside_a_file_is_carried_into_the_bundle(self):
+		text = self.bundle({
+			"server.py": "import helper\n",
+			"helper.py": "count = 1\n\nrun = 2\n",
+		}).getvalue()
+		self.assertIn("\n\n", text)
+
+	def test_indentation_of_a_kept_statement_is_unchanged(self):
+		text = self.bundle({"server.py": "if True:\n\tcount = 1\n"}).getvalue()
+		self.assertIn("\n\tcount = 1", text)
 
 if __name__ == "__main__":
 	unittest.main()
