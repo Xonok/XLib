@@ -76,7 +76,7 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **Tests are written and committed** — 65 in `tools/pybundle/test/` (`608621e`), derived from `SPEC.md` by process step 4. **They do not run, which is the correct state for this stage**: the old implementation was deleted 2026-10-14 (`5e87ae8`) and nothing has replaced it. **The stage is now blocked on the human**, not on an agent: the test review found **12 spec flaws** (`doc/reviews/pybundle-tests-pass1.md`), 6 of them blocking, and each needs a decision appended to `SPEC.md` per step 3 before the tests can re-derive. Implementation cannot start first, because tests are load-bearing | epiq `6MFX0Z1`, `YEBP3QB` |
+| **pybundle rewrite** | human (intent) / AI (spec) | **The spec's decisions are appended** — process step 3, `03c0e75`. All twelve flaws from the test pass are resolved in a new *Decisions — test pass 1* section at the end of `SPEC.md`; nothing above it was edited. **Tests are written and committed** — 65 in `tools/pybundle/test/` (`608621e`), derived before those decisions and therefore needing re-derivation: one of the 65 asserts the opposite of D9 and must be replaced, and five additions are listed in the append. Implementation is the stage after that | epiq `6MFX0Z1`, `YEBP3QB` |
 | **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib 31 open (28 Todo, 2 In progress, 1 Done), Agents 18 open (15 Todo, 1 In progress, 2 Done); the 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in | both boards |
@@ -197,33 +197,33 @@ Also standing, from the abandoned single-pass attempt:
 	directly, no longer works. **There is currently no way to look at a bundle
 	without writing one.** All six releases in `xlib/` predate the move and
 	nothing tests the path.
-- **The pybundle rewrite is blocked on the human's step-3 decisions, not on an
-	agent.** The human wrote `DRAFT.md` as intent; `SPEC.md` is derived from it
-	and written by an AI on the condition that every decision traces back to a
-	draft section (`24e1856`, `d9528b0`). Tests came next and are committed
-	(`608621e`): 65 tests over three files, and **they do not run, because there
-	is no implementation** — which is the state the process puts this stage in.
-	**The deliverable of the test stage was the spec flaws, and there are 12**
-	(`doc/reviews/pybundle-tests-pass1.md`). Six are blocking, and every one is
-	a decision only the human can take: `inline` cannot be called as written
-	(F5), the command line has no function that parses argv or returns an exit
-	code (F7), nothing is assigned the job of deleting the statements of
-	inlined imports (F4), the three leaves' return shapes are unstated (F1–F3),
-	`RELATIVE_IMPORT_IN_ROOT` has no function that could raise it (F6), and
-	star imports have no stated behaviour (F8). **The rest — F9 (where the
-	dropped-import message goes; it cannot be the sink, or R5's byte identity
-	breaks), F10 (a bare module reference, which is why D2's function-local
-	`import` is the one binding form with no test), F11 (the draft's four *Key
-	constraints* never became requirements), F12 (R3's "names the root imports
-	are translated" can only mean module names, because D7 makes `from x
-	import name` raise) — can be settled later or not at all.** The human's
-	reasons for the rewrite — pybundle is a tool and carries no versions; its
-	earlier releases were removed before ever being committed; the last agent on
-	it went in circles on the complexity — are in epiq `6MFX0Z1` (why: HISTORY.md
-	2026-09-30 for the original block). **Housekeeping the draft calls for is
-	still undone**: `SPEC_new.md` is to be deleted once the implementation
-	matches the intent, and until then it sits beside `SPEC.md` and `SPEC_old.md`
-	looking equally authoritative.
+- **The pybundle rewrite has left the decision stage; the tests are next.** The
+	human wrote `DRAFT.md` as intent; `SPEC.md` is derived from it and written by an
+	AI on the condition that every decision traces back to a draft section
+	(`24e1856`, `d9528b0`). The test pass then found **12 spec flaws**
+	(`doc/reviews/pybundle-tests-pass1.md`, `608621e`) — twelve places where a test
+	could not be written without a decision the spec did not contain. **All twelve are
+	now appended to `SPEC.md` as *Decisions — test pass 1*** (`03c0e75`), written
+	append-only: 346 insertions, 0 deletions, so nothing above the new section moved.
+	**The tests were derived before those decisions and must be re-derived**: one of
+	the 65 (`test_a_name_import_raises`) asserts the opposite of D9 and has to be
+	replaced, and five additions are listed in the append's *What the tests must now
+	cover*. **Three decisions changed the tool's scope, not just its wording, so they
+	are worth a second reader**: name imports are now supported, both local
+	(`count = helper__count`) and non-local (`from pathlib import join as A__join`),
+	which **retires `NOT_A_MODULE`**; the function set grows from six to seven with
+	`cli(argv) -> int`, which is what R5's "never closes a sink it did not open" was
+	waiting for; and a **star import of a non-local module is left in place with a
+	warning rather than refused** — the bundler will sometimes produce a bundle that
+	does not work and says so on stderr. That last one is a deliberate accepted limit,
+	and the append names the one-line change that reverses it. The human's reasons for
+	the rewrite — pybundle is a tool and carries no versions; its earlier releases
+	were removed before ever being committed; the last agent on it went in circles on
+	the complexity — are in epiq `6MFX0Z1` (why: HISTORY.md 2026-09-30 for the
+	original block). **Housekeeping the draft calls for is still undone**:
+	`SPEC_new.md` is to be deleted once the implementation matches the intent, and
+	until then it sits beside `SPEC.md` and `SPEC_old.md` looking equally
+	authoritative.
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
