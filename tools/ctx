@@ -26,7 +26,7 @@
 set -uo pipefail
 
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/models.json"
-OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+DB="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/opencode.db"
 
 usage() { sed -n '3,21p' "$0" | sed 's/^#\{1,\} \{0,1\}//'; }
 
@@ -48,7 +48,7 @@ while (( $# )); do
 done
 
 [[ $NUM =~ ^[0-9]+$ ]] && (( NUM > 0 )) || die "-n must be a positive integer" 2
-command -v "$OPENCODE_BIN" >/dev/null || die "opencode not found on PATH"
+[[ -r $DB ]] || die "opencode database not found at $DB"
 
 # Locate this session: match sessions rooted at $PWD, at a parent of $PWD, or
 # at $PWD itself, so the script still works from a subdirectory. Uses
@@ -77,7 +77,17 @@ WHERE (s.directory = '$HERE'
 ORDER BY m.time_created DESC
 LIMIT $NUM;"
 
-RAW=$("$OPENCODE_BIN" db "$SQL" --format tsv 2>&1) || die "query failed:"$'\n'"$RAW"
+# opencode 2.0 removed the `db` subcommand, so read the store directly. The SQL
+# is unchanged: v2 keeps message/session and mirrors session into session_v2.
+RAW=$(printf '%s' "$SQL" | python3 -c '
+import os,sqlite3,sys
+base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+conn = sqlite3.connect("file:" + base + "/opencode/opencode.db?mode=ro", uri=True)
+cur = conn.execute(sys.stdin.read())
+print("\t".join(col[0] for col in cur.description))
+for row in cur:
+	print("\t".join("" if v is None else str(v) for v in row))
+' 2>&1) || die "query failed:"$'\n'"$RAW"
 ROWS=${RAW#*$'\n'} # strip the tsv header
 
 if [[ -z ${ROWS//[[:space:]]/} ]]; then
