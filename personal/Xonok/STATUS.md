@@ -20,14 +20,21 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `247eaba` (2026-10-15), **one commit ahead of
-`origin/master` and unpushed** — the human authorised the commit, not the push.
-The working tree is clean. The
-pybundle test pass 2 is committed — 138 tests in five files plus
-`doc/reviews/pybundle-tests-pass1-2.md`, 9 files and 1102 insertions — and the
-commit body records the four rulings that landed while that pass was under
-review, including that **F13 was reversed**, so the 138 is not a stable number.
-xhttp arrived in
+Basis: `master` at `de4f70b` (2026-10-17), **snapshot taken 2026-10-17**, **one
+commit ahead of `origin/master` and unpushed** — the human authorised the commit, not
+the push. **pybundle test pass 3 is committed** (`de4f70b`): **188 tests in six
+files**, up from the 138 in five, plus both review docs, four decisions in SPEC.md
+(D26, D27, D28, D29), the three broken tests fixed and the coverage gaps closed.
+**The working tree is still not clean, and what is in it is not pybundle's** —
+modified `tools/marduk/_/sse_client.py`, `tools/marduk/_/state.py`,
+`tools/marduk/marduk.py`, `tools/oc-agent` and `tools/skynet.py`, untracked
+`tools/marduk/_/service.py`, `tools/marduk/_/session_watcher.py`, `tools/marduk/test/`
+and `tools/skynet/CHANGES.md`. **Left alone deliberately**: not mine, not this task's,
+and not mine to commit. The pass-2 history is
+kept below for what it settled: 138 tests in five files plus
+`doc/reviews/pybundle-tests-pass1-2.md`, 9 files and 1102 insertions, with the four
+rulings recorded in the commit body, including that **F13 was reversed** — which is
+why 138 is not a stable number and 188 is the current one. xhttp arrived in
 `dev/` from Space-Traveller on 2026-10-10; its root is clean — documentation,
 `xhttp.py`, the internals in `_/`, the suite in `test/`, and `compare/` holding
 the temporary RFC comparison material (`ba84849`). The suite is at **223 tests /
@@ -81,7 +88,7 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **The tests have been re-derived and the pass is closed; the spec edits it produced are not written in.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files**, re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2 is committed** (`247eaba`). **Every decision it prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings, so neither will send anyone back to a settled question. **The spec has not caught up, and that is now the only thing between here and implementation.** The human's stated next step is *"getting the bundler into a working state again"* via *"letting the reviewer derive tests once again"* — **which is the right instinct and the wrong order**: `SPEC.md` still describes F13, which today's ruling reversed, so a reviewer re-deriving against it would hit the same confusion this pass just spent a day resolving. **`#127`'s spec half is done** (`5e4784a` + the spec commit below): a new
+| **pybundle rewrite** | human (intent) / AI (spec) | **Pass 3 is derived, audited, fixed and committed (`de4f70b`); the spec edits it produced are written in for the four rulings, and the rest are not.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files** — that is pass 2, committed as `247eaba`, since superseded again by pass 3's 188 (see below) — re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2 is committed** (`247eaba`). **Every decision it prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings, so neither will send anyone back to a settled question. **The spec has not caught up, and that is now the only thing between here and implementation.** The human's stated next step is *"getting the bundler into a working state again"* via *"letting the reviewer derive tests once again"* — **which is the right instinct and the wrong order**: `SPEC.md` still describes F13, which today's ruling reversed, so a reviewer re-deriving against it would hit the same confusion this pass just spent a day resolving. **`#127`'s spec half is done** (`5e4784a` + the spec commit below): a new
 	*Decisions — 2026-10-15, after test pass 2* section, **268 insertions / 0
 	deletions**, with the first 730 lines verified byte-identical so the
 	append-only discipline of `03c0e75` holds. **D20** alias (reverses D9 and
@@ -91,7 +98,40 @@ the human's call.
 	saying **read D20 first — it reverses D9 two hundred lines up**, because an
 	implementer working top to bottom builds the withdrawn mechanism otherwise.
 	**What remains is the reviewer's re-derivation**, and the spec now names the
-	seven cases it must pin. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
+	seven cases it must pin.
+	**The re-derivation is done — pass 3, 2026-10-15, and it is uncommitted.** 176
+	tests in five files, described in `doc/reviews/pybundle-tests-pass1-3.md`; a
+	conformance audit on 2026-10-17 found **three tests that cannot pass against a
+	conforming bundler** and all three are fixed: `test_out_dash_writes_the_bundle_to_stdout`
+	asserted `helper__count` in a tree whose `setUp` had stopped importing `helper`
+	(**committed in `247eaba`, so two review passes missed it**), and the two D23
+	anchor tests gave the root no indentation at all, which made them contradict
+	their own sibling `test_a_root_without_indentation_reports_nothing_when_the_files_agree`
+	— no implementation satisfies both. A fourth, `test_a_comment_line_carries_no_indentation_of_its_own`,
+	asserted the opposite of its own name and is renamed. **188 tests now, in six
+	files**: the three coverage gaps are closed (R6.1's `tokenize` half, which no
+	test asserted; `imports`'s entry count, which D8 and D16 fix but nothing pinned;
+	and R5's "raises the same errors either way"), and the new `test_bundler_imports.py`
+	is the file for the one function D12 names that no file tested directly.
+	**All four still cannot run — there is no implementation.**
+	**One ruling recorded: D26** — a mixed statement's non-local half is aliased too
+	(`import helper, os` → `import os as sub__client__os`), which supersedes D8's
+	`becomes import os`. Three tests already asserted it; no test changed.
+	**The three blocking flaws are ruled and written in, 2026-10-17 — D27, D28,
+	D29**, all appended, nothing above them edited. **F25**: a use of a
+	name-imported name *is* rewritten, to the importing file's own prefixed name —
+	the bullet saying "nothing rewrites the use" would have produced a bundle raising
+	`NameError` that still passes a text-level test, and it contradicted D20's own
+	verified table. **F26**: a plain local module import emits **no rebind** — its
+	name is an alias for the callee's prefixed globals, because there is no module
+	object to bind (D17) and aliasing would make python re-import the file. **F29**:
+	the indentation report carries **the file's path, the first offending line's
+	number, and that line's text**, the path written the way the start comments write
+	it. F27, F28, F30, F31 and F21 remain open and none of them blocks.
+	**188 tests now, in six files** — the two new ones pin the report's path and
+	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
+	spec edits beyond these four decisions are still not written in, so the spec does
+	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
 | **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
