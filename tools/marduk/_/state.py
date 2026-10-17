@@ -17,9 +17,9 @@ class AgentStatus(Enum):
 class AgentState:
 	"""In-memory state for a single agent."""
 
-	__slots__=("session_id","role","status","current_tool","last_event_ts","port","pid","started_at","warn_sse_silence","_sse_client","disconnected_at")
+	__slots__=("session_id","role","status","current_tool","last_event_ts","port","pid","started_at","warn_sse_silence","_sse_client","disconnected_at","workspace","_tool_names")
 
-	def __init__(self,session_id:str,role:str,port:int,pid:int,started_at:float=0.0):
+	def __init__(self,session_id:str,role:str,port:int,pid:int,started_at:float=0.0,workspace:str=""):
 		self.session_id=session_id
 		self.role=role
 		self.status=AgentStatus.IDLE
@@ -30,7 +30,16 @@ class AgentState:
 		self.started_at=started_at
 		self.warn_sse_silence=False
 		self.disconnected_at=None
+		self.workspace=workspace
+		self._tool_names={}
 		self._sse_client=None
+
+DELEGATING_TOOLS=("task","subagent")
+
+def _apply_tool(state:AgentState,name:str):
+	"""Record a tool invocation, distinguishing delegation from ordinary work."""
+	state.current_tool=name
+	state.status=AgentStatus.DELEGATING if name in DELEGATING_TOOLS else AgentStatus.WORKING
 
 def _payload(data:dict,event_type:str)->dict:
 	"""Extract payload from full SSE event object."""
@@ -59,9 +68,54 @@ def _payload(data:dict,event_type:str)->dict:
 		return {}
 	return data
 
+def _v2_payload(data):
+	"""Payload of a v2 event, which nests its fields under `data`."""
+	if isinstance(data,dict) and isinstance(data.get("data"),dict):
+		return data["data"]
+	return data if isinstance(data,dict) else {}
+
+def parse_event_v2(event_type:str,data:dict,state:AgentState):
+	"""Apply a v2 event to agent state. Returns True when it was recognised."""
+	payload=_v2_payload(data)
+	if event_type=="session.execution.started":
+		state.status=AgentStatus.WORKING
+	elif event_type in ("session.execution.succeeded","session.execution.idle"):
+		state.status=AgentStatus.IDLE
+		state.current_tool=None
+	elif event_type=="session.execution.failed":
+		state.status=AgentStatus.RETRY
+	elif event_type=="session.step.started":
+		state.status=AgentStatus.WORKING
+		state.current_tool="step"
+	elif event_type=="session.text.started":
+		state.status=AgentStatus.WORKING
+		state.current_tool="text"
+	elif event_type=="session.tool.input.started":
+		name=payload.get("name")
+		if isinstance(name,str) and name:
+			call_id=payload.get("id")
+			if call_id:
+				state._tool_names[call_id]=name
+			_apply_tool(state,name)
+	elif event_type=="session.tool.called":
+		name=state._tool_names.get(payload.get("id"),"")
+		if name:
+			_apply_tool(state,name)
+	elif event_type=="session.tool.failed":
+		state.status=AgentStatus.RETRY
+	elif event_type=="session.agent.selected":
+		state.status=AgentStatus.DELEGATING
+		state.current_tool="subagent"
+	else:
+		return False
+	return True
+
 def parse_event(event_type:str,data:dict,state:AgentState):
 	"""Parse an SSE event and update agent state."""
 	now=time.time()
+	if parse_event_v2(event_type,data,state):
+		state.last_event_ts=now
+		return
 	payload=_payload(data,event_type)
 	if event_type=="session.status":
 		status_raw=payload.get("status") or payload.get("type","")

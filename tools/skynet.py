@@ -18,11 +18,18 @@ def load_stats(limit_seconds):
 	cutoff = (time.time() - limit_seconds) * 1000
 	rows = conn.execute(
 		"""
-		SELECT json_extract(data, '$.modelID'),
+		SELECT json_extract(data, '$.model.id'),
 			time_created/1000.0,
 			json_extract(data, '$.tokens.input'),
 			json_extract(data, '$.tokens.output'),
-			json_extract(data, '$.tokens.total'),
+			COALESCE(
+				json_extract(data, '$.tokens.total'),
+				(COALESCE(json_extract(data, '$.tokens.input'), 0) +
+				 COALESCE(json_extract(data, '$.tokens.output'), 0) +
+				 COALESCE(json_extract(data, '$.tokens.reasoning'), 0) +
+				 COALESCE(json_extract(data, '$.tokens.cache.read'), 0) +
+				 COALESCE(json_extract(data, '$.tokens.cache.write'), 0))
+			),
 			json_extract(data, '$.tokens.reasoning'),
 			json_extract(data, '$.tokens.cache.read'),
 			json_extract(data, '$.tokens.cache.write'),
@@ -30,8 +37,8 @@ def load_stats(limit_seconds):
 			json_extract(data, '$.error.name'),
 			json_extract(data, '$.finish'),
 			session_id
-		FROM message
-		WHERE json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.time.created') >= ?
+		FROM session_message
+		WHERE type = 'assistant' AND json_extract(data, '$.time.created') >= ?
 		ORDER BY time_created
 		""",
 		(cutoff,),

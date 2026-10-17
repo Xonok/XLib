@@ -26,10 +26,11 @@ except ImportError:
 class SSEClient(ABC):
 	"""Abstract SSE client."""
 
-	def __init__(self,url:str,on_event:Callable[[str,dict],None],on_disconnect:Callable[[],None]):
+	def __init__(self,url:str,on_event:Callable[[str,dict],None],on_disconnect:Callable[[],None],headers:dict=None):
 		self.url=url
 		self.on_event=on_event
 		self.on_disconnect=on_disconnect
+		self.headers=headers or {}
 		self._running=False
 		self._backoff=1.0
 		self._max_backoff=30.0
@@ -64,7 +65,7 @@ class HttpxSSEClient(SSEClient):
 	"""SSE client using httpx."""
 
 	def _connect(self):
-		with httpx.stream("GET",self.url,timeout=None) as response:
+		with httpx.stream("GET",self.url,headers={**self.headers,"Accept":"text/event-stream"},timeout=None) as response:
 			response.raise_for_status()
 			self._process_stream(response.iter_lines())
 
@@ -98,7 +99,7 @@ class UrllibSSEClient(SSEClient):
 	"""SSE client using urllib (stdlib fallback)."""
 
 	def _connect(self):
-		req=urllib.request.Request(self.url,headers={"Accept":"text/event-stream"})
+		req=urllib.request.Request(self.url,headers={**self.headers,"Accept":"text/event-stream"})
 		with urllib.request.urlopen(req,timeout=None) as response:
 			self._process_stream(response)
 
@@ -128,8 +129,8 @@ class UrllibSSEClient(SSEClient):
 			elif line.startswith("data:"):
 				event_data+=line[5:].lstrip()+"\n"
 
-def create_sse_client(url:str,on_event:Callable[[str,dict],None],on_disconnect:Callable[[],None]):
+def create_sse_client(url:str,on_event:Callable[[str,dict],None],on_disconnect:Callable[[],None],headers:dict=None):
 	"""Create the best available SSE client."""
 	if HAS_HTTPX:
-		return HttpxSSEClient(url,on_event,on_disconnect)
-	return UrllibSSEClient(url,on_event,on_disconnect)
+		return HttpxSSEClient(url,on_event,on_disconnect,headers)
+	return UrllibSSEClient(url,on_event,on_disconnect,headers)

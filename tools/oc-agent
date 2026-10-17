@@ -1,13 +1,26 @@
 #!/bin/bash
-# Named-agent launcher for opencode. Writes port files to ~/.opencode/ports/.
+# Named-agent launcher for opencode.
+#
+# Registers each launch in ~/.opencode/agents/<sessionID>.json, which is what
+# `tools/marduk` watches. OpenCode v2 removed the per-process `--port 0` server
+# that the old port files recorded, so the session id is the durable handle: it
+# is created up front with the agent bound, then attached to.
 AGENT="$1"
 
 # The names `oc-agent <name>` accepts, asked of opencode itself: an agent may
 # come from a file under .opencode/agent/, from a built-in, or from a plugin, so
 # reading one directory would list names the launcher rejects and miss names it
-# takes. Prints nothing if opencode cannot answer, which callers read as "unknown".
+# takes. Only primary-capable agents can head a session. Prints nothing if
+# opencode cannot answer, which callers read as "unknown".
 agent_names() {
-	opencode agent list 2>/dev/null | sed -n 's/^\([^ ][^ ]*\) (.*/\1/p' | sort -u
+	opencode api get /api/agent 2>/dev/null \
+		| jq -r '.data[] | select(.mode=="all") | .name' 2>/dev/null \
+		| sort -u
+}
+
+die() {
+	echo "oc-agent: $1" >&2
+	exit 1
 }
 
 if [ -z "$AGENT" ]; then
@@ -18,16 +31,19 @@ if [ -z "$AGENT" ]; then
 	exit 0
 fi
 
-# Only refuse a name when opencode actually answered: an empty list means the
+# Refuse an unknown name whenever opencode can answer. An empty list means the
 # question could not be asked, and a launcher that refuses every name then is
 # worse than one that lets opencode fall back to its default agent.
 names=$(agent_names)
 if [ -n "$names" ] && ! printf '%s\n' "$names" | grep -qxF -- "$AGENT"; then
 	echo "Unknown agent: $AGENT" >&2
+	echo "Available: $(printf '%s' "$names" | tr '\n' ' ')" >&2
 	echo "Usage: oc-agent <agent-name>   (run oc-agent with no arguments to list them)" >&2
 	exit 1
 fi
 
+# Claim a slot for this launch. The slot number names the window, so two
+# terminals running the same agent stay distinguishable.
 STATE="/tmp/oc-agent/$AGENT"
 mkdir -p "$STATE"
 
@@ -43,62 +59,63 @@ N=""
 for i in $(seq 1 99); do
 	if mkdir "$STATE/$AGENT.$i" 2>/dev/null; then N=$i; break; fi
 done
-if [ -z "$N" ]; then echo "Error: all 99 slots busy for '$AGENT'" >&2; exit 1; fi
+[ -n "$N" ] || die "all 99 slots busy for '$AGENT'"
 
 echo $$ > "$STATE/$AGENT.$N/pid"
 TITLE="$AGENT"; [ "$N" -gt 1 ] && TITLE="$AGENT-$N"
 printf '\033]2;%s\007' "$TITLE"
-export OPENCODE_DISABLE_TERMINAL_TITLE=1
+# OpenCode v2 dropped OPENCODE_DISABLE_TERMINAL_TITLE and sets its own title
+# ("OC | <agent>") over ours. Turn that off for this window only, so the
+# terminal shows the agent and slot. jq merges into any existing inline config;
+# the global cli.json is left untouched.
+existing_cli_config="$OPENCODE_CLI_CONFIG_CONTENT"
+if [ -n "$existing_cli_config" ] && printf '%s' "$existing_cli_config" | jq -e . >/dev/null 2>&1; then
+	export OPENCODE_CLI_CONFIG_CONTENT=$(printf '%s' "$existing_cli_config" | jq -c '. + {terminal:{title:false}}')
+else
+	export OPENCODE_CLI_CONFIG_CONTENT='{"terminal":{"title":false}}'
+fi
 export OPENCODE_AGENT_ROLE="$AGENT"
 
-ports_dir="$HOME/.opencode/ports"
-mkdir -p "$ports_dir"
-port_info_file="/tmp/oc_agent_port_$$"
+registry_dir="$HOME/.opencode/agents"
+mkdir -p "$registry_dir"
+registry_file=""
 
-port=""
 cleanup() {
-	if [ -n "$port" ]; then rm -f "$ports_dir/$port.json"; fi
-	rm -f "$port_info_file"
+	[ -n "$registry_file" ] && rm -f "$registry_file"
 	rm -rf "$STATE/$AGENT.$N"
 }
 trap cleanup EXIT
 
-# Background detector: find opencode PID, then its listening port via ss.
-(
-	opencode_pid=""
-	while [ -z "$opencode_pid" ]; do
-		opencode_pid=$(pgrep -P $$ -f "opencode.*--agent $AGENT" | head -1)
-		sleep 0.25
-	done
-	current_port=""
-	written=false
-	while true; do
-		if ! kill -0 "$opencode_pid" 2>/dev/null; then break; fi
-		if [ "$written" = false ]; then
-			current_port=$(ss -tlnp 2>/dev/null | grep "pid=$opencode_pid" | awk '{print $4}' | grep -o '[0-9]*$' | head -1)
-			if [ -n "$current_port" ]; then
-				session_id=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
-				cat > "$ports_dir/$current_port.json" <<PORTJSON
-{
-  "port": $current_port,
-  "role": "$TITLE",
-  "session_id": "$session_id",
-  "pid": $opencode_pid,
-  "started_at": $(date +%s.%3N)
-}
-PORTJSON
-				echo "$current_port" > "$port_info_file"
-				written=true
-			fi
-		fi
-		sleep 1.0
-	done
-) &
+# The project directory. This must be the terminal's own path: the service
+# resolves `/api/location` to its own home, not to the calling project, so
+# asking it would label every session with the wrong workspace.
+project_dir="$PWD"
 
-# Run opencode in the current project directory (agents are global via ~/.config/opencode/agent).
-opencode --agent "$AGENT" --port 0 --log-level WARN
-opencode_exit=$?
+# Create the session with the agent already bound, so the window opens on the
+# right agent without a switch. Location is explicit because the service
+# resolves it from its own working directory otherwise, not this terminal's.
+created=$(opencode api post /api/session --data "$(jq -nc \
+	--arg agent "$AGENT" \
+	--arg title "$TITLE" \
+	--arg dir "$project_dir" \
+	'{agent:$agent,title:$title,location:{directory:$dir}}')" 2>/dev/null)
 
-port=""
-if [ -f "$port_info_file" ]; then port=$(cat "$port_info_file" 2>/dev/null); fi
-exit $opencode_exit
+session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
+[ -n "$session_id" ] || die "could not create a session for '$AGENT' (is the opencode service running? try: opencode service status)"
+
+# One file per session, named for the id so a stale entry is unambiguous.
+registry_file="$registry_dir/$session_id.json"
+jq -nc \
+	--arg session "$session_id" \
+	--arg role "$TITLE" \
+	--arg agent "$AGENT" \
+	--arg dir "$project_dir" \
+	--argjson slot "$N" \
+	--argjson pid "$$" \
+	'{session_id:$session,role:$role,agent:$agent,workspace:$dir,slot:$slot,pid:$pid,started_at:(now*1000|floor)}' \
+	> "$registry_file" 2>/dev/null
+
+# Attach to the session just created. Run in the current project directory
+# (agents are global via ~/.config/opencode/agent).
+opencode --session "$session_id" --log-level warn
+exit $?
