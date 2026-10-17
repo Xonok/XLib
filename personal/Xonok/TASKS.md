@@ -307,6 +307,12 @@ All three are decisions, not code. The bundler itself is written and 186 of its
 	still runs 223 tests with the same 2 failures. **The test must invoke xlint,
 	not be a fixture** — `is_ignored` excludes any path part named `test`
 	(`AK633QC`), so a bundle fixture in `test/` is invisible to the linter.
+	**Also in scope: D33**, ruled the same day — no alias and no rebind where
+	`renamed(name, prefix) == name`, which is what produces the root's
+	`import time as time` / `email = email` no-ops. **Its negative test is the one
+	that matters**: a non-root file must still get its aliases, because a suite
+	covering only the root cannot tell the comparison is right from aliases having
+	stopped being emitted at all.
 - [ ] **#135 — xhttp: VERSIONS.md before a first release** (by 2026-10-20,
 	medium) — `dev/xhttp/` has no `VERSIONS.md`; `xconf`, `xcsv`, `xschema` and
 	`xtest` all have one, and `doc/library-structure.md:34` makes it part of the

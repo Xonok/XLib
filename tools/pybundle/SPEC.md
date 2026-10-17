@@ -1379,3 +1379,59 @@ because D32 is about lint and this is not a lint question.
 - **The obligation itself**: bundle a fixture and assert `tools/xlint/xlint.py`
 	reports nothing for it. This is the one test that keeps the ruling true as
 	xlint gains checks, and it is the one that cannot live as a fixture.
+
+### D33 — No alias and no rebind where the name does not change
+
+**Ruled 2026-10-17**, answering the question D32 recorded and forwarded.
+
+> **When the bundled name is the name the source already used, the alias and the
+> rebind are not emitted and the statement stands as the source wrote it.** The
+> test is one comparison: `renamed(name, prefix) == name`.
+
+**Why it comes up at all.** The root's prefix is empty (D10), so
+`renamed(name, "")` is the identity — and D20's machinery emits its alias and its
+rebind regardless, giving a root that imports anything at all three no-ops:
+
+```
+import time as time, sys as sys
+from urllib.parse import urlparse as urlparse
+import email.utils
+email = email
+```
+
+All three are semantically the identity, all three are lint-clean, and all three
+read as a bug to a reviewer. `dev/xhttp`'s root has no non-local import, so
+nothing in this repo's real code produced them; a three-line fixture did.
+
+**The condition covers the rebind as well as the alias.** D20's dotted form is a
+kept statement plus a rebind, and in the root the rebind is `email = email` —
+the same comparison, and the same answer. Both D20 rows are affected:
+`import time,sys` emits itself, `from pathlib import join` emits itself, and
+`import email.utils` keeps the statement with no rebind after it.
+
+**D8 is unaffected.** Local targets are still dropped from a statement, and a
+statement whose targets are all local is still removed entirely. What changes is
+only what happens to the **non-local** half when the prefix would not move it.
+
+**A statement emitted verbatim keeps the source's own spacing**, which is where
+D32's two-sided obligation does its work: `import time,sys` in house style comes
+out as it went in, and a source that wrote `import time, sys` produces a finding
+in the bundle that its own linted file already produced. Nothing is normalised.
+
+**Stated generally rather than as a root exception**, because the root is only
+where it currently fires: a file with an empty prefix is the root, so the
+condition is true there and nowhere else today. Written as the comparison, it
+stays true if a second such file ever exists.
+
+### What the tests must now cover
+
+- A root with `import time,sys` emits that statement unchanged, and **no**
+	`import time as time`.
+- A root with `import email.utils` emits the statement and **no** `email = email`
+	(D20's dotted row, rebind suppressed).
+- A root with `from pathlib import join` emits itself rather than
+	`from pathlib import join as join`.
+- **And the negative:** a non-root file still gets `helper__count`-style aliases
+	and rebinds. The condition must not fire there, and a test that only covers the
+	root cannot tell the difference between "the comparison is right" and "aliases
+	stopped being emitted at all".
