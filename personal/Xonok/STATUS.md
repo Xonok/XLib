@@ -328,7 +328,39 @@ Also standing, from the abandoned single-pass attempt:
 	**(b) The release path is still down**, one layer in: `release.py:8` imports
 	fine now and `:74` calls `bundler.bundle()`, which the spec does not have.
 	The human chose *"spec as written, bridge separately"* over adding it, so
-	`1ZY2Q5Q` outlives the landing.
+	`1ZY2Q5Q` outlives the landing. **What now stands between `dev/xhttp` and a
+	file in `xlib/`, measured 2026-10-17** — none of it is xhttp's own code, and
+	all of it is cheap or already decided:
+	1. **The guard above is still in the tree** (`#132`, epiq `NJ529TQ`) — the
+		committed bundler refuses xhttp's root today.
+	2. **The bundler has no `bundle(entry) -> str`** to call (`#129`, epiq
+		`1ZY2Q5Q`); the bridge is unwritten by decision.
+	3. **The bundle fails xlint, and the pre-commit hook runs xlint on staged
+		`.py`, so it cannot be committed.** Three findings, all in the bundler's
+		emission: `space after comma in import` and `aliased import on a shared
+		line` from D20's alias form, and a **`double blank line`** where a removed
+		import sat between two blanks — structural, so any normally-formatted
+		library hits it. **The second cannot be fixed by rewriting the output**:
+		it is `#104` / `DDRBHD5` reaching real data, and STATUS records there that
+		no legal form clears it. **Why this is first contact and not a
+		regression:** the six bundles in `xlib/` are lint-clean only because
+		`dev/xcsv` and friends have **no non-local imports at all**, so the
+		emission path had never met the linter. Filed as epiq `GADE1PY`,
+		taskview `#134`.
+	4. **`dev/xhttp/VERSIONS.md` does not exist** — `xconf`, `xcsv`, `xschema`
+		and `xtest` all have one, and `doc/library-structure.md:34` makes it part
+		of the per-library layout.
+	5. **The human's own gate: validation against real code in Space-Traveller**
+		(`#117`, due 2026-10-20). Not mechanical, and it is the stated condition
+		for calling xhttp done.
+	6. **Two red tests** (`7Z7DE78`, `websocket.send` type validation). A
+		judgement call rather than a script error — `TESTING_RULES.md` forbids
+		masking, and releasing a known-broken `send()` is the human's to allow.
+	7. **`#115` is unimplemented**, so the one gate that belongs in the release
+		path itself — refusing a library that depends on dev versions — is not
+		there.
+	Also stale, and cheap: `tools/release/README.md` still says the script
+	*"fails at import"*; it no longer does, it fails at `bundler.bundle`.
 	**(c) F21 was tolerated, not settled.** `imports` takes a modpath spelled with
 	dots from the loop and with slashes from one test, and normalises both.
 - **The pybundle rewrite is at the spec-edit stage: the tests are re-derived, and
@@ -744,23 +776,23 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	detail attached. A "not reproducible, here is my theory" report should have
 	came first, and the cheapest check — printing the string you were importing —
 	should have come before the theory, not after.
-8. **A dotted non-local import leaks one unprefixed name — accept it, or say
-	something about it?** D20 keeps `import a.b` verbatim because python binds the
-	*parent*, which the statement does not spell, so aliasing would hand the file
-	the leaf: `email.utils.parseaddr` would keep working by luck while
-	`email.message_from_string` raised `AttributeError`, which is the half-silent
-	failure the ruling exists to prevent. The price is that `email` lands at the
-	bundle's top level unprefixed. It works — `_helper__email.utils.formatdate`
-	resolves, and `dev/xhttp` bundles and runs — and there is **one occurrence in
-	everything this repo inlines**, at `dev/xhttp/_/helper.py:2`. So nothing here
-	decides it, and a foreign library can have many. **It cannot be removed**: a
-	name python does not bind under the statement's spelling can only be reached
-	by `__import__`, which D7 excludes on purpose. The options are in the chat
-	record for 2026-10-17: accept silently (today), accept with a stderr line per
-	occurrence, record it as a stated divergence beside D17, or refuse dotted
-	non-local imports outright. **It is also a second class of unprefixed name**,
-	alongside the non-local star import D24 already warns about and D19's declined
-	collision warning covers.
+8. **A dotted non-local import leaks one unprefixed name — RULED 2026-10-17:
+	accept it and write it down** (`SPEC.md` D31). D20 keeps `import a.b` verbatim
+	because python binds the *parent*, which the statement does not spell, so
+	aliasing would hand the file the leaf: `email.utils.parseaddr` would keep
+	working by luck while `email.message_from_string` raised `AttributeError`,
+	which is the half-silent failure the ruling exists to prevent. The price is
+	that `email` lands at the bundle's top level unprefixed, and **it cannot be
+	removed** — a name python does not bind under the statement's spelling is
+	reachable only through `__import__` or `sys.modules`, and D7 excludes dynamic
+	imports on purpose. **No warning**, which is D19's posture applied to a second
+	case: unprovable, and no failure observed — unlike D9's star import, where the
+	behaviour was at risk. One occurrence in everything this repo inlines
+	(`dev/xhttp/_/helper.py:2`), and the bundle it produces works. **The one cost
+	worth stating** is not cosmetic: a file that defines a global of the same name
+	has its meaning changed, because the definition is prefixed and the bare name
+	stays the module. It is also a second class of unprefixed name alongside the
+	non-local star import D24 warns about.
 
 ## Pointers
 

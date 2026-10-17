@@ -1246,3 +1246,49 @@ binds — the *parent* — lands unprefixed at the bundle's top level. It works
 repo, at `dev/xhttp/_/helper.py:2`, so nothing in the repo decides it. D24's
 non-local star import is the only surviving collision source, and this adds a
 second class of unprefixed name that is silent rather than warned about.
+
+### D31 — A dotted non-local import's escaped name is accepted, and written down
+
+**Ruled 2026-10-17.** D30 left this open: D20 keeps `import a.b` verbatim
+because python binds the *parent*, which the statement does not spell, so the
+parent lands unprefixed at the bundle's top level. The human's answer is to
+accept it and record it, which is D19's posture applied to a second case:
+
+> **A dotted non-local import leaves one unprefixed name at the bundle's top
+> level, and the bundler does not warn.** `import email.utils` in a file called
+> `A` emits `import email.utils` plus `A__email = email`, and `email` is bound
+> at bundle scope. Every *use* is safe — it reaches `A__email` — and the escaped
+> name is a shared global the way `import math` was under D19.
+
+**It cannot be removed.** A name python does not bind under the statement's own
+spelling is reachable only through `__import__` or `sys.modules`, and D7
+excludes dynamic imports on purpose.
+
+**No warning, and why that is the consistent answer rather than a lucky one.**
+D19's warning was declined on the human's reasoning — the tool *"is opinionated
+about what it bundles, not about what it can prove about the result"* — and this
+is that class: unprovable, and no failure observed. D9's non-local star import
+keeps its warning because there the *behaviour* is at risk, not the tidiness.
+
+**The one cost worth stating.** It is not only cosmetic. A file that defines a
+global of the same name has its meaning changed by the bundle, because the
+definition is prefixed and the bare name stays the module: in the source,
+\`email = "x"\` in a module shadows the module it imported; in the bundle it does
+not. Rare, and reachable only where a library both imports a dotted module and
+redefines its top-level name — but it is the reason a reader of a bundle should
+not assume every name in it came from a definition.
+
+**Measured on this repo: one occurrence**, \`dev/xhttp/_/helper.py:2\`, and the
+bundle it produces works — 223 tests, the same 2 failures the source has.
+
+**The local dotted import is a different case and stays where D17 put it.**
+\`import helper.sub\` names a module that does not exist as a name in the bundle
+at all (D17), the statement is removed, and the bare name dangles. That is a
+wrong bundle rather than a leak, it is documented rather than guarded, and this
+decision does not touch it.
+
+### What the tests must now cover
+
+Nothing new. The behaviour is unchanged from D20 and every test that pins it
+already passes; D31 records a decision about a name the bundler does not warn
+on, so there is no output to assert.
