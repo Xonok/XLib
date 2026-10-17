@@ -20,8 +20,8 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `ad47b60` (2026-10-17), **snapshot taken 2026-10-17**, **three
-commits ahead of `origin/master` and unpushed** — the human authorised the commit, not
+Basis: `master` at `8bf0ef3` (2026-10-17), **snapshot taken 2026-10-17**, **one
+commit ahead of `origin/master` and unpushed** — the human authorised the commit, not
 the push.
 
 **The bundler is written, runs, and is committed (`ba063b5`). All 188 tests pass.**
@@ -62,12 +62,19 @@ so `1ZY2Q5Q` stays open past the landing, as task **#129**. **F21 was tolerated
 rather than settled** — `imports` accepts a slash-spelled or a dot-spelled
 modpath, because the loop hands it one and the test another.
 
-**The working tree is still not clean, and what is in it is not pybundle's** —
-modified `tools/marduk/_/sse_client.py`, `tools/marduk/_/state.py`,
-`tools/marduk/marduk.py`, `tools/oc-agent` and `tools/skynet.py`, untracked
-`tools/marduk/_/service.py`, `tools/marduk/_/session_watcher.py`, `tools/marduk/test/`
-and `tools/skynet/CHANGES.md`. **Left alone deliberately**: not mine, not this task's,
-and not mine to commit. The pass-3 material is
+**The working tree is not clean, and what is in it is not pybundle's** — the OpenCode
+v2 migration of marduk, oc-agent and skynet, which sat dirty here from 2026-10-16 and
+**landed as `8bf0ef3` on the human's instruction on 2026-10-17**. The board ticket
+(`W06YDEQ`) was filed at commit time, because the `commit-msg` hook accepts only a real
+epiq ref and no ticket covered the work — the human chose filing one over bypassing the
+hook. **94 tests in `tools/marduk/test/` came with it, xlint clean, four fixes
+mutation-checked.** What the landing deliberately left behind is
+`tools/marduk/_/port_watcher.py`, now dead code that nothing references, and
+`tools/marduk/SPEC.md`, which still describes the port-file protocol and contradicts
+the code in about twenty places. **Neither is filed yet** — a rewrite of that SPEC is
+planner work, and it is the item most likely to mislead the next reader. The only file
+still dirty is `dev/xhttp/xhttp.py`, kept out of the commit on purpose. The pass-3
+material is
 kept below for what it settled: 188 tests in six files plus
 `doc/reviews/pybundle-tests-pass1-3.md`, committed as `de4f70b`. The pass-2 history is
 kept below for what it settled: 138 tests in five files plus
