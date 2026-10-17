@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 """
 Tests for `renamed(name, prefix)` and `translate(statements, renames, resolved)`
-— R3, D3, D16.
+— R3, D3, D16, D22.
 
 Run with: python3 -m unittest tools.pybundle.test.test_bundler_names -v
 
 `renamed` is the only pure function in the set — D4 calls it that, and "the one
 most worth testing on its own" — so its tests are direct by choice. `translate`
 joins the suite now that D16 fixes its return: a single string, statements joined
-with newlines, no trailing newline. Only the cases needing no filesystem are
-here; everything that does is driven through `main` in `test_bundler.py`, because
-R1.2 makes locality a question about location on disk.
+with newlines, no trailing newline.
+
+**`renamed` prefixes whatever it is given, including a name that already carries a
+prefix.** D20's exemption is for the rebind statements `translate` emits, which
+are written out after the rename pass rather than translated by it, so putting the
+exemption in `renamed` would break a name that genuinely starts with its own
+prefix. That is what `test_name_carrying_an_existing_prefix_is_prefixed_again`
+pins, and it is why D20's rebind-LHS tests live in `test_bundler.py`: they need a
+`resolved` value, and D8 fixes what `imports` returns without naming the fields.
+
+Only the cases needing no filesystem are here; everything that does is driven
+through `main` in `test_bundler.py`, because R1.2 makes locality a question about
+location on disk.
 """
 
 import unittest

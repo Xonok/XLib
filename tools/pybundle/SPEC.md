@@ -996,3 +996,122 @@ needs re-deriving against the table in D20. The cases the tests must now pin:
 	excluded ones, with the first offending line named per file.
 
 `NOT_A_MODULE` stays retired (D15). `RELATIVE_IMPORT_IN_ROOT` stays in `inline` (D15).
+
+### D26 — A mixed statement's non-local half is aliased too. Supersedes D8's sentence.
+
+**Ruled 2026-10-17.** D8's sentence — *"A statement with both local and non-local
+targets keeps the non-local ones and loses the local ones, so `import helper, os`
+becomes `import os`"* — was written before D20 and is superseded on its second half.
+The rule is now:
+
+> **A statement with both local and non-local targets loses its local targets and
+> has its non-local ones rewritten as D20 rewrites a non-local import on its own.**
+> So `import helper, os` in `sub/client.py` becomes `import os as sub__client__os`.
+
+The first half of D8's sentence stands unchanged: local targets are dropped, and a
+statement whose targets are all local is removed entirely.
+
+D20's table has no row for a mixed statement, which is why the gap survived two
+derivation passes — the alias rule reads as applying to an import statement, and
+`import helper, os` is two imports sharing one statement. The rule applies to the
+statement that is emitted, whatever produced it: `import os as A__os` is a non-local
+module import under D20's third row, and sharing a line with a local target changes
+neither what python binds nor which file's prefix applies.
+
+**No test changes with this.** Three already assert the reading — the aliased
+half, the dropped local half, and the remaining targets in source order — so this
+records the decision the tests were already written against.
+
+This settles the mixed statement only. A statement whose targets are *all* local is
+D8's other case and is unaffected; the unanswered question of what a plain local
+module import emits is F26, still open.
+
+### Decisions — 2026-10-17, the three blocking flaws
+
+Same discipline: **append-only, nothing above was edited**, each decision naming the
+flaw it answers and restating the corrected text. These three are the blocking half
+of pass 3's flaw list; F27, F28, F30, F31 and F21 are cheap and none blocks.
+
+| Flaw | Question | Ruling |
+|---|---|---|
+| F25 | does a use of a name-imported name get rewritten? | yes — to the importing file's own prefixed name (D27) |
+| F26 | what does a plain local module import emit? | no rebind; the module name is an alias for the prefixed globals (D28) |
+| F29 | does the indentation report quote the line or number it? | both, with the file path (D29) |
+
+### D27 — The use is reached through the importing file's own name. Answers F25.
+
+**Ruled 2026-10-17.** The closing bullet of the 2026-10-15 section reads
+`from helper import count` emits `A__count = helper__count`, and **nothing rewrites
+the use**. **That bullet is superseded**, and with it the reading it forces:
+
+> **A name import binds the importing file's own prefixed name, and a use of that
+> name is rewritten to reach it.** `from helper import count` in A emits
+> `A__count = helper__count`, and `count` in A becomes `A__count`.
+
+What does *not* happen is F13's withdrawn mechanism: the use is not pointed straight
+at the callee's prefixed global `helper__count`. The distinction matters and is the
+whole ruling — the use reaches the name **A** owns, not the name **helper** owns.
+
+Taken literally the bullet produces a bundle that raises `NameError`: the rebind
+binds `A__count`, and a use of `count` left alone looks for a name nothing in the
+bundle defines. It is also the failure this spec can least afford, because it passes
+a text-level test — both lines are present, in a plausible order, and only running
+the bundle shows the mismatch.
+
+**D20's verified table is what this restores**, and it is the authority: its third
+row — *"name import at function scope → `1`, function-local"* — is unreachable
+unless the use names the rebind. The bullet and the table disagreed, and only the
+table produces a working bundler.
+
+### D28 — A local module import emits no rebind; its name is an alias. Answers F26.
+
+**Ruled 2026-10-17.** D20's table has five rows and **none of them is a plain local
+module import**. Its general condition cannot cover the gap, because it makes it
+worse: *"the alias rule applies except where python binds a name the statement does
+not spell"*, and `import helper` spells `helper`, so the alias rule appears to apply
+— while D17 says the module object exists under no name at all.
+
+> **A local module import emits no rebind. Its name is an alias for the callee's
+> prefixed globals: the statement is removed (D8) and a use of `helper` reaches
+> `helper__`.**
+
+Four shapes follow from that one rule:
+
+| Source | Emitted |
+|---|---|
+| `import helper`, `helper` local | statement deleted; `helper.run()` → `helper__run()` |
+| `import helper as h`, `helper` local | statement deleted; `h.run()` and `helper.run()` both → `helper__run()` |
+| `import helper.sub`, `helper` local | statement deleted; binds the bare `helper`, which D17 leaves unsupported |
+| `from helper import nested`, `helper` local | D20's first row, unchanged: `A__nested = helper__nested` |
+
+D6's rule that `y.count` and `x.count` reach the same place holds for local imports
+too, which is what makes the second row an alias rather than a second name.
+
+**Aliasing a local module is not available as an alternative.** It would mean
+binding a module object the bundle never constructs, and keeping the statement would
+make python import the file from disk a second time — the exact duplication R1.6
+exists to prevent. Nothing to bind is why there is no rebind, and the alias is the
+substitute.
+
+### D29 — The indentation report carries the file, the number, and the line. Answers F29.
+
+**Ruled 2026-10-17.** D23 said *"one entry per offending file, naming that file's
+first offending line"*, which fixes the content — a file, a line, and which line —
+but not the form. All three elements are now required:
+
+> **Each entry carries the offending file's path, the number of that file's first
+> offending line, and the text of that line.**
+
+The path is written the way the start comments write it, so R2's rule applies and a
+directory component carries a leading `/`. An entry therefore reads like
+`/sub/client.py`, line 2, `\tvalue = 1`.
+
+The three existing tests read the report as quoting the line, and that part was
+right; the path and the number were simply never specified. Two tests now pin them,
+which they could not before the ruling.
+
+### What the tests must now cover
+
+The re-derivation already asserts D27 and D28 — no test changes with either, and the
+four F26 shapes are each covered by an existing test. D29 adds two: the report
+carries the offending file's path, and it carries the first offending line's number.

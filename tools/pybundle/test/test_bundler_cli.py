@@ -8,13 +8,12 @@ D12 put `cli` in the function set and D13 settled what it does: parse argv, open
 and close the sink, call `main`, and answer 0 or 1. Before D13 the whole command
 line was untestable, because no function owned it.
 
-**One reading is assumed, and it is flagged as an open question.** Every call
-below passes the arguments *without* a program name, i.e. what `sys.argv[1:]`
-holds. D13 names the parameter `argv` and does not say whether the program name
-is in it. If the human rules the other way, every literal in this file gains that
-name at the front — and `test_no_arguments_returns_one` still passes either way,
-because an empty list and a one-element list holding a program name are both
-"no flags given". See `doc/reviews/pybundle-tests-pass1.md`, flaw F14.
+**Every call below passes the arguments without a program name**, which is what
+D22 settled and what `argparse.parse_args` takes. The earlier pass-1 review left
+this as an open reading of F14; the clause that closed it is D22's — *"The
+program name does not matter to the person running it"* — and the call is
+`cli(sys.argv[1:])`. Ruling it the other way is one literal per test, and
+`test_no_arguments_returns_one` passes either way.
 """
 
 import contextlib,io,sys,tempfile,unittest
@@ -90,7 +89,9 @@ class TestStdoutSink(CliTestCase):
 
 	def test_out_dash_writes_the_bundle_to_stdout(self):
 		_, stdout_text, _ = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])
-		self.assertIn("helper__count = 1", stdout_text)
+		# This class's setUp replaced the tree, so the module holding `count` is
+		# `shared` — `helper.py` is on disk but nothing imports it any more.
+		self.assertIn("shared__count = 1", stdout_text)
 
 	def test_out_dash_returns_zero(self):
 		code, _, _ = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])

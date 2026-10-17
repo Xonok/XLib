@@ -59,6 +59,15 @@ class TestNoParseTreeR6(unittest.TestCase):
 		offenders = [path.name for path in MODULES if _imports(path.name, "ast")]
 		self.assertEqual(offenders, [])
 
+	def test_some_module_of_the_bundler_imports_tokenize(self):
+		# R6.1's other half. The spec does not only forbid `ast`, it *names*
+		# `tokenize` as the thing that makes statement handling correct rather than
+		# approximate, and D21 makes matching its INDENT/DEDENT stream a
+		# requirement. A bundler that reached the same answers some other way
+		# would satisfy the test above, so the naming needs its own.
+		users = [path.name for path in MODULES if _imports(path.name, "tokenize")]
+		self.assertTrue(users)
+
 class TestEntryModuleIsImportedByNothingR6(unittest.TestCase):
 	"""R6.3: the bundler's own modules do not import the entry file."""
 

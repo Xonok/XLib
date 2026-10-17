@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Tests for `statements(text)` — D1, D16 and the field names proposed in the
-second pass-1 review.
+Tests for `statements(text)` — D1, D16 and D22.
 
 Run with: python3 -m unittest tools.pybundle.test.test_bundler_source -v
 
-**Two of these field names are mine, not the spec's.** The human settled that the
-entries are dictionaries and asked for names to be proposed; these are the
-proposal, and they are documented as such in `doc/reviews/pybundle-tests-pass1-2.md`
-so they get written back into the spec:
+**The two field names are the spec's.** The first derivation proposed them and
+asked for them to be written back; D22 fixed them, and this suite now tests what
+the spec states rather than what a reviewer suggested:
 
 - `text` — the statement's source text, its first line's indentation included,
-  and no trailing newline.
-- `indent` — that same leading whitespace, as a string. D2 compares by column,
-  which is what the tokenizer's own INDENT and DEDENT tokens give.
+  every line of a multi-line statement, no trailing newline.
+- `indent` — that same leading whitespace, as a string. D21 is why it is a string
+  and not a column count: a string is comparable, so the block tracking has to be
+  told which comparison to use, and D21 says it matches the tokenizer's own
+  INDENT and DEDENT rather than comparing indents.
 
 Everything else here counts entries rather than reading fields, because counting
 is derivable from D16 saying the return is a list, and reading a field is not.
@@ -23,7 +23,7 @@ import unittest
 from tools.pybundle.bundler_source import statements
 
 class TestStatementShapeD16(unittest.TestCase):
-	"""D16, as amended: a list of dictionaries."""
+	"""D16 as restated by D22: a list of dictionaries with `text` and `indent`."""
 
 	def test_statements_is_a_list(self):
 		self.assertIsInstance(statements("a = 1\n"), list)
@@ -88,7 +88,10 @@ class TestNonCodeLinesAreKeptD18(unittest.TestCase):
 		texts = [statement["text"] for statement in statements("a = 1\n\nb = 2\n")]
 		self.assertIn("", texts)
 
-	def test_a_comment_line_carries_no_indentation_of_its_own(self):
+	def test_a_comment_line_carries_its_own_indentation_in_its_text(self):
+		# D22 — `text` holds the statement's first line's indentation, and R7
+		# says non-name text reaches the bundle unchanged, so the comment's own
+		# leading whitespace is part of it rather than stripped from it.
 		texts = [statement["text"] for statement in statements("a = 1\n\t# indented note\n")]
 		self.assertIn("\t# indented note", texts)
 
