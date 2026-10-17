@@ -102,6 +102,12 @@ needed when there is no due date.
 	import-shape test needs re-deriving. The spec's own *What the tests must now
 	cover* lists the seven cases. That re-derivation is the reviewer's, and it
 	should not start until the reader it hands to has this section.
+	**BOTH HALVES NOW DONE 2026-10-17.** Test pass 3 re-derived and committed
+	(`de4f70b`, 188 in six files), and the bundler itself is implemented against
+	them — 806 lines, five modules, **186 of 188 passing**, xlint clean. What the
+	implementation exposed is filed as **#129** (the release path), **#130** (D15
+	against the house idiom) and **#131** (the two structure tests, since fixed).
+	**Landed `ba063b5`, 2026-10-17: all 188 pass.**
 - [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
 - [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
@@ -265,6 +271,42 @@ needed when there is no due date.
 	everybody waits on it.
 - [ ] Give #77 a real due date or keep 2026-10-05 (by decision needed) — a
 	testing task with no test written yet is a task that will slip.
+
+## pybundle — after the implementation, 2026-10-17
+
+All three are decisions, not code. The bundler itself is written and 186 of its
+188 tests pass; these are what that exposed.
+
+- [ ] **#129 — pybundle: how does `release.py` reach the bundler** (by decision
+	needed, high) — board: epiq `1ZY2Q5Q`. `release.py:8` now imports cleanly and
+	`:74` calls `bundler.bundle(str(entry))`, which **the spec does not have**: the
+	seven functions are `statements`, `imports`, `renamed`, `translate`, `inline`,
+	`main`, `cli`, and the old `bundle(entry) -> str` is not among them. The human
+	ruled on 2026-10-17, *"spec as written, bridge separately"*, over adding it as
+	an eighth function — so this outlives the landing by decision. **Every library
+	is still un-releasable**, now with `AttributeError` instead of `ImportError`.
+	The choice is between an eighth `bundle()` wrapping `inline`, and moving
+	`release.py` onto `main(entry, out)`.
+- [x] **#130 — pybundle: D15 forbids a relative import in the root, and three
+	libraries use one — ANSWERED, the spec is wrong** (done 2026-10-17, high). The
+	human asked whether python allows it. **It does**, and this repo depends on it:
+	`import pkg.mod` runs clean, `python pkg/mod.py` raises `ImportError:
+	attempted relative import with no known parent package`. D15's premise —
+	*"which python does not allow"* — is true of `__main__` and false of a package
+	module, and `dev/xhttp/test/harness.py:7` puts `dev/` on `sys.path` so
+	`from xhttp import xhttp` works. **So `from ._ import …` in a root is the house
+	idiom and legal, three libraries use it, and the six bundles in `xlib/` came
+	from a bundler that handled it.** The error belongs on an entry that is a
+	script, which the bundler cannot currently tell. **Decide what it is instead.**
+- [x] **#131 — two tests in `test_bundler_structure.py` cannot pass as written**
+	(done 2026-10-17, medium). Neither was satisfiable by any import mechanism.
+	`test_each_function_of_the_set_lives_in_the_file_the_table_names` compared
+	`Path(value.__module__).name` against `"bundler_source.py"`, and `__module__`
+	is a dotted module name, never a filename. `test_some_module_of_the_bundler
+	_imports_tokenize` matched `^\s*import\s+tokenize\b`, which only a single-name
+	import satisfies, while `doc/style/python.md:26` mandates comma-joined
+	imports — so it matched none of this repo's own imports. **Fixed on the human's
+	authorisation**, both helpers corrected to their intent rather than weakened.
 
 ## Related, tracked elsewhere
 

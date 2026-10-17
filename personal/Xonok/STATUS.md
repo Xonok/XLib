@@ -20,17 +20,54 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `de4f70b` (2026-10-17), **snapshot taken 2026-10-17**, **one
-commit ahead of `origin/master` and unpushed** — the human authorised the commit, not
-the push. **pybundle test pass 3 is committed** (`de4f70b`): **188 tests in six
-files**, up from the 138 in five, plus both review docs, four decisions in SPEC.md
-(D26, D27, D28, D29), the three broken tests fixed and the coverage gaps closed.
+Basis: `master` at `ba063b5` (2026-10-17), **snapshot taken 2026-10-17**, **two
+commits ahead of `origin/master` and unpushed** — the human authorised the commit, not
+the push.
+
+**The bundler is written, runs, and is committed (`ba063b5`). All 188 tests pass.**
+This was done out of lane — implementation is programmer work and the secretary
+agent does not write programs; the human overrode that on 2026-10-17 after being
+told, and the record says so rather than quietly absorbing it. **806 lines across
+five modules**, xlint clean, verified beyond the fixtures: a hand-built tree
+bundles to a file that runs and prints the right values.
+
+**Does python allow a relative import in the root? Yes — and this repo depends on
+it.** D15's `RELATIVE_IMPORT_IN_ROOT` rests on *"which python does not allow"*,
+and that holds for a module run as `__main__` and not for one imported as part of
+a package. Checked both ways: `import pkg.mod` runs clean, `python pkg/mod.py`
+raises `ImportError: attempted relative import with no known parent package`.
+**`dev/xhttp/test/harness.py:7` puts `dev/` on `sys.path` so `from xhttp import
+xhttp` works**, so the root file is always a package module here and
+`from ._ import …` is legal — and it is the house idiom in xcsv, xhttp and xtest.
+**So the bundler cannot bundle this repo's own libraries, and the spec is what is
+wrong about it**: the error belongs on an entry that is a script, which the
+bundler currently cannot tell. Filed as **#130**.
+
+**Two of the 188 could not pass as written, and both were wrong; they are fixed.**
+In `test_bundler_structure.py`, the placement test compared
+`Path(value.__module__).name` against `"bundler_source.py"` — `__module__` is a
+dotted module name, never a filename, so no import mechanism produced it. And the
+tokenize test matched `^\s*import\s+tokenize\b`, which only a *single-name* import
+satisfies while `doc/style/python.md:26` mandates comma-joined imports, so it
+matched none of this repo's own imports. Both helpers fixed to match their intent,
+on the human's authorisation having been told. A third fix is in
+`test_bundler_imports.py`, whose `write` helper never created parent folders and
+so killed its own fixture; the other five suites' helpers do.
+
+**`release.py` still fails**, now with `AttributeError` rather than `ImportError`:
+the spec has no `bundle(entry) -> str`, and the human chose "bridge separately",
+so `1ZY2Q5Q` stays open past the landing, as task **#129**. **F21 was tolerated
+rather than settled** — `imports` accepts a slash-spelled or a dot-spelled
+modpath, because the loop hands it one and the test another.
+
 **The working tree is still not clean, and what is in it is not pybundle's** —
 modified `tools/marduk/_/sse_client.py`, `tools/marduk/_/state.py`,
 `tools/marduk/marduk.py`, `tools/oc-agent` and `tools/skynet.py`, untracked
 `tools/marduk/_/service.py`, `tools/marduk/_/session_watcher.py`, `tools/marduk/test/`
 and `tools/skynet/CHANGES.md`. **Left alone deliberately**: not mine, not this task's,
-and not mine to commit. The pass-2 history is
+and not mine to commit. The pass-3 material is
+kept below for what it settled: 188 tests in six files plus
+`doc/reviews/pybundle-tests-pass1-3.md`, committed as `de4f70b`. The pass-2 history is
 kept below for what it settled: 138 tests in five files plus
 `doc/reviews/pybundle-tests-pass1-2.md`, 9 files and 1102 insertions, with the four
 rulings recorded in the commit body, including that **F13 was reversed** — which is
@@ -88,7 +125,7 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **Pass 3 is derived, audited, fixed and committed (`de4f70b`); the spec edits it produced are written in for the four rulings, and the rest are not.** Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files** — that is pass 2, committed as `247eaba`, since superseded again by pass 3's 188 (see below) — re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. They compile and pass xlint; they do not run, because there is no implementation — which is the state this stage is supposed to be in. **Pass 2 is committed** (`247eaba`). **Every decision it prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings, so neither will send anyone back to a settled question. **The spec has not caught up, and that is now the only thing between here and implementation.** The human's stated next step is *"getting the bundler into a working state again"* via *"letting the reviewer derive tests once again"* — **which is the right instinct and the wrong order**: `SPEC.md` still describes F13, which today's ruling reversed, so a reviewer re-deriving against it would hit the same confusion this pass just spent a day resolving. **`#127`'s spec half is done** (`5e4784a` + the spec commit below): a new
+| **pybundle rewrite** | human (intent) / AI (spec) | **IMPLEMENTED 2026-10-17, out of lane on the human's override. 806 lines, five modules, 186 of 188 tests pass, xlint clean.** Uncommitted. See the Snapshot for the two test defects and the three un-ruled consequences. **Implementation landed; `release.py` did not, and neither did the review.** Pass 3's 188 tests were committed as `de4f70b`; the two failures are both in `test_bundler_structure.py` and both are unsatisfiable as written. Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files** — that is pass 2, committed as `247eaba`, since superseded again by pass 3's 188 — re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. **Every decision they prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings. **`#127`'s spec half is done** (`5e4784a` + the spec commit below): a new
 	*Decisions — 2026-10-15, after test pass 2* section, **268 insertions / 0
 	deletions**, with the first 730 lines verified byte-identical so the
 	append-only discipline of `03c0e75` holds. **D20** alias (reverses D9 and
@@ -254,6 +291,23 @@ Also standing, from the abandoned single-pass attempt:
 	directly, no longer works. **There is currently no way to look at a bundle
 	without writing one.** All six releases in `xlib/` predate the move and
 	nothing tests the path.
+- **The pybundle rewrite has code: the bundler is implemented and 186 of its 188
+	tests pass.** Implementation is programmer work and the secretary does not do
+	it; the human was told and overrode that, so the work happened here and the
+	record says so. What that leaves behind is three things the human has not
+	ruled on, and they are worth more than the green tests:
+	**(a) The bundler cannot bundle this repo's own libraries.** xcsv, xhttp and
+	xtest each open with `from ._ import …`, and D15 makes a relative import in
+	the root an error — `dev/xhttp/xhttp.py` raises on it, checked. The six
+	bundles in `xlib/` came from the old bundler, which flattened `_/`. Either
+	D15 is wrong for the house idiom or three libraries need rewriting, and both
+	are bigger than the bundler.
+	**(b) The release path is still down**, one layer in: `release.py:8` imports
+	fine now and `:74` calls `bundler.bundle()`, which the spec does not have.
+	The human chose *"spec as written, bridge separately"* over adding it, so
+	`1ZY2Q5Q` outlives the landing.
+	**(c) F21 was tolerated, not settled.** `imports` takes a modpath spelled with
+	dots from the loop and with slashes from one test, and normalises both.
 - **The pybundle rewrite is at the spec-edit stage: the tests are re-derived, and
 	the spec has not caught up with what they proved.** The human wrote `DRAFT.md`
 	as intent; `SPEC.md` is derived from it and written by an AI on the condition
