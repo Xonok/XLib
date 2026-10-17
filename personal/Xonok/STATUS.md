@@ -343,17 +343,26 @@ Also standing, from the abandoned single-pass attempt:
 	2. **The bundler has no `bundle(entry) -> str`** to call (`#129`, epiq
 		`1ZY2Q5Q`); the bridge is unwritten by decision.
 	3. **The bundle fails xlint, and the pre-commit hook runs xlint on staged
-		`.py`, so it cannot be committed.** Three findings, all in the bundler's
-		emission: `space after comma in import` and `aliased import on a shared
-		line` from D20's alias form, and a **`double blank line`** where a removed
-		import sat between two blanks — structural, so any normally-formatted
-		library hits it. **The second cannot be fixed by rewriting the output**:
-		it is `#104` / `DDRBHD5` reaching real data, and STATUS records there that
-		no legal form clears it. **Why this is first contact and not a
-		regression:** the six bundles in `xlib/` are lint-clean only because
-		`dev/xcsv` and friends have **no non-local imports at all**, so the
-		emission path had never met the linter. Filed as epiq `GADE1PY`,
-		taskview `#134`.
+		`.py`, so it cannot be committed** — **now ruled on and all three
+		findings are bundler-side** (`SPEC.md` D32, epiq `GADE1PY`, `#134`).
+		*The bundler has to produce xlint-clean code*, and the three rules follow
+		from the check's own text (`tools/xlint/xlint.py:907-920`): no `, ` in an
+		emitted import; an emitted statement with an alias is **split one target
+		per line** (which is the 2026-09 houserule, so the bundler was violating
+		house style rather than inventing a form); and removing a statement must
+		not leave a double blank line — a narrow, stated exception to R7. Splitting
+		cannot introduce a new finding, because a split alias line clears
+		`prev_plain`. **Verified reachable, not hoped for**: the xhttp bundle with
+		those three applied is clean and still runs 223 tests with the same 2
+		failures. **A claim recorded here on 2026-10-09 was wrong and is corrected
+		by this ruling**: the merged-imports rule is *not* unsatisfiable for
+		aliased imports in the shape the bundler emits. It is unsatisfiable for
+		two **plain** imports plus one alias, where the fix for the plain pair is
+		the merge the alias blocks — a source shape, which is what `#104` /
+		`DDRBHD5` is about, and that ticket is untouched. **Why nobody noticed:**
+		the six bundles in `xlib/` are lint-clean only because `dev/xcsv` and
+		friends have **no non-local imports at all**, so the emission path had
+		never met the linter.
 	4. **`dev/xhttp/VERSIONS.md` does not exist** — `xconf`, `xcsv`, `xschema`
 		and `xtest` all have one, and `doc/library-structure.md:34` makes it part
 		of the per-library layout.

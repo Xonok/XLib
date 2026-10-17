@@ -1292,3 +1292,90 @@ decision does not touch it.
 Nothing new. The behaviour is unchanged from D20 and every test that pins it
 already passes; D31 records a decision about a name the bundler does not warn
 on, so there is no output to assert.
+
+### D32 — A bundle must be xlint-clean. What the bundler owns
+
+**Ruled 2026-10-17:** *"The bundler has to produce xlint-clean code."* The
+premise was measured on `dev/xhttp`, the first library here whose modules have
+non-local imports: its bundle reported `space after comma in import`,
+`aliased import on a shared line` and a `double blank line`, and the pre-commit
+hook runs xlint on staged `.py`, so the artefact could not have been committed.
+
+> **The bundler owns what its own edits produce. Text carried verbatim from a
+> source that is already linted is not its responsibility.** So the obligation is
+> two-sided and testable in one sentence: **a bundle of an xlint-clean library is
+> xlint-clean.** A source's own double blank line is carried into the bundle and
+> is that library's finding, not the bundler's.
+
+Three rules follow, and each is derived from the check's own text rather than
+from what it said about one output — `tools/xlint/xlint.py:907-920`:
+
+1. **An emitted import carries no `, `.** A statement joins its targets with `,`.
+2. **No emitted line carries an alias and a comma.** An emitted statement with
+	any alias is therefore **split, one target per line**. This is not a new form:
+	the house rule already says *"aliased imports get their own line"* (ruled
+	2026-10-09), so the bundler was violating house style rather than inventing
+	something to satisfy a linter.
+3. **Removing a statement must not leave a double blank line.** D8 removes an
+	inlined import and keeps the blank lines around it, so a root file that
+	separates its imports with a blank line yields two consecutive blanks. This is
+	a **narrow exception to R7**, stated as one: R7's rule is that non-name text is
+	not *edited*, and a blank pair the bundler itself created by deleting a
+	statement is the bundler's artefact rather than the source's text.
+
+**Why the two alias forms are not treated alike**, which is easy to miss: both
+checks read **one line at a time**, and `import_match` is `^\s*import\s+`, so a
+`from x import y as A__y` line is never inspected. D20's name-import alias needs
+no split; only the module-import alias does.
+
+**Splitting cannot introduce a new finding,** which is what makes rule 2 safe
+rather than a trade. A split alias line sets `prev_plain = False`, and that is
+what stops the following plain import from tripping *consecutive plain imports
+not merged*. Measured across the forms:
+
+| emitted | xlint |
+|---|---|
+| `import time as A, sys as B` | 2 findings |
+| `import time as A,sys as B` | 1 finding |
+| `import time as A` + `import sys as B` | clean |
+| `from urllib.parse import urlparse as A` | clean |
+| `import email.utils` (D20's dotted form, kept) | clean |
+
+**This supersedes a claim about this rule made on 2026-10-09**, and the
+correction is worth its own line because it was load-bearing. STATUS recorded the
+merged-imports rule as *unsatisfiable for aliased imports*, and the measurement
+behind that is two **plain** imports plus one alias
+(`import json` / `import math as m` / `import collections`), where the fix for
+the plain pair is the merge the alias blocks. **The shape the bundler emits is
+every target aliased**, and that is clean one-per-line. So no style ruling is
+needed for the bundler's output, and `#104` / `DDRBHD5` is untouched — its
+question is about the *source* shape and stays exactly as it was.
+
+**Verified reachable rather than asserted.** The `dev/xhttp` bundle with rules 1
+to 3 applied is **clean** under `tools/xlint/xlint.py`, and still runs **223
+tests with the same 2 failures the source has**. The requirement is reachable
+with the machinery as it stands.
+
+**The obligation needs a test, and there is a trap in where it goes.** xlint's
+`is_ignored` excludes any path part named `test` (`AK633QC`), so a bundle
+fixture inside `tools/pybundle/test/` is invisible to xlint by construction. The
+test has to **invoke** xlint on the bundle it produced — which is also the only
+way the bundler and the linter stay in step as either changes.
+
+**Recorded, not decided: the root's self-aliases.** With an empty prefix
+`renamed(name, "")` is the identity, and the machinery still emits the no-ops —
+`import time as time`, `from urllib.parse import urlparse as urlparse`,
+`email = email`. All three are lint-clean, all three are semantically the
+identity, and all three read as a bug to a reviewer. `dev/xhttp`'s root has no
+non-local import, so nothing in this repo's real code shows it; a three-line
+fixture does. Forwarded to the human on 2026-10-17 rather than ruled here,
+because D32 is about lint and this is not a lint question.
+
+### What the tests must now cover
+
+- An emitted multi-target aliased statement is **one target per line**, and the
+	comma is not followed by a space.
+- A statement removed from between two blank lines leaves no double blank.
+- **The obligation itself**: bundle a fixture and assert `tools/xlint/xlint.py`
+	reports nothing for it. This is the one test that keeps the ruling true as
+	xlint gains checks, and it is the one that cannot live as a fixture.

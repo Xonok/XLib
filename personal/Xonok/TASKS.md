@@ -287,22 +287,26 @@ All three are decisions, not code. The bundler itself is written and 186 of its
 	is still un-releasable**, now with `AttributeError` instead of `ImportError`.
 	The choice is between an eighth `bundle()` wrapping `inline`, and moving
 	`release.py` onto `main(entry, out)`.
-- [ ] **#134 — pybundle: its emitted output fails xlint** (by 2026-10-21, high) —
-	board: epiq `GADE1PY` (Todo). Bundling `dev/xhttp` — **the first library here
-	whose modules have non-local imports** — produces three findings:
-	`space after comma in import` and `aliased import on a shared line` (both from
-	D20's alias form, `import time as _helper__time, sys as _helper__sys`) and a
-	**`double blank line`** where a removed import sat between two blanks — the
-	last one structural, so any normally-formatted library hits it. **The pre-commit
-	hook runs xlint on staged `.py`, so a released bundle cannot be committed.**
-	**The second finding cannot be fixed by rewriting the output**: it is `#104` /
-	`DDRBHD5` on real data, where STATUS already records that no legal form clears
-	it, so it needs the style ruling that ticket waits on, or an exemption for
-	bundler output. **Why nobody noticed:** the six bundles in `xlib/` are
-	lint-clean only because `dev/xcsv` and friends have **no non-local imports at
-	all** — the emission path had never met the linter. Also worth knowing:
-	`tools/pybundle/test/` is skipped by xlint, so nothing in the test suite could
-	have caught it.
+- [ ] **#134 — pybundle: emit xlint-clean bundles** (by 2026-10-21, high) —
+	board: epiq `GADE1PY` (Todo). **RULED 2026-10-17 — *"the bundler has to
+	produce xlint-clean code"* — and all three findings are bundler-side**, so
+	none of this needs a style ruling. Bundling `dev/xhttp` (the first library here
+	with non-local imports) produced `space after comma in import`, `aliased
+	import on a shared line` and a `double blank line`; **the pre-commit hook runs
+	xlint on staged `.py`, so the artefact could not have been committed.** The
+	rules, from `tools/xlint/xlint.py:907-920`: no `, ` in an emitted import; an
+	emitted statement with an alias is **split one target per line**; and removing
+	a statement must not leave a double blank (a narrow stated exception to R7).
+	**The second rule is the 2026-09 houserule**, so the bundler was violating house
+	style rather than inventing a form, and splitting cannot introduce a new
+	finding — a split alias line clears `prev_plain`. **Correction to a claim
+	recorded here on 2026-10-09:** the merged-imports rule is *not* unsatisfiable
+	for the bundler's shape. It is unsatisfiable for two **plain** imports plus one
+	alias, which is a source shape — `#104` / `DDRBHD5` stays open and untouched.
+	**Verified reachable**: the xhttp bundle with the three applied is clean and
+	still runs 223 tests with the same 2 failures. **The test must invoke xlint,
+	not be a fixture** — `is_ignored` excludes any path part named `test`
+	(`AK633QC`), so a bundle fixture in `test/` is invisible to the linter.
 - [ ] **#135 — xhttp: VERSIONS.md before a first release** (by 2026-10-20,
 	medium) — `dev/xhttp/` has no `VERSIONS.md`; `xconf`, `xcsv`, `xschema` and
 	`xtest` all have one, and `doc/library-structure.md:34` makes it part of the
