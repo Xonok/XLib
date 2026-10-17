@@ -36,7 +36,9 @@ PLACEMENT = {
 def _imports(module_name, imported_name):
 	"""True when a module carries an import statement naming that module."""
 	source = (PACKAGE / module_name).read_text(encoding="utf-8")
-	pattern = re.compile(rf"^\s*(?:import\s+{imported_name}\b|from\s+\S+\s+import\s+.*\b{imported_name}\b)")
+	# The comma-joined form is what `doc/style/python.md:26` requires, so a bare
+	# `import\s+NAME` matches none of this repo's own imports.
+	pattern = re.compile(rf"^\s*(?:import\s+(?:\w+\s*,\s*)*{imported_name}\b|from\s+\S+\s+import\s+.*\b{imported_name}\b)")
 	return any(pattern.match(line) for line in source.splitlines())
 
 def _placement():
@@ -48,7 +50,9 @@ def _placement():
 				continue
 			value = getattr(module, name)
 			if callable(value) and getattr(value, "__module__", "").startswith("tools.pybundle"):
-				found[name] = Path(value.__module__).name
+				# `__module__` is a dotted module name, never a filename, so the
+				# table's `bundler_source.py` is reached rather than compared with.
+				found[name] = Path(value.__module__.replace(".", "/")).with_suffix(".py").name
 	return found
 
 class TestNoParseTreeR6(unittest.TestCase):

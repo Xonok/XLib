@@ -33,7 +33,11 @@ class ImportsTestCase(unittest.TestCase):
 		self.root = Path(tmpdir.name)
 
 	def write(self, name, text):
-		(self.root / name).write_text(text, encoding="utf-8", newline="")
+		# The parent is made here because a fixture in this file writes into a
+		# subfolder, and the other five suites' helpers do the same.
+		path = self.root / name
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_text(text, encoding="utf-8", newline="")
 
 	def resolve(self, source, modpath=None):
 		"""`imports` over `source`, as a file at `modpath` in the throwaway folder."""
