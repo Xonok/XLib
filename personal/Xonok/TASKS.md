@@ -287,6 +287,32 @@ All three are decisions, not code. The bundler itself is written and 186 of its
 	is still un-releasable**, now with `AttributeError` instead of `ImportError`.
 	The choice is between an eighth `bundle()` wrapping `inline`, and moving
 	`release.py` onto `main(entry, out)`.
+- [ ] **#132 — pybundle: retire `RELATIVE_IMPORT_IN_ROOT`** (by 2026-10-20,
+	high) — board: epiq `NJ529TQ` (Todo). **Ruled 2026-10-17, written in as D30**
+	(131 insertions, 0 deletions; the first 1117 lines verified byte-identical).
+	The root may use a relative import and the error is retired, because D15's
+	premise — *"which python does not allow"* — holds for `__main__` and not for a
+	package module, and a library's root file is one. **The guard was the only
+	blocker**: with it removed and `dev/xhttp/xhttp.py` untouched, the library
+	bundles to 552 lines and **its own suite runs 223 tests against the bundle
+	with the same 2 failures the source has**, plus a 12-case live-socket smoke
+	test with byte-identical responses. **The work is four edits**: delete
+	`bundler.py:37-38`, the exception class at `bundler_imports.py:20`, and its two
+	uses in `bundler_cli.py`; then **four tests that pin the error**, one of which
+	asserts the opposite of the new rule. The `relative` flag stays — only its
+	reader in `inline` goes. **xcsv and xtest have the same root shape, so this one
+	change unbundles all three libraries.**
+- [ ] **#133 — pybundle: an option that emits internal-module shims** (by
+	decision needed, low) — board: epiq `AYB2896` (Todo). The human's own words,
+	2026-10-17: *"We'll probably have to add an option to the bundler for making
+	these shims automatically. Future work."* A bundle has no module objects
+	(D17), so a bundled library cannot run its own suite —
+	`test_response.py:25` does `from xhttp._.response import http_responses` and
+	`test_websocket.py` reaches `websocket._recv`. Running all 223 against the
+	xhttp bundle needed a hand-written shim package that rebuilds each internal
+	module out of prefixed names. **Not a blocker while internals stay
+	unreachable by design**; it becomes one when a library ships bundled and its
+	suite is the only thing that can catch a regression in it.
 - [x] **#130 — pybundle: D15 forbids a relative import in the root, and three
 	libraries use one — ANSWERED, the spec is wrong** (done 2026-10-17, high). The
 	human asked whether python allows it. **It does**, and this repo depends on it:
@@ -297,7 +323,10 @@ All three are decisions, not code. The bundler itself is written and 186 of its
 	`from xhttp import xhttp` works. **So `from ._ import …` in a root is the house
 	idiom and legal, three libraries use it, and the six bundles in `xlib/` came
 	from a bundler that handled it.** The error belongs on an entry that is a
-	script, which the bundler cannot currently tell. **Decide what it is instead.**
+	script, which the bundler cannot currently tell. **Decided 2026-10-17: relax
+	it** — *"Callers are not supposed to use those. That's part of why the root file
+	of a library needs to reflect whatever internals matter"* — and the
+	implementation is `#132`.
 - [x] **#131 — two tests in `test_bundler_structure.py` cannot pass as written**
 	(done 2026-10-17, medium). Neither was satisfiable by any import mechanism.
 	`test_each_function_of_the_set_lives_in_the_file_the_table_names` compared

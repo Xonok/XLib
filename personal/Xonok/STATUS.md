@@ -20,7 +20,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `ba063b5` (2026-10-17), **snapshot taken 2026-10-17**, **two
+Basis: `master` at `ad47b60` (2026-10-17), **snapshot taken 2026-10-17**, **three
 commits ahead of `origin/master` and unpushed** — the human authorised the commit, not
 the push.
 
@@ -32,16 +32,18 @@ five modules**, xlint clean, verified beyond the fixtures: a hand-built tree
 bundles to a file that runs and prints the right values.
 
 **Does python allow a relative import in the root? Yes — and this repo depends on
-it.** D15's `RELATIVE_IMPORT_IN_ROOT` rests on *"which python does not allow"*,
+it.** D15's `RELATIVE_IMPORT_IN_ROOT` rested on *"which python does not allow"*,
 and that holds for a module run as `__main__` and not for one imported as part of
 a package. Checked both ways: `import pkg.mod` runs clean, `python pkg/mod.py`
 raises `ImportError: attempted relative import with no known parent package`.
 **`dev/xhttp/test/harness.py:7` puts `dev/` on `sys.path` so `from xhttp import
 xhttp` works**, so the root file is always a package module here and
 `from ._ import …` is legal — and it is the house idiom in xcsv, xhttp and xtest.
-**So the bundler cannot bundle this repo's own libraries, and the spec is what is
-wrong about it**: the error belongs on an entry that is a script, which the
-bundler currently cannot tell. Filed as **#130**.
+**RULED 2026-10-17: the rule is relaxed and the error retired** — `SPEC.md` D30,
+and the blocker this paragraph opened is gone. The evidence that it was the only
+blocker is in *Blocked* item (a): **`dev/xhttp` bundles with its root untouched and
+its own 223-test suite runs against the bundle with the same 2 failures the source
+has.** Taskview `#130`.
 
 **Two of the 188 could not pass as written, and both were wrong; they are fixed.**
 In `test_bundler_structure.py`, the placement test compared
@@ -169,7 +171,7 @@ the human's call.
 	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
 	spec edits beyond these four decisions are still not written in, so the spec does
 	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
-| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
@@ -296,12 +298,33 @@ Also standing, from the abandoned single-pass attempt:
 	it; the human was told and overrode that, so the work happened here and the
 	record says so. What that leaves behind is three things the human has not
 	ruled on, and they are worth more than the green tests:
-	**(a) The bundler cannot bundle this repo's own libraries.** xcsv, xhttp and
-	xtest each open with `from ._ import …`, and D15 makes a relative import in
-	the root an error — `dev/xhttp/xhttp.py` raises on it, checked. The six
-	bundles in `xlib/` came from the old bundler, which flattened `_/`. Either
-	D15 is wrong for the house idiom or three libraries need rewriting, and both
-	are bigger than the bundler.
+	**(a) RULED 2026-10-17: a relative import in the root is allowed, and
+	`RELATIVE_IMPORT_IN_ROOT` is retired** (`SPEC.md` D30, taskview `#130`).
+	D15's premise — *"which python does not allow"* — holds for `__main__` and
+	not for a package module, and a library's root file is a package module.
+	Measured, not argued: with the check removed and `dev/xhttp/xhttp.py`
+	untouched, the library bundles to 552 lines and **its own suite runs 223
+	tests against the bundle with the same 2 failures the source has**, plus a
+	12-case live-socket smoke test with byte-identical wire responses. The
+	refusal was the only blocker — `imports` had already resolved `from ._ import
+	…` to six local targets. The source-side workaround does not exist:
+	`from _ import helper,…` breaks `from xhttp import xhttp` with
+	`ModuleNotFoundError: No module named '_'`, so this had to be a bundler
+	decision. The human's reason for relaxing rather than narrowing it: *"Callers
+	are not supposed to use those. That's part of why the root file of a library
+	needs to reflect whatever internals matter."* **The cost of that is real and
+	was accepted**: the internals stop being reachable as attributes of the
+	bundle, so **a caller can no longer name the library's error classes** — the
+	human answered that on the source side the same day, adding nineteen
+	`err_X = err.X` lines to the root file, which the bundler passes through as
+	`err_HTTPError = _err__HTTPError` (223 tests, same 2 failures, re-measured).
+	**The implementation is not done**: two lines in `bundler.py`, the exception's
+	four import sites, and four tests that pin the error. **A bundled library
+	cannot be tested by its own suite** — `test_response.py:25` and
+	`test_websocket.py` import internals and D17 means a bundle has no module
+	objects — so running all 223 needed a shim package; the human's answer is
+	*"we'll probably have to add an option to the bundler for making these shims
+	automatically. Future work"*, filed as `#133`.
 	**(b) The release path is still down**, one layer in: `release.py:8` imports
 	fine now and `:74` calls `bundler.bundle()`, which the spec does not have.
 	The human chose *"spec as written, bridge separately"* over adding it, so
@@ -721,6 +744,23 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	detail attached. A "not reproducible, here is my theory" report should have
 	came first, and the cheapest check — printing the string you were importing —
 	should have come before the theory, not after.
+8. **A dotted non-local import leaks one unprefixed name — accept it, or say
+	something about it?** D20 keeps `import a.b` verbatim because python binds the
+	*parent*, which the statement does not spell, so aliasing would hand the file
+	the leaf: `email.utils.parseaddr` would keep working by luck while
+	`email.message_from_string` raised `AttributeError`, which is the half-silent
+	failure the ruling exists to prevent. The price is that `email` lands at the
+	bundle's top level unprefixed. It works — `_helper__email.utils.formatdate`
+	resolves, and `dev/xhttp` bundles and runs — and there is **one occurrence in
+	everything this repo inlines**, at `dev/xhttp/_/helper.py:2`. So nothing here
+	decides it, and a foreign library can have many. **It cannot be removed**: a
+	name python does not bind under the statement's spelling can only be reached
+	by `__import__`, which D7 excludes on purpose. The options are in the chat
+	record for 2026-10-17: accept silently (today), accept with a stderr line per
+	occurrence, record it as a stated divergence beside D17, or refuse dotted
+	non-local imports outright. **It is also a second class of unprefixed name**,
+	alongside the non-local star import D24 already warns about and D19's declined
+	collision warning covers.
 
 ## Pointers
 

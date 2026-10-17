@@ -1115,3 +1115,134 @@ which they could not before the ruling.
 The re-derivation already asserts D27 and D28 — no test changes with either, and the
 four F26 shapes are each covered by an existing test. D29 adds two: the report
 carries the offending file's path, and it carries the first offending line's number.
+
+## Decisions — 2026-10-17, the root's relative import
+
+Same discipline as the two sections above: **append-only, nothing above this was
+edited**, and each decision names what it supersedes and restates the corrected
+text so this section reads on its own.
+
+**Read this before D15.** D15 gave `RELATIVE_IMPORT_IN_ROOT` a home in `inline`
+and D3's root exception still stands; what changed is that one error is retired
+and the root is no longer special-cased on this axis at all.
+
+| Section above | Changed by | Effect |
+|---|---|---|
+| Errors | human, 2026-10-17 | **`RELATIVE_IMPORT_IN_ROOT` is retired**; `IMPORT_FILE_NOT_FOUND` is now the only bundler error |
+| D15 | human, 2026-10-17 | withdrawn; restated in full below as D30 |
+| Command line | D30 | `cli`'s error list loses one member |
+
+### D30 — A relative import in the root is allowed, and the error is retired
+
+**Ruled 2026-10-17.** D15 stated the error as *"the root file used a relative
+import, which python does not allow"*. That premise is true of a module run as
+`__main__` and false of one imported as part of a package, and **the root of a
+library bundle is a package module**: `dev/xhttp/test/harness.py:7` puts `dev/`
+on `sys.path`, so `from xhttp import xhttp` makes `dev/xhttp/xhttp.py` a package
+member, and `from ._ import …` in it is ordinary python. Checked both ways:
+`import pkg.mod` runs clean, `python pkg/mod.py` raises `ImportError: attempted
+relative import with no known parent package`.
+
+> **A relative import resolves the same way whatever file writes it.** The root is
+> not a special case here, so there is nothing left for an error to say.
+> `IMPORT_FILE_NOT_FOUND` remains and is the error a relative import that names
+> nothing raises — a relative import cannot be a global, so it is the one case
+> where "maybe it is installed" is not available.
+
+The human's reason for relaxing it rather than narrowing it to "as long as it
+resolves inside the root folder" is worth recording, because it is what makes the
+error's premise rather than its reach the wrong thing:
+
+> **Callers are not supposed to use a library's internals. That is part of why
+> the root file of a library needs to reflect whatever internals matter.**
+
+So what the relaxation costs — internals stop being reachable through the bundle
+(D28 binds no module name; D17 says a module object exists under no name at all)
+— is a cost the human has already decided to pay, by putting the reflection in
+the root file instead of relying on the bundle carrying `err`, `request` or
+`websocket` as attributes.
+
+#### What the relaxation does not change
+
+**Resolution was never the question.** `imports` resolves a relative import
+against the importing file's modpath, and for the root it already returns the
+local modpath: `from ._ import helper,err,…` in `dev/xhttp/xhttp.py` yields six
+targets, `_.helper` through `_.server`, each `local`. The bundler was refusing
+something it had already worked out.
+
+**The root's prefix, and D3's root exception, are untouched.** D30 is about
+whether a relative import is an error. What a name in the root is called is D10,
+and it still says the root's own prefix is empty.
+
+**One behaviour is newly reachable and is recorded rather than guarded.** An
+entry's modpath is its file stem, so it carries no package path, and `_resolves`
+counts leading dots against it: `..` in a root file resolves exactly as `.` does,
+one level up from the root folder instead of an error. Previously the retired
+check caught every relative import in the root, so this was unreachable. It is
+left unguarded deliberately — a root file reaching above its own package is not
+python that works — and it is one line in `_resolves` if an implementer would
+rather raise.
+
+#### What it costs, measured on `dev/xhttp`
+
+The library was bundled with the check removed and the root's import line
+untouched. 8 files, 552 lines out, **11 diagnostics, every one of them R1.6's
+"a second reference is dropped"** — the root's import is each module's first
+reference and the internals' `from . import …` are the second, which is what that
+rule is for. No indentation warnings, consistent with D23's calibration.
+
+| Check | Source | Bundle |
+|---|---|---|
+| own suite, full | 223 ran, 2 failures, 1 skipped | **223 ran, 2 failures, 1 skipped** — the same two |
+| 12-case live-socket smoke test | — | **byte-identical wire responses** |
+
+The 2 failures are the pre-existing `_/websocket.py:send` message-type defect
+(`7Z7DE78`), which is a defect in the source and not in the bundle.
+
+**Bloat measured on this corpus: +1 717 B on 19 537 B, +8%**, of which 14 lines
+are R2's start and end comments. That is above the +3% the earlier corpus gave,
+and the reason is the same one recorded there: the cost tracks references, and
+`dev/xhttp`'s names are short (`err`, `MB`) inside a one-component folder whose
+prefix is `_err__`.
+
+#### The two consequences the human answered at the same time
+
+**The error classes were reachable by name in the source and are not in the
+bundle**, because a local module import binds nothing. The human accepted the
+point and answered it on the source side rather than the tool side:
+`dev/xhttp/xhttp.py` now ends with one aliased line per exception —
+`err_HTTPError = err.HTTPError` and eighteen others. The bundler needs no change
+for this: the root's prefix is empty, so the bundle emits `err_HTTPError =
+_err__HTTPError` and every public name stays clean. Measured on the rebundled
+library: **223 ran, the same 2 failures.**
+
+**A bundled library cannot be tested by its own suite** — not because anything
+fails, but because two test modules import internals
+(`test_response.py:25` reads `from xhttp._.response import http_responses`,
+`test_websocket.py` reaches `websocket._recv`) and D17 means a bundle has no
+module objects. Running all 223 against a bundle needed a shim package that
+rebuilds the internal modules out of prefixed names. The human's answer: *"We'll
+probably have to add an option to the bundler for making these shims
+automatically. Future work."* Not specified, and nothing in this spec depends on
+its shape.
+
+### What the tests must now cover
+
+- `test_a_relative_import_in_the_root_file_raises` is **wrong and must be
+	replaced** by its opposite: a relative import in the root bundles, the local
+	targets are inlined, and the root's uses reach their prefixed globals.
+- `test_bundler_cli.py`'s three `RELATIVE_IMPORT_IN_ROOT` tests lose their
+	trigger and need another bundler error to assert the same three things
+	(exit 1, the message on stderr, nothing on stdout). `IMPORT_FILE_NOT_FOUND`
+	is the obvious one, and `test_bundler.py` already has a fixture for it.
+- The `relative` flag stays — `imports` sets it, `_from` and `_star` read it to
+	decide that a missing file raises rather than being left in place. Only its
+	one reader in `inline` goes.
+
+**Not decided here, and asked of the human on 2026-10-17:** a dotted non-local
+import (`import email.utils`) keeps its statement per D20, so the name python
+binds — the *parent* — lands unprefixed at the bundle's top level. It works
+(`_helper__email.utils.formatdate` resolves) and there is one occurrence in this
+repo, at `dev/xhttp/_/helper.py:2`, so nothing in the repo decides it. D24's
+non-local star import is the only surviving collision source, and this adds a
+second class of unprefixed name that is silent rather than warned about.
