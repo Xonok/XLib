@@ -15,11 +15,14 @@ What dumb_http actually emits, captured by running it:
 	then always    -> a trailing b"\\r\\n\\r\\n" from __init__
 
 Two of those are defects rather than contract, and the tests below say which:
-the unconditional gzip (dumb_http does it, so it is not a regression) and the
-missing Content-Length on a bodyless response.
+the unconditional gzip and the missing Content-Length on a bodyless response.
+Both were inherited from dumb_http and both were kept for parity at first.
+The gzip one has since been ruled on: dumb_http does it too, but parity is
+not the bar - a server must not send a content coding the client did not ask
+for, and every browser that talks to this server is entitled to that.
 """
 
-import unittest,harness
+import unittest,socket,gzip,harness
 from xhttp import xhttp
 from xhttp._ import err
 from xhttp._.response import http_responses
@@ -253,18 +256,13 @@ class ResponseUnknownCodeTest(harness.HttpErrorAssertions,unittest.TestCase):
 
 class ResponseCompressionTest(unittest.TestCase):
 	"""
-	Compression is unconditional and does not consult the request.
+	Whether to compress a body at all, once the client has been asked.
 
-	Not a parity break: dumb_http gzips every send_str too, and the game has
-	been running that way. Pinned here so the behaviour is a decision rather
-	than an accident, and so the fix - if it comes - is deliberate.
+	The size comparison is the body's own business: compress = False sends
+	raw, and a body that would grow under gzip is sent raw even when the
+	client asked for it. Which codings a client will accept is a question
+	about the request, and that is ContentNegotiationTest.
 	"""
-
-	def test_compress_true_gzips_without_consulting_the_request(self):
-		payload = b"hello" * 100
-		s = harness.ScriptedSocket(b"")
-		xhttp.send_response_full(s,200,payload = payload,compress = True)
-		self.assertEqual(harness.header_value(bytes(s.written),"content-encoding"),"gzip")
 
 	def test_compress_false_sends_raw(self):
 		payload = b"hello" * 100
@@ -281,30 +279,133 @@ class ResponseCompressionTest(unittest.TestCase):
 		xhttp.send_response_full(s,200,payload = b"hi",compress = True)
 		self.assertIsNone(harness.header_value(bytes(s.written),"content-encoding"))
 
-	@harness.edge
-	def test_client_without_accept_encoding(self):
-		"""
-		A client that never said Accept-Encoding: gzip still gets a gzipped
-		body, because send_response_full never sees the request.
+class ContentNegotiationTest(unittest.TestCase):
+	"""
+	A content coding is applied only when the client asked for it.
 
-		Not reachable from a browser - every browser sends the header. It bites
-		curl --http1.0, some health checkers and some proxies. The fix is to
-		let the response functions consult the request's accept-encoding, which
-		is an API change worth making before anything depends on the current
-		signature.
+	RFC 9110 12.5.3: a server picks a content coding based on what the
+	request says the client can decode. Sending gzip to a client that never
+	sent Accept-Encoding is the same class of mistake as the missing
+	Connection: close - the response asserting something the client never
+	agreed to, and the client finding out by failing to decode the body.
 
-		This asserts on the signature rather than on the output, because the
-		output is indistinguishable from the correct case: gzip is right for a
-		client that asked for it.
+	Browsers always send Accept-Encoding, which is why this survived a
+	migration unnoticed. It bites curl --http1.0, health checkers and proxies.
+
+	These drive a real request through wrap_handler, because that is where
+	the request is visible. send_response_full is handed a client and nothing
+	else, so negotiation has to happen on the way past - which is a design
+	question for the fix, not something these tests should dictate.
+	"""
+
+	PAYLOAD = b"hello" * 100 # compresses enough that gzip is smaller
+
+	def negotiate(self,accept_encoding):
 		"""
-		import inspect
-		params = inspect.signature(xhttp.send_response_full).parameters
-		has_request = any(name in params for name in ("request","req","headers"))
-		self.assertTrue(
-			has_request,
-			"send_response_full%s cannot see the request, so it cannot honour "
-			"Accept-Encoding. Params: %s" % (inspect.signature(xhttp.send_response_full),list(params))
+		One request carrying this Accept-Encoding. Returns (raw, body).
+
+		None means the header is absent, which is a different case from an
+		empty one and is what curl, HTTP/1.0 clients and most health checkers
+		send.
+		"""
+		payload = self.PAYLOAD
+		def handler(req, *args):
+			xhttp.send_response_full(req["client"],200,payload = payload,compress = True)
+		a,b = socket.socketpair()
+		header = "" if accept_encoding is None else "Accept-Encoding: %s\r\n" % accept_encoding
+		b.sendall(("GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n" + header + "\r\n").encode())
+		# Connection: close, so wrap_handler answers once and closes its end.
+		xhttp.wrap_handler(handler,(),None,a,("127.0.0.1",5),1)
+		b.settimeout(3)
+		raw = b""
+		while True:
+			try:
+				chunk = b.recv(65536)
+			except socket.timeout:
+				break
+			if not chunk:
+				break
+			raw += chunk
+		a.close()
+		b.close()
+		_,_,body = harness.parse_response(raw)
+		return raw,body
+
+	def assert_not_gzipped(self,accept_encoding,why):
+		raw,body = self.negotiate(accept_encoding)
+		encoding = harness.header_value(raw,"content-encoding")
+		self.assertIsNone(
+			encoding,
+			"%s, so the body has to go out as-is. Got content-encoding %r. "
+			"Response: %r" % (why,encoding,raw[:120])
 		)
+		self.assertEqual(
+			body,self.PAYLOAD,
+			"%s, so the body has to be readable without decoding. Starts %r"
+			% (why,body[:16])
+		)
+
+	def assert_gzipped(self,accept_encoding,why):
+		raw,body = self.negotiate(accept_encoding)
+		self.assertEqual(
+			harness.header_value(raw,"content-encoding"),"gzip",
+			"%s, so gzip is allowed and smaller. Response: %r" % (why,raw[:120])
+		)
+		self.assertEqual(gzip.decompress(body),self.PAYLOAD,"gzip body did not round-trip")
+
+	def test_absent_accept_encoding_is_not_gzipped(self):
+		self.assert_not_gzipped(None,"the client sent no Accept-Encoding at all")
+
+	def test_empty_accept_encoding_is_not_gzipped(self):
+		self.assert_not_gzipped("","the client sent an empty Accept-Encoding")
+
+	def test_identity_only_is_not_gzipped(self):
+		self.assert_not_gzipped("identity","the client asked for identity")
+
+	def test_other_coding_only_is_not_gzipped(self):
+		self.assert_not_gzipped("deflate","the client asked for deflate, not gzip")
+
+	def test_gzip_is_applied_when_asked(self):
+		self.assert_gzipped("gzip","the client asked for gzip")
+
+	def test_wildcard_is_gzipped(self):
+		self.assert_gzipped("*","the client accepts anything")
+
+	def test_gzip_in_a_list_is_gzipped(self):
+		self.assert_gzipped("br, gzip","gzip is one of several codings accepted")
+
+	def test_coding_tokens_are_case_insensitive(self):
+		self.assert_gzipped("GZIP","coding tokens are case-insensitive")
+
+	def test_zero_quality_is_a_refusal_not_a_preference(self):
+		# `gzip;q=0` means the client cannot decode gzip. It is the one case a
+		# substring match for "gzip" gets wrong, and it is what a client sends
+		# when gzip is deliberately disabled.
+		self.assert_not_gzipped("gzip;q=0","the client refused gzip with q=0")
+
+	def test_content_length_agrees_with_the_body_actually_sent(self):
+		"""
+		Whichever way the decision goes, the two have to agree.
+
+		Header block and payload are sent separately and content-length is
+		computed from whichever body goes out. A negotiation that chooses a
+		coding and forgets to update the length is worse than no negotiation,
+		because the client then waits for bytes that never arrive - which is
+		the same stall shape as the keep-alive defect.
+		"""
+		for accept_encoding,wants_gzip in [(None,False),("gzip",True)]:
+			raw,_ = self.negotiate(accept_encoding)
+			head,_,rest = raw.partition(b"\r\n\r\n")
+			declared = int(harness.header_value(raw,"content-length"))
+			self.assertEqual(
+				declared,len(rest),
+				"Accept-Encoding %r: content-length says %d but %d bytes "
+				"followed the headers" % (accept_encoding,declared,len(rest))
+			)
+			self.assertEqual(
+				harness.header_value(raw,"content-encoding") == "gzip",wants_gzip,
+				"Accept-Encoding %r: expected gzip=%s" % (accept_encoding,wants_gzip)
+			)
 
 class ResponseEdgeTest(harness.HttpErrorAssertions,unittest.TestCase):
 	"""

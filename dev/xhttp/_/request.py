@@ -1,5 +1,5 @@
 import json,traceback
-from urllib.parse import urlparse
+from urllib.parse import urlparse,unquote
 from . import err
 
 _MB = 1024*1024
@@ -30,11 +30,11 @@ def read_request(client,client_addr,max_header_len=8192,max_content_len=100*_MB,
 	if len(req_tokens) < 2:
 		raise err.HTTPRequestInvalid("Request is malformed.")
 	method,target = req_tokens[0],req_tokens[1]
-	if ".." in target:
-		raise err.HTTPDoubleDotForbidden("Request target must not contain '..'.")
-	filepath = urlparse(target).path
+	filepath = unquote(urlparse(target).path)
 	if filepath.startswith("/"):
 		filepath = filepath[1:]
+	if ".." in filepath:
+		raise err.HTTPDoubleDotForbidden("Request filepath must not contain '..'.")
 	protocol = req_tokens[2] if len(req_tokens) == 3 else "HTTP/0.9"
 	if protocol not in ["HTTP/0.9","HTTP/1.0","HTTP/1.1"]:
 		raise err.HTTPHeaderVersion("Unknown header version.")

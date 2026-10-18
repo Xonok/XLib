@@ -11,11 +11,16 @@ the only tests here that touch the real kernel interface, which is the point:
 an fd leak is invisible to a mock.
 """
 
-import os,socket,threading,time,unittest,harness
+import os,socket,threading,time,unittest,contextlib,io,harness
 from xhttp import xhttp
+from xhttp._ import server
 
 def open_fds():
 	return len(os.listdir("/proc/self/fd"))
+
+def response_head(raw):
+	"""Just the status line and headers, for asserting on one of them."""
+	return raw.split(b"\r\n\r\n")[0]
 
 class ServeLiveTest(unittest.TestCase):
 	"""A real socket, a real thread, a real request."""
@@ -43,7 +48,10 @@ class ServeLiveTest(unittest.TestCase):
 	def test_several_requests_in_a_row(self):
 		# The listener must keep going. One connection per request here: this
 		# is about the listener surviving, not about reusing a connection.
-		# keep-alive itself is covered in WrapHandlerKeepAliveTest.
+		# Reusing one is ServeForeverKeepAliveTest, and it cannot be done from
+		# here - LiveServer calls wrap_handler directly with a hardcoded 120
+		# rather than going through serve_forever, so it would pass whatever
+		# serve_forever did with max_requests.
 		counts = []
 		def handler(req, *args):
 			counts.append(1)
@@ -318,6 +326,170 @@ class WrapHandlerEdgeTest(unittest.TestCase):
 				a.close()
 			except OSError:
 				pass
+
+class ServeForeverKeepAliveTest(unittest.TestCase):
+	"""
+	Keep-alive as a browser uses it: several requests down one connection.
+
+	There was no test for this, and the file said otherwise - the comment in
+	ServeLiveTest.test_several_requests_in_a_row pointed at a
+	`WrapHandlerKeepAliveTest` that was never written. It was never written
+	because of how a keep-alive test is reached here: harness.LiveServer does
+	not call serve_forever. It re-implements the accept loop and calls
+	wrap_handler directly with a hardcoded 120, so a keep-alive test written
+	against LiveServer passes no matter what serve_forever does.
+
+	And serve_forever passed no max_requests at all, so wrap_handler took its
+	own default of 1: every connection served one request and closed, while the
+	responses advertised HTTP/1.1 and never said `Connection: close`. A browser
+	reused the connection, the server closed without reading the request
+	already in flight, and that file was silently lost. Traveller's page load
+	died on whichever image happened to be in flight, which is why it looked
+	like one bad file.
+
+	These tests therefore start the real serve_forever on a real port. Nothing
+	stops the listener afterwards; low-level threads are not joined at
+	interpreter exit, so a leaked one costs a port and nothing else.
+	"""
+
+	def _serve(self,handler,max_requests = None):
+		"""Start the real serve_forever on a real port. Returns the port."""
+		port = harness.free_port()
+		if max_requests is None:
+			promise = xhttp.serve_forever(("127.0.0.1",port),handler,(),None,True)
+		else:
+			# The root wrapper does not forward max_requests, so a listener
+			# with a short budget has to be started through the internal it
+			# wraps. Worth knowing: it is not reachable from the public API.
+			promise = server.serve_forever(("127.0.0.1",port),handler,(),None,True,None,max_requests)
+		xhttp.await_startup(promise)
+		return port
+
+	def _read_one(self,s):
+		"""
+		One length-framed response. b"" means the peer went away without one.
+
+		Which of the two it is depends on timing. A server that closes with
+		the request still unread in its receive buffer gets answered by the
+		kernel with RST rather than FIN, so the same defect arrives as an
+		orderly close or as ConnectionResetError from one run to the next.
+		Both are the same defect, so both have to land as one assertion rather
+		than as a failure that alternates with an error.
+		"""
+		buf = bytearray()
+		while True:
+			try:
+				chunk = s.recv(65536)
+			except (ConnectionResetError,BrokenPipeError):
+				return bytes(buf)
+			if not chunk:
+				return bytes(buf)
+			buf.extend(chunk)
+			if harness._response_complete(buf):
+				return bytes(buf)
+
+	def _two_on_one_connection(self,port,headers = ()):
+		"""
+		Two requests down one socket, both answers read back.
+
+		A lost second request has to come back as b"" - the server going away
+		with nothing written - rather than as a timeout, or the test cannot
+		tell the defect this class exists for from a slow machine.
+		"""
+		s = socket.create_connection(("127.0.0.1",port))
+		s.settimeout(3.0)
+		out = []
+		try:
+			for target in ("/one","/two"):
+				lines = ["GET %s HTTP/1.1" % target,"Host: 127.0.0.1"]
+				lines.extend(headers)
+				try:
+					s.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
+				except (ConnectionResetError,BrokenPipeError):
+					out.append(b"")
+					break
+				out.append(self._read_one(s))
+		finally:
+			s.close()
+		return out
+
+	@staticmethod
+	def _handler(req, *args):
+		xhttp.send_response_full(req["client"],200,payload = b"ok")
+
+	def test_two_requests_on_one_connection_both_answered(self):
+		"""The regression: serve_forever must keep a connection alive."""
+		port = self._serve(self._handler)
+		first,second = self._two_on_one_connection(port)
+		self.assertEqual(harness.status_code(first),200,"first request: %r" % first)
+		self.assertEqual(
+			harness.status_code(second),200,
+			"serve_forever answered the first request and closed instead of "
+			"reading the second. A browser reuses connections, so the second "
+			"request is lost rather than refused - empty second response is %r" % second
+		)
+
+	def test_last_response_says_connection_close(self):
+		"""
+		The response before the socket closes has to say so.
+
+		Without the header the client is told, by omission, that the
+		connection is still good - and anything it writes next is lost. That is
+		the same defect as above, only arriving on the last request instead of
+		the first.
+		"""
+		port = self._serve(self._handler,max_requests = 2)
+		first,second = self._two_on_one_connection(port)
+		self.assertEqual(harness.status_code(first),200,"first request: %r" % first)
+		self.assertNotIn(
+			b"connection: close",response_head(first).lower(),
+			"the server is staying open for another request, so it must not "
+			"claim otherwise"
+		)
+		self.assertIn(
+			b"connection: close",response_head(second).lower(),
+			"this is the last response before the socket closes, so it has to "
+			"say so. Second response was %r" % second
+		)
+
+	def test_client_asked_to_close_is_told_so(self):
+		"""`Connection: close` in the request is echoed in the response."""
+		port = self._serve(self._handler)
+		first,second = self._two_on_one_connection(port,headers = ("Connection: close",))
+		self.assertEqual(harness.status_code(first),200,"first request: %r" % first)
+		self.assertIn(
+			b"connection: close",response_head(first).lower(),
+			"the client asked to close. Echoing it is what RFC 9112 asks for, "
+			"and it costs nothing. First response was %r" % first
+		)
+		self.assertEqual(second,b"","the client asked to close, so nothing follows")
+
+	def test_peer_disconnect_between_requests_is_quiet(self):
+		"""
+		A browser dropping an idle keep-alive connection is ordinary traffic.
+
+		Once keep-alive is on, every idle connection the browser closes ends in
+		EOF, which read_request reports as HTTPHeaderInvalid. Printing a
+		traceback for it fills the log with the normal case and buries the real
+		faults - the same reason TimeoutError is already swallowed beside it.
+		"""
+		a,b = socket.socketpair()
+		b.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
+		b.close()
+		printed = io.StringIO()
+		try:
+			with contextlib.redirect_stdout(printed):
+				xhttp.wrap_handler(self._handler,(),None,a,("127.0.0.1",5),120)
+		finally:
+			a.close()
+		self.assertEqual(
+			printed.getvalue(),"",
+			"a peer closing between keep-alive requests was reported as an "
+			"error. HTTPHeaderInvalid is raised only when the peer closed "
+			"before sending a complete request - malformed input with a "
+			"terminator is HTTPRequestInvalid, and a bad version is "
+			"HTTPHeaderVersion, both of which are still reported. Got: %r" % printed.getvalue()
+		)
 
 if __name__ == "__main__":
 	unittest.main()

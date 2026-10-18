@@ -43,6 +43,37 @@ class ParseCoreTest(unittest.TestCase):
 		self.assertEqual(req["headers"]["x-real-ip"],"10.0.0.5")
 		self.assertEqual(req["headers"]["accept-encoding"],"gzip")
 
+	def test_percent_encoded_path_is_decoded(self):
+		# Ordinary traffic, not an edge case: a browser percent-encodes every
+		# path segment, and Space-Traveller/img holds names with spaces in them
+		# ("2024-07-09 19_50_51-Window.png"). Without the decode those 404.
+		_,req = self.parse(b"GET /img/2024-07-09%2019_50_51-Window.png HTTP/1.1\r\nHost: x\r\n\r\n")
+		self.assertEqual(req["filepath"],"img/2024-07-09 19_50_51-Window.png")
+
+	def test_query_string_is_not_decoded_into_the_path(self):
+		# filepath is the path only. A percent-encoded query value must not
+		# leak into it - the login flow compares filepath against a fixed name.
+		_,req = self.parse(b"GET /chat_async?key=a%2Fb HTTP/1.1\r\nHost: x\r\n\r\n")
+		self.assertEqual(req["filepath"],"chat_async")
+		self.assertEqual(req["target"],"/chat_async?key=a%2Fb")
+
+	def test_query_string_survives_an_encoded_fragment_delimiter(self):
+		"""
+		Decoding has to happen after the target is split, not before.
+
+		Unquoting the whole target turns an encoded %23 in a query value into
+		a real '#', and urlparse then reads everything past it as a fragment -
+		so the query is silently truncated. Here the key arrives as 'a#b' and
+		'key=a%23b' would be read as 'key=a', losing the rest without a word.
+
+		This is the websocket login key, and SPEC.md already records a query
+		string being lost here (ed66b138: lost the query string and broke
+		websocket login with a KeyError on every connection).
+		"""
+		_,req = self.parse(b"GET /chat_async?key=a%23b HTTP/1.1\r\nHost: x\r\n\r\n")
+		self.assertEqual(req["filepath"],"chat_async")
+		self.assertEqual(req["target"],"/chat_async?key=a%23b")
+
 	def test_post_body_read_exactly(self):
 		body = b'{"command":"auth"}'
 		_,req = self.parse(b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
@@ -372,6 +403,31 @@ class ParseEdgeTest(harness.HttpErrorAssertions,unittest.TestCase):
 			("127.0.0.1",5),
 			expected = err.HTTPDoubleDotForbidden,
 			msg = "traversal segments should be refused at the parsing boundary"
+		)
+
+	@harness.edge
+	def test_percent_encoded_traversal_still_refused(self):
+		"""
+		The `..` guard has to look at the decoded path, not at the wire bytes.
+
+		Percent-decoding the target moves the payload behind a guard that
+		inspects the target. `/%2e%2e/%2e%2e/etc/passwd` carries no literal
+		`..`, so a guard read before the decode passes it, and read_request
+		then hands back a filepath of `../../etc/passwd` to whatever consumes
+		it.
+
+		send_file has its own token check that still catches this, so nothing
+		is exploitable through serve_files today - which is exactly why it is
+		worth a test. The guard that exists to stop this is currently the one
+		thing not standing in the way.
+		"""
+		self.assert_http_error(
+			xhttp.read_request,
+			harness.ScriptedSocket(b"GET /%2e%2e/%2e%2e/etc/passwd HTTP/1.1\r\nHost: x\r\n\r\n"),
+			("127.0.0.1",5),
+			expected = err.HTTPDoubleDotForbidden,
+			msg = "traversal segments should be refused after decoding, or the "
+			"decode step can be used to carry them past the guard"
 		)
 
 	@harness.edge

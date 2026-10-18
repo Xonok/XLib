@@ -1,4 +1,4 @@
-import gzip,json,os
+import gzip,json,os,threading
 from http import HTTPStatus
 from . import err,helper
 
@@ -14,6 +14,8 @@ def send_response(client,code,**headers):
 			raise err.HTTPCapitalizedHeader("Capitalized letter detected in header. Please don't do that.")
 		if "\r" in k or "\n" in k or "\r" in v or "\n" in v:
 			raise err.HTTPHeaderNewline("Newline and carriage return are forbidden in headers.")
+	if is_closing() and "connection" not in headers:
+		headers["connection"] = "close"
 	if "date" not in headers:
 		headers["date"] = helper.datetime_string()
 	if "server" not in headers:
@@ -85,3 +87,7 @@ def send_not_found(client,config,**headers):
 	if send_file(client,404,"404.html",config,**headers) == False:
 		return send_response(client,404,**headers)
 	return True
+#helpers
+_state = threading.local()
+def mark_closing(): _state.closing = True
+def is_closing(): return getattr(_state,"closing",False)

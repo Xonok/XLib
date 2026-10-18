@@ -3,11 +3,11 @@ from concurrent.futures import Future
 from . import err,response,request,helper,websocket
 
 #Server and handler
-def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None):
+def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120):
 	if promise is None:
 		promise = Future()
 	if new_thread:
-		_thread.start_new_thread(serve_forever,(addr,handler,handler_args,ssl_keys,False,promise))
+		_thread.start_new_thread(serve_forever,(addr,handler,handler_args,ssl_keys,False,promise,max_requests))
 		return promise
 	try:
 		context = None
@@ -30,7 +30,7 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 		try:
 			s,c = sock.accept()
 			s.settimeout(60)
-			_thread.start_new_thread(wrap_handler,(handler,handler_args,context,s,c))
+			_thread.start_new_thread(wrap_handler,(handler,handler_args,context,s,c,max_requests))
 		except Exception:
 			print(traceback.format_exc(),flush=True)
 			if s and s.fileno() != -1:
@@ -38,17 +38,21 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 				s.close()
 def await_startup(promise,timeout=5):
 	promise.result(timeout=timeout)
-def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=1):
+def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests):
 	buffer = b""
 	try:
 		if ssl_context:
 			client = ssl_context.wrap_socket(client,server_side=True)
-		for _ in range(max_requests):
+		for req_nr in range(max_requests):
 			req = request.read_request(client,client_addr,buffer=buffer)
-			buffer = req["leftover"]
+			keepalive = helper.has_keepalive(req)
+			if req_nr == max_requests-1 or not keepalive:
+				response.mark_closing()
 			func(req,*func_args)
-			if not helper.has_keepalive(req):
+			if not keepalive:
 				break
+	except err.HTTPHeaderInvalid:
+		pass #request ended halfway
 	except err.HTTPHeaderVersion:
 		if client and client.fileno() != -1:
 			response.send_response(client,505)
@@ -70,11 +74,11 @@ def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=1):
 		client.close()
 #File server callback. Combine with serve_forever and a config to serve files.
 def serve_files(req,config):
+	#TODO: add warning when config has "*" mapped to folder "". Security issue.
 	client = req["client"]
 	if req["method"] != "GET":
 		if client and client.fileno() != -1:
 			response.send_response(client,400)
-			client.close()
 		return
 	fpath = req["filepath"]
 	if response.send_file(client,200,fpath,config) == False:

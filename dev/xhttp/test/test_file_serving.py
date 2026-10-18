@@ -156,12 +156,25 @@ class ServeFilesTest(TempDirCase):
 		self.assertEqual(body, b"<html>home</html>")
 
 	def test_serve_files_non_get_returns_400(self):
-		"""Non-GET requests get 400 and connection closed."""
+		"""
+		Non-GET requests get 400, and the socket is left to whoever owns it.
+
+		serve_files used to close the connection here. That was invisible while
+		every connection served exactly one request, and wrong as soon as
+		keep-alive was on: wrap_handler owns the socket and reads the next
+		request from it, so closing underneath it left the next loop iteration
+		reading a dead descriptor.
+		"""
 		req = self._make_req("POST", "index.html")
 		xhttp.serve_files(req, self.CONFIG)
 		s = req["client"]
 		self.assertEqual(harness.status_code(bytes(s.written)), 400)
-		self.assertTrue(s.closed)
+		self.assertFalse(
+			s.closed,
+			"serve_files closed a socket it does not own. wrap_handler closes "
+			"the connection; a file server that is one callback inside it has "
+			"no say over its lifetime."
+		)
 
 	def test_serve_files_missing_file_serves_404(self):
 		"""Missing file triggers send_not_found fallback."""

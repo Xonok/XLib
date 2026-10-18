@@ -25,7 +25,7 @@ skipped; they are tracked but not what the library is judged on yet.
 |------|-------|-------|
 | `test_parse.py` | `read_request` contract — what a browser and the game actually send | yes |
 | `test_response.py` | `write_response` / `write_response_full` — status line, headers, body, partial writes, gzip, capitalisation | yes |
-| `test_server.py` | `serve_forever`, `wrap_handler` — fd leak, close, error containment, bind reporting | yes |
+| `test_server.py` | `serve_forever`, `wrap_handler` — keep-alive on a real listener, fd leak, close, error containment, bind reporting | yes |
 | `test_parity.py` | dumb_http feature parity — the exact call sites in server.py, websocket.py, Chat/api.py | yes |
 | `test_websocket_correctness.py` | RFC 6455 behaviour `send()` should have — message type validation | yes |
 | `test_parse.py` (ParseEdgeTest) | TE casing, pipelining, path traversal, obs-fold, bare LF | no |
