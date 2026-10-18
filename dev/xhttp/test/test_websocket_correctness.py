@@ -24,7 +24,7 @@ if REPO_ROOT not in sys.path:
 	sys.path.insert(0, REPO_ROOT)
 
 import harness
-from xhttp._ import err
+from xhttp._ import err,websocket
 # ============================================================================
 # RFC 6455 Reference Values
 # ============================================================================
@@ -276,15 +276,13 @@ class TestSendReceiveBehavior(unittest.TestCase):
 		"""send(None) must raise WSMessageNone."""
 		ctx = {"data": {}, "_send": queue.Queue(), "req": {}, "send_ws": None}
 		with self.assertRaises(err.WSMessageNone):
-			# Correct implementation would raise here
-			pass
+			websocket.send(ctx, None)
 
 	def test_send_rejects_non_string(self):
 		"""send() must only accept strings (text frames)."""
 		ctx = {"data": {}, "_send": queue.Queue(), "req": {}, "send_ws": None}
 		with self.assertRaises(err.WSMessageMustBeString):
-			# Correct implementation would raise here
-			pass
+			websocket.send(ctx, 42)
 
 class TestSenderThreadLifecycle(unittest.TestCase):
 	"""Tests for sender thread lifecycle management."""

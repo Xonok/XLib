@@ -1457,3 +1457,31 @@ their rebind.
 - A non-local name import inside a function stays inside it, by text and by
 	compiling the bundle — the second is the assertion that would have caught this,
 	and it is cheap.
+
+### D35 — The two failures this document attributes to `websocket.send` were tests that were never written
+
+**Recorded 2026-10-18.** D30's section says twice that the xhttp bundle's two
+failing tests are *"the pre-existing `_/websocket.py:send` message-type defect"*
+on board `7Z7DE78`. **That attribution was wrong, and the board ticket argued the
+same wrong thing at length** — *"These are real defects, not test bugs"* — without
+anyone reading what the tests did.
+
+The implementation validates, at `_/websocket.py:62-65`: `send` raises
+`WSMessageNone` for `None` and `WSMessageMustBeString` for anything whose type is
+not `str`, checked against all three of `None`, `42` and `b'x'`. The two tests
+were:
+
+```python
+with self.assertRaises(err.WSMessageNone):
+	# Correct implementation would raise here
+	pass
+```
+
+`assertRaises` around a body that cannot raise fails, every time, whether the code
+is right or wrong — so a green implementation and a red test were reported as a
+red implementation. **With the two bodies written, the suite is 223 tests, 0
+failures, 1 skipped, against the source and against the bundle alike.**
+
+Nothing in D30 or D32 changes on this. It is here because those sections are the
+reason the number 2 appears in them, and a reader checking the claim would find
+the tests rather than the code.

@@ -83,8 +83,10 @@ rulings recorded in the commit body, including that **F13 was reversed** — whi
 why 138 is not a stable number and 188 is the current one. xhttp arrived in
 `dev/` from Space-Traveller on 2026-10-10; its root is clean — documentation,
 `xhttp.py`, the internals in `_/`, the suite in `test/`, and `compare/` holding
-the temporary RFC comparison material (`ba84849`). The suite is at **223 tests /
-2 failures / 1 skipped**, unchanged by `95d700b`; see *In progress*. Its design
+the temporary RFC comparison material (`ba84849`). **The suite is green: 223
+tests, 0 failures, 1 skipped** as of 2026-10-18 — the two failures it carried
+since 2026-10-12 were tests that had never been written, not a defect (see
+*In progress* and `7Z7DE78`). Its design
 record lives at `dev/xhttp/SPEC.md`. **xlint reports clean over the
 whole repo, and that is narrower than it reads** — it skips every directory named
 `test`, so its violations are invisible to it (epi `AK633QC`).
@@ -178,7 +180,7 @@ the human's call.
 	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
 	spec edits beyond these four decisions are still not written in, so the spec does
 	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
-| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 2 failures, 0 errors, 1 skipped** as of `f83b050` — was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 0 failures, 1 skipped — green**, as of 2026-10-18. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
@@ -361,9 +363,11 @@ Also standing, from the abandoned single-pass attempt:
 		(`#117`, due 2026-10-20). Not mechanical, and it is the stated condition
 		for calling xhttp done. **A release is also the human's call**, and nothing
 		has been released — the six files in `xlib/` still predate the rewrite.
-	5. **Two red tests** (`7Z7DE78`, `websocket.send` type validation). A
-		judgement call rather than a script error — `TESTING_RULES.md` forbids
-		masking, and releasing a known-broken `send()` is the human's to allow.
+	5. ~~**Two red tests** (`7Z7DE78`, `websocket.send` type validation).~~ **Gone —
+		they were never real.** `_/websocket.py:62-65` validates correctly; the two
+		tests were `pass` inside `assertRaises`, with the comment *"Correct
+		implementation would raise here"*. Written properly on 2026-10-18, the suite
+		is **223 tests green against the source and against the bundle**.
 	6. **`#115` is unimplemented**, so the one gate that belongs in the release
 		path itself — refusing a library that depends on dev versions — is not
 		there.

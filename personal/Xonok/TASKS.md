@@ -313,7 +313,9 @@ future work.
 	that invokes xlint**, because `is_ignored` excludes any path part named `test`
 	(`AK633QC`) and a fixture in `test/` would be invisible to the check it exists
 	to satisfy. **Verified**: all five bundles lint-clean, and the xhttp bundle
-	still runs its 223 tests with the same 2 failures.
+	still runs its 223 tests green — the two failures this work kept reporting
+	were tests that had never been written (see the `#117` entry's neighbour,
+	`7Z7DE78` in epiq).
 	**Also found and fixed while implementing it, as `SPEC.md` D34**: an indented
 	non-local name import lost its indentation, so the bundle **did not parse**.
 	D20's *"rewritten in place"* had been read as *rebuilt*.
