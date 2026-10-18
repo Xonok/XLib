@@ -11,7 +11,7 @@ function's hands to begin with.
 
 import argparse,sys
 from tools.pybundle.bundler import main
-from tools.pybundle.bundler_imports import IMPORT_FILE_NOT_FOUND,RELATIVE_IMPORT_IN_ROOT
+from tools.pybundle.bundler_imports import IMPORT_FILE_NOT_FOUND
 
 _USAGE = "pybundle --in <path> --out <path|->"
 
@@ -34,7 +34,7 @@ def cli(argv: list) -> int:
 		return 1
 	try:
 		main(arguments.entry, sink)
-	except (IMPORT_FILE_NOT_FOUND,RELATIVE_IMPORT_IN_ROOT,OSError) as problem:
+	except (IMPORT_FILE_NOT_FOUND,OSError) as problem:
 		print(f"pybundle: {problem}", file=sys.stderr)
 		return 1
 	finally:

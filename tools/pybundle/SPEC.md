@@ -1435,3 +1435,25 @@ stays true if a second such file ever exists.
 	and rebinds. The condition must not fire there, and a test that only covers the
 	root cannot tell the difference between "the comparison is right" and "aliases
 	stopped being emitted at all".
+
+### D34 — "Rewritten in place" means at its own indentation
+
+**Found while implementing D32, 2026-10-17.** D20 says a non-local name import is
+*"rewritten in place"*, and the name-import branch of `translate` read that as
+*rebuilt*: it emitted `from pathlib import join as A__join` with no leading
+whitespace at all. A `from x import y` written inside a function therefore came
+out at column 0, and the bundle **did not parse** — `IndentationError: expected an
+indented block after function definition`. A statement can be correct text and
+still be the wrong bundle; this one only failed when compiled.
+
+> **An emitted import statement carries the indentation it was written with.**
+
+The other two branches already did, which is why the shape survived: a local
+module import and a local name import both interpolate `indent` when they write
+their rebind.
+
+### What the tests must now cover
+
+- A non-local name import inside a function stays inside it, by text and by
+	compiling the bundle — the second is the assertion that would have caught this,
+	and it is cheap.

@@ -24,7 +24,7 @@ importing file's own name. The old class `TestNameImportsD9` asserted the
 withdrawn mechanism and is replaced by the three classes below it.
 """
 
-import contextlib,io,os,shutil,sys,tempfile,unittest
+import contextlib,io,os,shutil,subprocess,sys,tempfile,unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -422,7 +422,7 @@ class TestOutputDestinationR5(BundleTestCase):
 		# the run does the same work and raises the same errors either way." The
 		# byte half is covered above; this is the other half, and it is the half
 		# a sink-conditional implementation would get wrong silently.
-		files = {"server.py": "from . import helper\n", "helper.py": "count = 1\n"}
+		files = {"server.py": "from . import gone\n"}
 		with self.assertRaises(Exception) as from_buffer:
 			self.bundle(dict(files), out=io.StringIO())
 		out_path = self.root / "bundle.py"
@@ -480,12 +480,20 @@ class TestErrors(BundleTestCase):
 		text = self.bundle({"server.py": "import definitely_not_local\n"}).getvalue()
 		self.assertIn("import definitely_not_local", text)
 
-	def test_a_relative_import_in_the_root_file_raises(self):
-		# RELATIVE_IMPORT_IN_ROOT — D15 puts the check in `inline`, which is the
-		# only function that is handed `entry`.
+	def test_a_relative_import_of_a_missing_module_raises_in_the_root_too(self):
+		# D30 retired RELATIVE_IMPORT_IN_ROOT, so the root now reaches the check
+		# every other file does: a relative import naming nothing cannot be global.
 		with self.assertRaises(Exception) as caught:
-			self.bundle({"server.py": "from . import helper\n", "helper.py": "count = 1\n"})
-		self.assertIn("RELATIVE_IMPORT_IN_ROOT", str(caught.exception))
+			self.bundle({"server.py": "from . import gone\n"})
+		self.assertIn("IMPORT_FILE_NOT_FOUND", str(caught.exception))
+
+	def test_a_relative_import_in_the_root_file_is_not_an_error(self):
+		# D30 — the ruling itself. Local targets inline, and the root's uses reach
+		# their prefixed globals.
+		text = self.bundle({"server.py": "from . import helper\nvalue = helper.count\n",
+			"helper.py": "count = 1\n"}).getvalue()
+		self.assertIn("helper__count = 1", text)
+		self.assertIn("value = helper__count", text)
 
 	def test_a_relative_import_in_a_non_root_file_does_not_raise(self):
 		# D15 — the check is `modpath == entry`, so an ordinary module may still
@@ -526,12 +534,15 @@ class TestImportStatementsRemovedD8(BundleTestCase):
 		self.assertNotIn("import helper", text)
 
 	def test_a_mixed_statement_keeps_the_remaining_targets_in_source_order(self):
+		# D32 puts each aliased target on its own line, so the order is read off
+		# the bundle rather than off one comma-joined statement.
 		text = self.bundle({
 			"server.py": "import sub.client\n",
 			"sub/client.py": "import helper, os, sys\n",
 			"helper.py": "count = 1\n",
 		}).getvalue()
-		self.assertIn("import os as sub__client__os, sys as sub__client__sys", text)
+		self.assertLess(text.index("import os as sub__client__os"), text.index("import sys as sub__client__sys"))
+		self.assertNotIn("import os as sub__client__os,", text)
 
 	def test_a_non_local_import_statement_is_never_removed(self):
 		# R1.5 — the local case above does not become a rule about every import.
@@ -812,6 +823,114 @@ class TestNonLocalModuleImportsD20(BundleTestCase):
 			"sub/client.py": "import email.utils as eu\n",
 		}).getvalue()
 		self.assertIn("import email.utils as sub__client__eu", text)
+
+class TestEmittedOutputIsLintCleanD32(BundleTestCase):
+	"""D32: a bundle must be xlint-clean, and the obligation is the bunder's own
+	edits — text carried verbatim from a source that is already linted is not its
+	responsibility.
+
+	**The test invokes xlint rather than being a fixture**, because `is_ignored`
+	excludes any path part named `test` (`AK633QC`) — a bundle written into this
+	folder would be invisible to the very check it exists to satisfy. It also
+	asserts the *sources* are clean, which is the other half: a bundle cannot be
+	cleaner than what it was made of, and the difference between the two is
+	exactly the bundler's own work.
+	"""
+
+	TREE = {
+		"server.py": "import sub.client\nimport time,sys\nimport email.utils\n"
+			"\nvalue = sub.client.run() + time.time() + len(sys.argv)\n",
+		"sub/client.py": "import helper,os,json\nimport email.utils\nfrom pathlib import join\n"
+			"from helper import count\n"
+			"\ndef run():\n\tfrom http import HTTPStatus\n"
+			"\treturn join(\"a\"), HTTPStatus.OK, count, json.dumps({}), os.sep\n",
+		"helper.py": "import math\ncount = 1\nvalue = math.pi\n",
+	}
+
+	def _linted(self, path):
+		found = subprocess.run([sys.executable, str(ROOT / "tools" / "xlint" / "xlint.py"), str(path)],
+			capture_output = True, text = True)
+		return found.returncode, found.stdout.strip()
+
+	def test_the_fixtures_themselves_are_lint_clean(self):
+		for name, text in self.TREE.items():
+			self.write_files({name: text})
+			_, said = self._linted(self.root / name)
+			self.assertEqual(said, "clean", f"{name} is not lint clean")
+
+	def test_the_bundle_is_lint_clean(self):
+		self.write_files(self.TREE)
+		path = self.root / "bundle.py"
+		path.write_text(self.bundle(self.TREE).getvalue(), encoding = "utf-8", newline = "")
+		code, said = self._linted(path)
+		self.assertEqual(said, "clean")
+
+	def test_the_bundle_parses(self):
+		# The shape the lint test cannot see: a statement emitted at the wrong
+		# indentation is still perfectly valid *text*, and fails at compile.
+		compile(self.bundle(self.TREE).getvalue(), "<bundle>", "exec")
+
+	def test_an_emitted_import_carries_no_space_after_a_comma(self):
+		text = self.bundle({"server.py": "import sub.client\n",
+			"sub/client.py": "import os,sys\n"}).getvalue()
+		self.assertNotIn(", as", text)
+		self.assertNotIn("import os as sub__client__os,", text)
+
+	def test_an_indented_non_local_name_import_keeps_its_indentation(self):
+		# Found while implementing D32: the statement came out at column 0, so the
+		# bundle did not parse.
+		text = self.bundle({"server.py": "import sub.client\n",
+			"sub/client.py": "def run():\n\tfrom pathlib import join\n\treturn join(\"a\")\n"}).getvalue()
+		self.assertIn("\tfrom pathlib import join as sub__client__join", text)
+
+	def test_a_removed_import_between_two_blanks_leaves_no_double_blank(self):
+		text = self.bundle({"server.py": "\"doc\"\n\nimport helper\n\nvalue = 1\n",
+			"helper.py": "count = 1\n"}).getvalue()
+		self.assertNotIn("\n\n\n", text)
+
+	def test_a_double_blank_the_source_wrote_is_carried(self):
+		# The other half of D32's rule: a blank pair the bundler did not create is
+		# the source's own finding, and normalising it would be the bundler
+		# claiming a style the source never owed.
+		text = self.bundle({"server.py": "value = 1\n\n\nother = 2\n"}).getvalue()
+		self.assertIn("\n\n\n", text)
+
+class TestNothingMovesD33(BundleTestCase):
+	"""D33: where the bundled name is the name the source used, no alias and no
+	rebind is written and the statement stands as written.
+	"""
+
+	def test_a_non_local_import_in_the_root_is_left_alone(self):
+		text = self.bundle({"server.py": "import time,sys\n"}).getvalue()
+		self.assertIn("import time,sys", text)
+		self.assertNotIn("import time as time", text)
+
+	def test_a_non_local_name_import_in_the_root_keeps_its_as_clause(self):
+		# The reason the statement is taken verbatim rather than rebuilt: a
+		# rebuilt one would drop the alias the source spelled and the name would
+		# then be undefined.
+		text = self.bundle({"server.py": "from pathlib import join as j\nvalue = j(\"a\")\n"}).getvalue()
+		self.assertIn("from pathlib import join as j", text)
+		self.assertNotIn("join as j as j", text)
+
+	def test_a_dotted_import_in_the_root_adds_no_rebind(self):
+		text = self.bundle({"server.py": "import email.utils\nparsed = email.utils.parseaddr(\"a\")\n"}).getvalue()
+		self.assertIn("import email.utils", text)
+		self.assertNotIn("email = email", text)
+
+	def test_a_non_root_file_still_gets_its_alias_and_its_rebind(self):
+		# The negative case, and the one that matters: a suite covering only the
+		# root cannot tell a right comparison from aliases having stopped being
+		# emitted at all.
+		text = self.bundle({"server.py": "import sub.client\n",
+			"sub/client.py": "import math\nvalue = math.pi\n"}).getvalue()
+		self.assertIn("import math as sub__client__math", text)
+		self.assertIn("value = sub__client__math.pi", text)
+
+	def test_a_dotted_import_in_a_non_root_file_still_adds_its_rebind(self):
+		text = self.bundle({"server.py": "import sub.client\n",
+			"sub/client.py": "import email.utils\n"}).getvalue()
+		self.assertIn("sub__client__email = email", text)
 
 class TestDiagnosticsGoToStderrD14(BundleTestCase):
 	"""D14: every diagnostic reaches stderr, and none reaches the sink."""

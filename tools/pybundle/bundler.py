@@ -9,7 +9,7 @@ even that is a reading rather than a cache — see `_anchor`.
 
 import sys
 from pathlib import Path
-from tools.pybundle.bundler_imports import IMPORT_FILE_NOT_FOUND,RELATIVE_IMPORT_IN_ROOT,imports
+from tools.pybundle.bundler_imports import IMPORT_FILE_NOT_FOUND,imports
 from tools.pybundle.bundler_names import defined,renamed,translate
 from tools.pybundle.bundler_source import statements
 
@@ -34,8 +34,9 @@ def inline(modpath: str, root: str, out, seen: set, entry: str) -> list:
 	text = _read(root, modpath)
 	found = statements(text)
 	resolved = imports(found, modpath, root)
-	if modpath == entry and any(item["relative"] for item in resolved):
-		raise RELATIVE_IMPORT_IN_ROOT("RELATIVE_IMPORT_IN_ROOT: the root file may not use a relative import")
+	# D30: a relative import resolves the same way here as in any other file, so
+	# the root is not a case this needs. `IMPORT_FILE_NOT_FOUND` covers the one
+	# that is — a relative import naming a file that is not there.
 	prefix = "" if modpath == entry else _prefix(modpath)
 	_warn_indentation(text, modpath, _anchor(root, entry))
 	for item in resolved:

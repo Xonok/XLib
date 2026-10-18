@@ -17,9 +17,6 @@ class IMPORT_FILE_NOT_FOUND(Exception):
 	"""A file an import named is not there, and a relative import cannot be a
 	global — so there is nothing to leave in place either."""
 
-class RELATIVE_IMPORT_IN_ROOT(Exception):
-	"""The root file used a relative import, which python does not allow (D15)."""
-
 _CLAUSE = re.compile(r":\s*((?:import|from)\s)")
 _HEAD = re.compile(r"^(import|from)\s+(.*)$", re.DOTALL)
 

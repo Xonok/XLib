@@ -58,6 +58,7 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 	blocks = [[set(), set()]]
 	waiting = set()
 	out = []
+	pending = False
 	for depth, index, statement in _scanned(statements):
 		while len(blocks) > depth + 1:
 			blocks.pop()
@@ -67,8 +68,20 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 		entry = entries.get(id(statement))
 		if entry is not None:
 			kept = _imported(statement, entry, renames)
-			out.extend(kept if kept is not None else _emptied(statement, statements, index))
+			if kept is None:
+				kept = _emptied(statement, statements, index)
+			if kept:
+				out.extend(kept)
+			else:
+				# D32's third rule: a statement the bundler removed must not leave
+				# the blank above it next to the blank below it. A blank the source
+				# wrote twice is carried and stays that library's own finding.
+				pending = bool(out) and out[-1] == "" and _blank_at(statements, index)
 			continue
+		if pending and not statement["text"].strip():
+			pending = False
+			continue
+		pending = False
 		body = statement["text"].strip()
 		if _GLOBAL.match(body):
 			blocks[-1][1].update(_NAMED.findall(body))
@@ -170,6 +183,17 @@ def _imported(statement: dict, entry: dict, renames: dict):
 	its place instead. A statement whose text is not only the import — a one-line
 	compound, `if False: import helper` — keeps its header, because D22's `pass`
 	clause is about the body a removal emptied, not about the header above it.
+
+	**D33: a statement that would not move anything stands as the source wrote
+	it.** The root's prefix is empty, so `renamed` is the identity there, and
+	rebuilding the statement anyway produced `import time as time` and
+	`email = email` — correct, lint-clean, and a bug to a reader. A statement
+	with no local target and nothing to rename is returned untouched, which is
+	also what keeps the source's own spacing.
+
+	**The statement keeps its own indentation**, which the name-import case did
+	not: a `from x import y` written inside a function came out at column 0, and
+	the bundle did not parse.
 	"""
 	text = statement["text"]
 	head = _CLAUSE.search(text)
@@ -178,23 +202,59 @@ def _imported(statement: dict, entry: dict, renames: dict):
 	other = [target for target in entry["targets"] if not target["local"]]
 	if entry["kind"] == "star":
 		if not local:
-			return [statement["text"]]
+			return [text]
 		return [f"{indent}{renames[name]} = {target['prefix']}{name}"
 			for target in local for name in target.get("defined", [])]
 	if entry["kind"] == "name":
 		if not local:
-			spelled = ", ".join(f"{target['name']} as {renames[target['binds']]}" for target in other)
-			written = f"from {entry['source']} import {spelled}"
-			return [f"{_header(statement)} {written}" if head else written]
+			if not _moved(other, renames):
+				return [text]
+			spelled = [f"{target['name']} as {renames[target['binds']]}" for target in other]
+			return _lines(statement, head, indent, f"from {entry['source']} import ", spelled)
 		return [f"{indent}{renames[target['binds']]} = {target['prefix']}{target['name']}" for target in local]
 	if not other:
 		return [f"{_header(statement)} pass"] if head else None
 	held = [target for target in other if target["dotted"] and target["alias"] is None]
 	kept = [target for target in other if target not in held]
+	if not local and not _moved(other, renames):
+		return [text]
 	names = [target["written"] for target in held]
 	names += [f"{target['written']} as {renames[target['binds']]}" for target in kept]
-	rebuilt = f"{_header(statement)} import {', '.join(names)}" if head else f"{indent}import {', '.join(names)}"
-	return [rebuilt] + [f"{indent}{renames[target['binds']]} = {target['binds']}" for target in held]
+	return _lines(statement, head, indent, "import ", names) + [
+		f"{indent}{renames[target['binds']]} = {target['binds']}" for target in held if _moves(target, renames)]
+
+def _moves(target: dict, renames: dict) -> bool:
+	"""Whether this target's bound name is called something else in the bundle.
+
+	D33's one comparison. It is false wherever the prefix is empty — the root, and
+	only the root today — and true everywhere else, so a rebind whose two halves
+	are the same name is not written.
+	"""
+	return renames[target["binds"]] != target["binds"]
+
+def _moved(targets: list, renames: dict) -> bool:
+	return any(_moves(target, renames) for target in targets)
+
+def _lines(statement: dict, head, indent: str, opener: str, names: list) -> list:
+	"""The emitted statement, or one statement per target — D32's two import rules.
+
+	**No emitted import carries `, `**, so targets are joined with `,` whatever
+	they are. **No emitted line carries both an alias and a comma**, so a statement
+	with an aliased target puts each of its own on its own line, which is the
+	shape the house rule asks for anyway (*aliased imports get their own line*,
+	ruled 2026-09-09) — the bundler was breaking house style rather than inventing
+	a form to satisfy a linter. Splitting cannot introduce a finding: a split
+	aliased line clears the plain-import predecessor the check remembers.
+
+	**A one-line compound cannot be split** — its body is one statement — so
+	`if False: import a as A, b as B` keeps the comma. That is the one input where
+	the two rules are not both satisfiable, and it is a shape almost nobody
+	writes.
+	"""
+	if head is not None or not any(" as " in name for name in names):
+		lead = f"{_header(statement)} " if head is not None else indent
+		return [f"{lead}{opener}{','.join(names)}"]
+	return [f"{indent}{opener}{name}" for name in names]
 
 def _header(statement: dict) -> str:
 	"""The compound header a one-line import sat on — `if False:` and the rest."""
@@ -209,6 +269,10 @@ def _emptied(statement: dict, statements: list, index: int) -> list:
 	if not indent or (index + 1 < len(statements) and statements[index + 1]["indent"] == indent):
 		return [] if index + 1 < len(statements) else ["pass" if indent else ""]
 	return [f"{indent}pass"]
+
+def _blank_at(statements: list, index: int) -> bool:
+	"""Whether the statement after `index` is a blank line — D32's third rule."""
+	return index + 1 < len(statements) and not statements[index + 1]["text"].strip()
 
 def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	"""The statement's text with the names that are ours moved and nothing else.

@@ -146,23 +146,34 @@ class TestUsage(CliTestCase):
 		self.assertEqual(stdout_text, "")
 
 class TestBundlerErrors(CliTestCase):
-	"""D13: a bundler error is reported on stderr and becomes exit code 1."""
+	"""D13: a bundler error is reported on stderr and becomes exit code 1.
+
+	D30 retired `RELATIVE_IMPORT_IN_ROOT`, which used to be the trigger here. The
+	tree is a relative import naming a file that is not there, which is the one
+	error a root can still reach.
+	"""
 
 	def setUp(self):
 		super().setUp()
-		self.write_files({"server.py": "from . import helper\n"})
+		self.write_files({"server.py": "from . import gone\n"})
 
-	def test_a_relative_import_in_the_root_returns_one(self):
+	def test_a_bundler_error_returns_one(self):
 		code, _, _ = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])
 		self.assertEqual(code, 1)
 
 	def test_a_bundler_error_is_reported_on_stderr(self):
 		_, _, stderr_text = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])
-		self.assertIn("RELATIVE_IMPORT_IN_ROOT", stderr_text)
+		self.assertIn("IMPORT_FILE_NOT_FOUND", stderr_text)
 
 	def test_a_bundler_error_writes_nothing_to_stdout(self):
 		_, stdout_text, _ = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])
 		self.assertEqual(stdout_text, "")
+
+	def test_a_relative_import_in_the_root_is_not_an_error(self):
+		# D30 — the same tree with the file there bundles and exits 0.
+		self.write_files({"server.py": "from . import helper\n"})
+		code, _, _ = self.run_cli(["--in", str(self.root / "server.py"), "--out", "-"])
+		self.assertEqual(code, 0)
 
 if __name__ == "__main__":
 	unittest.main()
