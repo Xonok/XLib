@@ -274,65 +274,54 @@ needed when there is no due date.
 
 ## pybundle — after the implementation, 2026-10-17
 
-All three are decisions, not code. The bundler itself is written and 186 of its
-188 tests pass; these are what that exposed.
+All three are decisions, not code. The bundler itself is written, and all three
+are settled now — two ruled and implemented 2026-10-17, one (`#133`) left as
+future work.
 
-- [ ] **#129 — pybundle: how does `release.py` reach the bundler** (by decision
-	needed, high) — board: epiq `1ZY2Q5Q`. `release.py:8` now imports cleanly and
-	`:74` calls `bundler.bundle(str(entry))`, which **the spec does not have**: the
-	seven functions are `statements`, `imports`, `renamed`, `translate`, `inline`,
-	`main`, `cli`, and the old `bundle(entry) -> str` is not among them. The human
-	ruled on 2026-10-17, *"spec as written, bridge separately"*, over adding it as
-	an eighth function — so this outlives the landing by decision. **Every library
-	is still un-releasable**, now with `AttributeError` instead of `ImportError`.
-	The choice is between an eighth `bundle()` wrapping `inline`, and moving
-	`release.py` onto `main(entry, out)`.
-- [ ] **#134 — pybundle: emit xlint-clean bundles** (by 2026-10-21, high) —
-	board: epiq `GADE1PY` (Todo). **RULED 2026-10-17 — *"the bundler has to
-	produce xlint-clean code"* — and all three findings are bundler-side**, so
-	none of this needs a style ruling. Bundling `dev/xhttp` (the first library here
-	with non-local imports) produced `space after comma in import`, `aliased
-	import on a shared line` and a `double blank line`; **the pre-commit hook runs
-	xlint on staged `.py`, so the artefact could not have been committed.** The
-	rules, from `tools/xlint/xlint.py:907-920`: no `, ` in an emitted import; an
-	emitted statement with an alias is **split one target per line**; and removing
-	a statement must not leave a double blank (a narrow stated exception to R7).
-	**The second rule is the 2026-09 houserule**, so the bundler was violating house
-	style rather than inventing a form, and splitting cannot introduce a new
-	finding — a split alias line clears `prev_plain`. **Correction to a claim
+- [x] **#129 — pybundle: how does `release.py` reach the bundler** (done
+	2026-10-17, high) — board: epiq `1ZY2Q5Q`. `release.py:74` called
+	`bundler.bundle(str(entry))`, which **the spec does not have**: the seven
+	functions are `statements`, `imports`, `renamed`, `translate`, `inline`,
+	`main`, `cli`, and the old `bundle(entry) -> str` is not among them, so every
+	library failed with `AttributeError`. **Decided and built 2026-10-17: the
+	second option**, on the human's ruling *"spec as written, bridge separately"*.
+	`bundled(entry)` is now in `release.py` and is `main` over a `StringIO` — the
+	spec keeps its seven functions. **Verified without releasing anything**:
+	byte-identical to the CLI's
+	output for all five libraries, and a redirected `release("xhttp","rev",
+	False)` writes an xlint-clean `xhttp_1_0_0.py`. Board epiq `1ZY2Q5Q`, whose
+	comment carries the same evidence and whose lane is the human's to move.
+- [x] **#132 — pybundle: retire `RELATIVE_IMPORT_IN_ROOT`** (done 2026-10-17,
+	high) — board: epiq `NJ529TQ` (Done). **Ruled 2026-10-17 as D30** and
+	implemented the same day, out of lane on the human's authorisation to write
+	code. Guard, exception class and its two uses gone; the four tests that pinned
+	it rewritten. **188 → 202 tests, all passing**, whole-repo xlint clean.
+	**All five libraries in `dev/` now bundle and every bundle is xlint-clean.**
+	What D30 settled, and the evidence behind it, is in the entry below.
+- [x] **#134 — pybundle: emit xlint-clean bundles** (done 2026-10-17, high) —
+	board: epiq `GADE1PY` (Done). **RULED 2026-10-17 — *"the bundler has to
+	produce xlint-clean code"* — and implemented the same day.** The three rules,
+	from `tools/xlint/xlint.py:907-920`: no `, ` in an emitted import; an emitted
+	statement with an alias is **split one target per line** (the 2026-09
+	houserule, so the bundler was breaking house style rather than inventing a
+	form); a removed statement leaves no double blank. **Correction to a claim
 	recorded here on 2026-10-09:** the merged-imports rule is *not* unsatisfiable
-	for the bundler's shape. It is unsatisfiable for two **plain** imports plus one
-	alias, which is a source shape — `#104` / `DDRBHD5` stays open and untouched.
-	**Verified reachable**: the xhttp bundle with the three applied is clean and
-	still runs 223 tests with the same 2 failures. **The test must invoke xlint,
-	not be a fixture** — `is_ignored` excludes any path part named `test`
-	(`AK633QC`), so a bundle fixture in `test/` is invisible to the linter.
-	**Also in scope: D33**, ruled the same day — no alias and no rebind where
-	`renamed(name, prefix) == name`, which is what produces the root's
-	`import time as time` / `email = email` no-ops. **Its negative test is the one
-	that matters**: a non-root file must still get its aliases, because a suite
-	covering only the root cannot tell the comparison is right from aliases having
-	stopped being emitted at all.
-- [ ] **#135 — xhttp: VERSIONS.md before a first release** (by 2026-10-20,
-	medium) — `dev/xhttp/` has no `VERSIONS.md`; `xconf`, `xcsv`, `xschema` and
-	`xtest` all have one, and `doc/library-structure.md:34` makes it part of the
-	per-library layout. One of the seven things standing between `dev/xhttp` and a
-	file in `xlib/`, listed in STATUS's *Blocked* item (b).
-- [ ] **#132 — pybundle: retire `RELATIVE_IMPORT_IN_ROOT`** (by 2026-10-20,
-	high) — board: epiq `NJ529TQ` (Todo). **Ruled 2026-10-17, written in as D30**
-	(131 insertions, 0 deletions; the first 1117 lines verified byte-identical).
-	The root may use a relative import and the error is retired, because D15's
-	premise — *"which python does not allow"* — holds for `__main__` and not for a
-	package module, and a library's root file is one. **The guard was the only
-	blocker**: with it removed and `dev/xhttp/xhttp.py` untouched, the library
-	bundles to 552 lines and **its own suite runs 223 tests against the bundle
-	with the same 2 failures the source has**, plus a 12-case live-socket smoke
-	test with byte-identical responses. **The work is four edits**: delete
-	`bundler.py:37-38`, the exception class at `bundler_imports.py:20`, and its two
-	uses in `bundler_cli.py`; then **four tests that pin the error**, one of which
-	asserts the opposite of the new rule. The `relative` flag stays — only its
-	reader in `inline` goes. **xcsv and xtest have the same root shape, so this one
-	change unbundles all three libraries.**
+	for the bundler's shape — only for two **plain** imports plus one alias, which
+	is a source shape, so `#104` / `DDRBHD5` stays open and untouched. **D33's
+	comparison is in too** (`renamed(name, prefix) == name`), with its negative
+	test: a non-root file must still get its aliases. **The obligation has a test
+	that invokes xlint**, because `is_ignored` excludes any path part named `test`
+	(`AK633QC`) and a fixture in `test/` would be invisible to the check it exists
+	to satisfy. **Verified**: all five bundles lint-clean, and the xhttp bundle
+	still runs its 223 tests with the same 2 failures.
+	**Also found and fixed while implementing it, as `SPEC.md` D34**: an indented
+	non-local name import lost its indentation, so the bundle **did not parse**.
+	D20's *"rewritten in place"* had been read as *rebuilt*.
+- [x] **#135 — xhttp: VERSIONS.md before a first release** (done 2026-10-17,
+	medium) — written, with the shape `dev/xconf/VERSIONS.md` uses: the title, the
+	convention note, and no entries because nothing is released yet. The first is
+	`1_0_0`, which `release.py xhttp` now produces — verified with the write
+	redirected to a temp folder, so no release was made.
 - [ ] **#133 — pybundle: an option that emits internal-module shims** (by
 	decision needed, low) — board: epiq `AYB2896` (Todo). The human's own words,
 	2026-10-17: *"We'll probably have to add an option to the bundler for making

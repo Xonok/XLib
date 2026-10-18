@@ -305,8 +305,9 @@ Also standing, from the abandoned single-pass attempt:
 	it; the human was told and overrode that, so the work happened here and the
 	record says so. What that leaves behind is three things the human has not
 	ruled on, and they are worth more than the green tests:
-	**(a) RULED 2026-10-17: a relative import in the root is allowed, and
-	`RELATIVE_IMPORT_IN_ROOT` is retired** (`SPEC.md` D30, taskview `#130`).
+	**(a) RULED 2026-10-17 and IMPLEMENTED the same day: a relative import in the
+	root is allowed, and `RELATIVE_IMPORT_IN_ROOT` is retired** (`SPEC.md` D30,
+	taskview `#130` closed, `#132` done, epiq `NJ529TQ`).
 	D15's premise — *"which python does not allow"* — holds for `__main__` and
 	not for a package module, and a library's root file is a package module.
 	Measured, not argued: with the check removed and `dev/xhttp/xhttp.py`
@@ -325,58 +326,49 @@ Also standing, from the abandoned single-pass attempt:
 	human answered that on the source side the same day, adding nineteen
 	`err_X = err.X` lines to the root file, which the bundler passes through as
 	`err_HTTPError = _err__HTTPError` (223 tests, same 2 failures, re-measured).
-	**The implementation is not done**: two lines in `bundler.py`, the exception's
-	four import sites, and four tests that pin the error. **A bundled library
-	cannot be tested by its own suite** — `test_response.py:25` and
+	**The implementation landed 2026-10-17, out of lane on the human's
+	authorisation to write code** — guard, exception class and its two uses gone;
+	the four tests that pinned it rewritten, 188 → **202 tests**. **A bundled
+	library cannot be tested by its own suite** — `test_response.py:25` and
 	`test_websocket.py` import internals and D17 means a bundle has no module
 	objects — so running all 223 needed a shim package; the human's answer is
 	*"we'll probably have to add an option to the bundler for making these shims
 	automatically. Future work"*, filed as `#133`.
-	**(b) The release path is still down**, one layer in: `release.py:8` imports
-	fine now and `:74` calls `bundler.bundle()`, which the spec does not have.
-	The human chose *"spec as written, bridge separately"* over adding it, so
-	`1ZY2Q5Q` outlives the landing. **What now stands between `dev/xhttp` and a
-	file in `xlib/`, measured 2026-10-17** — none of it is xhttp's own code, and
-	all of it is cheap or already decided:
-	1. **The guard above is still in the tree** (`#132`, epiq `NJ529TQ`) — the
-		committed bundler refuses xhttp's root today.
-	2. **The bundler has no `bundle(entry) -> str`** to call (`#129`, epiq
-		`1ZY2Q5Q`); the bridge is unwritten by decision.
-	3. **The bundle fails xlint, and the pre-commit hook runs xlint on staged
-		`.py`, so it cannot be committed** — **now ruled on and all three
-		findings are bundler-side** (`SPEC.md` D32, epiq `GADE1PY`, `#134`).
-		*The bundler has to produce xlint-clean code*, and the three rules follow
-		from the check's own text (`tools/xlint/xlint.py:907-920`): no `, ` in an
-		emitted import; an emitted statement with an alias is **split one target
-		per line** (which is the 2026-09 houserule, so the bundler was violating
-		house style rather than inventing a form); and removing a statement must
-		not leave a double blank line — a narrow, stated exception to R7. Splitting
-		cannot introduce a new finding, because a split alias line clears
-		`prev_plain`. **Verified reachable, not hoped for**: the xhttp bundle with
-		those three applied is clean and still runs 223 tests with the same 2
-		failures. **A claim recorded here on 2026-10-09 was wrong and is corrected
-		by this ruling**: the merged-imports rule is *not* unsatisfiable for
-		aliased imports in the shape the bundler emits. It is unsatisfiable for
-		two **plain** imports plus one alias, where the fix for the plain pair is
-		the merge the alias blocks — a source shape, which is what `#104` /
-		`DDRBHD5` is about, and that ticket is untouched. **Why nobody noticed:**
-		the six bundles in `xlib/` are lint-clean only because `dev/xcsv` and
-		friends have **no non-local imports at all**, so the emission path had
-		never met the linter.
-	4. **`dev/xhttp/VERSIONS.md` does not exist** — `xconf`, `xcsv`, `xschema`
-		and `xtest` all have one, and `doc/library-structure.md:34` makes it part
-		of the per-library layout.
-	5. **The human's own gate: validation against real code in Space-Traveller**
+	**(b) The release path works, as of 2026-10-17** — also out of lane, on the
+	same authorisation. `release.py` called `bundler.bundle(entry)`, which the
+	spec does not have; the human ruled *"spec as written, bridge separately"*, so
+	`bundled(entry)` lives in `release.py` and is `main` over a `StringIO` — the
+	whole adaptation. **Verified without releasing anything**: the bridge's text is
+	byte-identical to the CLI's for all five libraries in `dev/`, and a redirected
+	`release("xhttp","rev",False)` writes a 22 308-byte `xhttp_1_0_0.py` that is
+	xlint-clean. `1ZY2Q5Q` and `#129` can close. **What is left between
+	`dev/xhttp` and a file in `xlib/`:**
+	1. **Nothing mechanical.** All five libraries bundle, and **every bundle is
+		xlint-clean**: `xhttp` 583 lines, `xschema` 469, `xcsv` 415, `xconf` 119,
+		`xtest` 95. `dev/xhttp/VERSIONS.md` now exists (`#135`).
+	2. **A finding I did not expect, and fixed**: an indented non-local name
+		import lost its indentation, so the bundle **did not parse**
+		(`IndentationError`). D20's *"rewritten in place"* read as *rebuilt*;
+		recorded as `SPEC.md` D34. A statement can be correct text and still be
+		the wrong bundle — that one only failed at compile.
+	3. **Two library suites verified end-to-end against their bundles**: xhttp's
+		**223 tests, same 2 failures as the source** (needs the shim, `#133`), and
+		xcsv's **18 tests green through the public API alone**. `xconf`, `xschema`
+		and `xtest` bundle and lint clean, and their suites import and run against
+		the bundles, but they are xtest-runner based and were not counted the way
+		the other two were.
+	4. **The human's own gate: validation against real code in Space-Traveller**
 		(`#117`, due 2026-10-20). Not mechanical, and it is the stated condition
-		for calling xhttp done.
-	6. **Two red tests** (`7Z7DE78`, `websocket.send` type validation). A
+		for calling xhttp done. **A release is also the human's call**, and nothing
+		has been released — the six files in `xlib/` still predate the rewrite.
+	5. **Two red tests** (`7Z7DE78`, `websocket.send` type validation). A
 		judgement call rather than a script error — `TESTING_RULES.md` forbids
 		masking, and releasing a known-broken `send()` is the human's to allow.
-	7. **`#115` is unimplemented**, so the one gate that belongs in the release
+	6. **`#115` is unimplemented**, so the one gate that belongs in the release
 		path itself — refusing a library that depends on dev versions — is not
 		there.
-	Also stale, and cheap: `tools/release/README.md` still says the script
-	*"fails at import"*; it no longer does, it fails at `bundler.bundle`.
+	`tools/release/README.md`'s *"the bundler is not in the tree"* paragraph is
+	corrected, and `dev/xhttp/VERSIONS.md` now exists (`#135` closed).
 	**(c) F21 was tolerated, not settled.** `imports` takes a modpath spelled with
 	dots from the loop and with slashes from one test, and normalises both.
 - **The pybundle rewrite is at the spec-edit stage: the tests are re-derived, and
