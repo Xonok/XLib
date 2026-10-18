@@ -318,6 +318,24 @@ Also standing, from the abandoned single-pass attempt:
 	directly, no longer works. **There is currently no way to look at a bundle
 	without writing one.** All six releases in `xlib/` predate the move and
 	nothing tests the path.
+- **The release gate landed 2026-10-18**: `release.py` runs this repository's
+	own xlint over the bundle and **refuses before writing**, so nothing released
+	here carries a finding. **The gate is the repository's, not the bundler's** —
+	the human ruled both halves: *"The release script still has to require
+	xlint-clean output. It's a release gate for this particular repository after
+	all"* and, of the bundler, *"the bundler's rules are slightly more open
+	because I want to see what happens if I bundle traveller at some point. If
+	Traveller can survive the bundling, then it's very likely that the bundler's
+	behaviour is correct overall."* So D36 stands (add none, pass through the
+	rest) and D37 puts the stricter rule in `release.py`, where it cannot stop the
+	Traveller experiment from being run. **Traveller is the bundler's acceptance
+	test** — bigger than any fixture, since nobody wrote the tests for it. Recorded
+	as `SPEC.md` D37 and as taskview `#137`; the gate has its own
+	`tools/release/test/test_release.py` (7 tests), including the pair that only
+	makes sense together: the bundler passes a pre-existing finding through, and the
+	gate refuses it. **Verified against the real library**: re-releasing xhttp
+	through the gated path produces a file byte-identical to the committed
+	`xhttp_1_0_0.py`, so the gate does not perturb the artefact.
 - **The pybundle rewrite has code: the bundler is implemented and 186 of its 188
 	tests pass.** Implementation is programmer work and the secretary does not do
 	it; the human was told and overrode that, so the work happened here and the

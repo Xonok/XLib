@@ -1527,3 +1527,54 @@ tools only stay in step if something actually runs one against the other.
 	text the bundler copies verbatim and can therefore neither introduce nor lose.
 - The fixtures-clean assertion stays, with its comment corrected: it is there so a
 	finding in the bundle *can only* be the bundler's, not as a precondition.
+
+### D37 — The lint requirement is this repository's release gate, not the bundler's
+
+**Ruled 2026-10-18.** D32 and D36 are the bundler's rule — it adds no findings and
+passes through what the source had. Ruled on top of that, verbatim:
+
+> **The release script still has to require xlint-clean output. It's a release gate
+> for this particular repository after all.**
+
+**So there are two rules and they are not the same rule.** The bundler's is about
+what the tool *does*; the gate is about what this repository *publishes*. A bundle
+can therefore arrive at a release carrying a finding, and the release is refused
+for it. `release.py` holds the gate and nothing else holds it: `bundled(entry)`
+goes through `linted(text, beside)`, which invokes this repository's own
+`tools/xlint/xlint.py` the way the pre-commit hook invokes it, and raises before
+the write rather than after.
+
+**Why the bundler's rule stays open, and this is the load-bearing sentence:**
+
+> **However, the bundler's rules are slightly more open because I want to see what
+> happens if I bundle traveller at some point. If Traveller can survive the
+> bundling, then it's very likely that the bundler's behaviour is correct overall.**
+
+That is an acceptance test, and it is a bigger one than any fixture: **Space-
+Traveller is a real project with real structure, and if it bundles and runs, then
+the bundler's judgement calls — what gets a prefix, what keeps its name, what is
+left behind — have been right on something nobody wrote the tests for.** Until
+then the bundler refuses no input for style reasons, which is what makes that
+experiment possible at all. A bundler that refused dirty input could not answer
+the question.
+
+**Two things follow, and both are about where a rule lives.** The gate cannot
+move into the bundler, or the experiment cannot be run. And a bundler-clean
+guarantee is not a style promise: it is the strongest statement available about
+the tool's own edits, and it is checkable by anyone who runs xlint over a bundle.
+
+### What the tests must now cover
+
+The gate has its own file, `tools/release/test/test_release.py`, because it is a
+different tool from this one and the two rules are different:
+
+- A clean library releases, and **the file written is the bundler's output
+	unchanged** — the README's scope rule, which the gate must not have broken.
+- **A bundle carrying a finding is refused, nothing is written, and the refusal
+	exits 1 with the finding named.** This is the pair D36 and D37 make together:
+	the bundler is *supposed* to pass the finding through, and the gate is
+	*supposed* to refuse it, so neither half is testable without the other.
+- **The gate reads the artefact, not the source** — a source whose own finding
+	travels verbatim into its bundle is refused, which is the assertion that would
+	fail if the check were pointed at the dev tree.
+- The probe file the check writes beside the target does not survive it.

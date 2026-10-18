@@ -337,6 +337,16 @@ future work.
 	convention note, and no entries because nothing is released yet. The first is
 	`1_0_0`, which `release.py xhttp` now produces — verified with the write
 	redirected to a temp folder, so no release was made.
+- [ ] **#137 — pybundle: bundle Space-Traveller as the acceptance test** (by
+	decision needed, medium) — the human's own framing, 2026-10-18: *"I want to see
+	what happens if I bundle traveller at some point. If Traveller can survive the
+	bundling, then it's very likely that the bundler's behaviour is correct
+	overall."* **That is a bigger test than any fixture**: Traveller is real code
+	with real structure, so if it bundles and runs, the bundler's judgement calls —
+	what gets a prefix, what keeps its name, what is left behind — have been right
+	on something nobody wrote the tests for. **It is only possible because the
+	bundler refuses no input for style reasons** (D36), so the gate lives in
+	`release.py` instead (D37). Nothing to do until he says go.
 - [ ] **#133 — pybundle: an option that emits internal-module shims** (by
 	decision needed, low) — board: epiq `AYB2896` (Todo). The human's own words,
 	2026-10-17: *"We'll probably have to add an option to the bundler for making
