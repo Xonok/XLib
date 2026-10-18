@@ -1,4 +1,4 @@
-import argparse,io,re,sys,time
+import argparse,io,os,re,subprocess,sys,tempfile,time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +61,31 @@ def bundled(entry):
 	bundler.main(str(entry), sink)
 	return sink.getvalue()
 
+def linted(text, beside):
+	"""What this repository's xlint says about a bundle, and whether it passes.
+
+	**The gate belongs here and not to the bundler** (D37). The bundler's own rule
+	is narrower — it adds no findings of its own and passes through whatever the
+	source already had — so what arrives at a release may carry a finding the source
+	had, and this repository does not release those. The bundler has to stay open
+	enough to bundle a project this repository's style does not govern.
+
+	Run the same way the pre-commit hook runs it, by invocation rather than by
+	import, so the gate and the hook cannot drift. The text is checked through a
+	temporary file **beside the release target** rather than on the target, so a
+	refusal leaves nothing in `xlib/` — which this folder's README warns about.
+	"""
+	probe = tempfile.NamedTemporaryFile("w", suffix = ".py", prefix = "release-check-",
+		dir = beside, delete = False, encoding = "utf-8")
+	try:
+		probe.write(text)
+		probe.close()
+		found = subprocess.run([sys.executable, str(ROOT / "tools" / "xlint" / "xlint.py"), probe.name],
+			capture_output = True, text = True)
+		return found.returncode, found.stdout.strip()
+	finally:
+		os.unlink(probe.name)
+
 def release(library, bump, force):
 	if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", library) is None:
 		msg = f"not a valid library name: {library!r}"
@@ -85,6 +110,9 @@ def release(library, bump, force):
 		msg = f"{target.name} already exists in xlib/"
 		raise ValueError(msg)
 	text = bundled(entry)
+	code, said = linted(text, target.parent)
+	if code != 0:
+		raise ValueError(f"the bundle is not xlint-clean, and nothing this repository releases is:\n{said}")
 	target.write_text(text)
 	print(f"released {target.name}")
 

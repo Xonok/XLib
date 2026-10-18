@@ -48,11 +48,25 @@ source; the bundler and release script leave those lines untouched. Import resol
 is a manual, per-library step done during development, not something the release
 script does.
 
+## The gate: a bundle must be xlint-clean
+
+Nothing this repository releases may carry a lint finding. The script bundles the
+dev folder, runs this repository's own `tools/xlint/xlint.py` over the result, and
+**refuses before writing** if anything is reported — the check goes through a
+temporary file beside the release target, so a refusal leaves nothing in `xlib/`.
+
+The rule is about *this repository's releases*, not about the bundler. The bundler
+adds no findings of its own and passes through whatever the source already had, so
+a bundle can legitimately arrive with a finding in it — and one that could bundle a
+project this repository's style does not govern could not answer the question of
+whether it is correct.
+
 ## Scope: no code fixes, no edits to the bundled output
 
 The release script provides versioning only. It makes **no edits** to the file the
 bundler produces: no import rewriting, no post-processing, no patching. The bundled
-output is written to `xlib/` unchanged.
+output is written to `xlib/` unchanged. **Checking it is not editing it** — the gate
+above reads the result and either writes it or refuses.
 
 If the bundled output needs to change, fix the dev library or the bundler instead.
 Historical `xlib/` files are never edited or deleted once released; a bug in a
