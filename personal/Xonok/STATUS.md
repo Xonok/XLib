@@ -20,7 +20,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `8bf0ef3` (2026-10-17), **snapshot taken 2026-10-17**, **one
+Basis: `master` at `7c6f61d` (2026-10-18), **snapshot taken 2026-10-18**, **one
 commit ahead of `origin/master` and unpushed** — the human authorised the commit, not
 the push.
 
@@ -180,7 +180,7 @@ the human's call.
 	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
 	spec edits beyond these four decisions are still not written in, so the spec does
 	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
-| **xhttp** | human | **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 0 failures, 1 skipped — green**, as of 2026-10-18. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **xhttp** | human | **Released `1_0_0` 2026-10-18** (`xlib/xhttp_1_0_0.py`, epi `2X0B2XW`, 22 308 bytes) — the first entry in this repo citing its release ticket, as the convention asks. Verified before it was committed: xlint-clean, **223 tests green against it** through a shim package, and the live-socket smoke test returning the same responses as the source. **Running in Space-Traveller's game server and behaving, per the human** — which answers the "validate against real code" condition by use rather than by a campaign; what remains is whether a *release* survives that use. **The nineteen `err_*` lines are the reason the released file can be told apart from python**, and the reasoning behind them is now in `dev/xhttp/SPEC.md`. One open bug, refresh flakiness, **attributed to the frontend by the human's reading** — the frontend still runs `dumb_http`, the live server shows no such issue, and an agent is investigating. **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 0 failures, 1 skipped — green**, as of 2026-10-18. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
@@ -257,6 +257,22 @@ Also standing, from the abandoned single-pass attempt:
 
 ## Blocked / needs attention
 
+- **Marduk tracks the kitty window, not the opencode process** — found and filed
+	2026-10-18, epiq `NAHEGJE`, task **#136**. `tools/oc-agent:114` records its own
+	`$$` as the registry entry's `pid`, and that process is the launcher script,
+	a child of the window's shell — so `read_registry` reaps on the tab. Verified
+	live: every registry `pid` resolves to `/bin/bash oc-agent secretary`, whose
+	child is the `opencode --session …` TUI. **The human corrected their own
+	earlier spec** ("keep it open as long as the window stays open") — the window
+	is kitty, the session is the opencode process. Three decisions taken the same
+	day: record the opencode child's pid, keep service-only sessions (those the
+	service reports running that no oc-agent launched, including a secretary's own
+	session) shown on the service's word alone, and fold in two leaks found beside
+	it — an entry whose `pid` is not an int is never reaped, and a recycled pid is
+	indistinguishable from the original. **Implementation must be checked by
+	launching a real window**: backgrounding the TUI is safe only without `set -m`,
+	or job control puts it in a background process group and the first tty read
+	raises `SIGTTIN`.
 - **Work on a branch is not live until it merges.** Established by `HC1ZJK6`:
 	the `worker-ling` → `worker-longcat` fix for `dispatch general` arrived as an
 	uncommitted working-tree edit, and moving it onto a branch — which the
@@ -360,9 +376,18 @@ Also standing, from the abandoned single-pass attempt:
 		the bundles, but they are xtest-runner based and were not counted the way
 		the other two were.
 	4. **The human's own gate: validation against real code in Space-Traveller**
-		(`#117`, due 2026-10-20). Not mechanical, and it is the stated condition
-		for calling xhttp done. **A release is also the human's call**, and nothing
-		has been released — the six files in `xlib/` still predate the rewrite.
+		(`#117`). **Re-scoped 2026-10-18: the game server has been running on xhttp
+		"for a bit now and seems to be working fine"**, so the original framing is
+		answered by use. What remains is the checkpoint he named: **whether a
+		released artefact survives being used by Space-Traveller** — which is what
+		`xhttp_1_0_0.py` is for (epi `2X0B2XW`, released 2026-10-18, verified
+		xlint-clean and 223-green through a shim). **One open bug, attributed to
+		the frontend and not yet established**: flakiness around refresh, which the
+		live server does not show when *both* frontend and game run `dumb_http`.
+		The frontend still runs `dumb_http`; an agent is investigating, and the
+		planned experiment is to move the frontend to xhttp and see whether that
+		fixes it. **That attribution is the human's reading, not a measured
+		finding** — recorded as such.
 	5. ~~**Two red tests** (`7Z7DE78`, `websocket.send` type validation).~~ **Gone —
 		they were never real.** `_/websocket.py:62-65` validates correctly; the two
 		tests were `pass` inside `assertRaises`, with the comment *"Correct

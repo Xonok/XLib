@@ -215,6 +215,36 @@ The `key_hash` typo, `_send` arg order, and `on_message` msg pass were fixed 202
 	gets `None`. Either subclass it case-insensitively or document that callers
 	lowercase.
 - **`send_not_found` / `serve_files`** — no direct coverage in the suite.
-- **Websocket** — the six defects above, plus `send()` not validating message
-	type.
-- **The `dev/xhttp/` folder is untracked.** Nothing in it is committed.
+- **Websocket** — the six defects above. **`send()` message-type validation is
+	no longer on this list**: it validates (`_/websocket.py:62-65`), and the two
+	tests that said otherwise had `pass` inside their `assertRaises` — they were
+	never written, so the suite read as a defect where there was none (epi
+	`7Z7DE78`, closed 2026-10-18). The suite is **223 tests, 0 failures, 1
+	skipped**, against the source and against a bundle.
+- **The `dev/xhttp/` folder is tracked** as of `ba84849` and `0a0dcd8`
+	(2026-10-13/14). What is untracked is nothing in it.
+
+## The error hierarchy — why nineteen classes
+
+Recorded 2026-10-18, from the human, because it is the reasoning behind a shape
+that looks like duplication and is not.
+
+**The classes are separate so a caller *can* discriminate.** The point is to
+leave the option open: a caller that wants to forward certain errors to its client
+— a `HTTPDoubleDotForbidden` as a 403, say — can, and one that does not care can
+catch `HTTPError`. That asymmetry is the whole reason there are nineteen rather
+than one. Throwing a single exception class everywhere would remove it.
+
+**`HTTPError` is the broad catch on purpose.** It is the base of all of them, so
+a caller who wants to silence xhttp without silencing python's errors generally
+catches `HTTPError` and nothing else. It is what `wrap_handler`'s blanket
+`except` sits beside, and it is what the released `err_HTTPError` is for.
+
+**Consequence for a bundle, which is why the root file carries them.** D28 of the
+bundler's spec makes a local module import bind nothing, so a bundle has no `err`
+attribute and no module objects at all — `xhttp.err.HTTPError` is an
+`AttributeError` against a bundle. **The root file is therefore the only place a
+caller of a bundle can reach these**, which is what the nineteen
+`err_HTTPError = err.HTTPError` lines in `xhttp.py` are for. They are public API,
+not duplication, and they exist in the source for the same reason: the root is
+what a caller is meant to see.

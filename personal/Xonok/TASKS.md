@@ -110,6 +110,12 @@ needed when there is no due date.
 	**Landed `ba063b5`, 2026-10-17: all 188 pass.**
 - [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
 - [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
+- [ ] **#136 — marduk: track the opencode process, not the window** (by
+	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
+	oc-agent's own `$$`, so an entry lives exactly as long as the kitty tab
+	rather than the session. Three decisions taken 2026-10-18: record the
+	opencode child's pid, keep service-only sessions shown but uncorroborated,
+	and fold in the no-usable-pid and pid-reuse leaks.
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
@@ -131,10 +137,17 @@ needed when there is no due date.
 	but `sender` leaks. Queue grows unbounded if `send()` called after close.
 	No sentinel, no socket check. Unused `queue` import. `key_hash` typo,
 	`_send` arg order, `on_message` msg pass were fixed.
-- [ ] **#117 — xhttp: validate against real code in Space-Traveller** (by
-	2026-10-20, high) — the human's stated condition for calling xhttp done.
-	Blocked behind #116. Parity reads 8/8 and the core suite is green, but parity
-	is a checked list, not a running server.
+- [ ] **#117 — xhttp: does a release survive being used by Space-Traveller**
+	(high) — **re-scoped 2026-10-18.** Originally "validate against real code",
+	which **use answers**: the game server has been running on xhttp "for a bit now
+	and seems to be working fine". What is left is the checkpoint the human named —
+	**whether the released `xhttp_1_0_0.py` survives that use**, which is what the
+	release (`2X0B2XW`) enables. Parity reads 8/8 and the suite is 223 green, but
+	both were true before the game server moved, so neither is the evidence.
+	**Open alongside it, and not this task's**: refresh flakiness on the traveller,
+	**attributed to the frontend by the human's reading** — the frontend still runs
+	`dumb_http`, and the live server shows no such issue when both run `dumb_http`.
+	An agent is investigating; the experiment is to move the frontend to xhttp.
 - [x] **#118 — xhttp: commit `dev/xhttp/`** (done 2026-10-14, medium) — the whole
 	folder arrived from Space-Traveller untracked on 2026-10-10. The scratch layer
 	was the last of it: `REVIEW.md` and `TODO.md` were the only untracked files
