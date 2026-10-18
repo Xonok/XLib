@@ -57,3 +57,24 @@ def send_not_found(client,config,**headers):
 #Helpers
 def config_valid(config):
 	return helper.config_valid(config)
+
+#Errors
+err_HTTPError = err.HTTPError #the generic error that contains all the others
+err_HTTPHeaderInvalid = err.HTTPHeaderInvalid
+err_HTTPHeaderNewline = err.HTTPHeaderNewline
+err_HTTPHeaderTooBig = err.HTTPHeaderTooBig
+err_HTTPRequestInvalid = err.HTTPRequestInvalid
+err_HTTPDoubleDotForbidden = err.HTTPDoubleDotForbidden
+err_HTTPHeaderVersion = err.HTTPHeaderVersion
+err_HTTPHeaderDuplicate = err.HTTPHeaderDuplicate
+err_HTTPChunkedEncoding = err.HTTPChunkedEncoding
+err_HTTPNegativeContentLength = err.HTTPNegativeContentLength
+err_HTTPContentLengthBad = err.HTTPContentLengthBad
+err_HTTPPayloadTooBig = err.HTTPPayloadTooBig
+err_HTTPBodyIncomplete = err.HTTPBodyIncomplete
+err_JSONDecodeError = err.JSONDecodeError
+err_StrDecodeError = err.StrDecodeError
+err_HTTPCapitalizedHeader = err.HTTPCapitalizedHeader
+err_HTTPCodeUnknown = err.HTTPCodeUnknown
+err_WSMessageNone = err.WSMessageNone
+err_WSMessageMustBeString = err.WSMessageMustBeString
