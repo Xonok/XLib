@@ -852,7 +852,17 @@ class TestEmittedOutputIsLintCleanD32(BundleTestCase):
 			capture_output = True, text = True)
 		return found.returncode, found.stdout.strip()
 
+	def _findings(self, path):
+		"""What xlint says about a file, with the paths stripped — so a source and
+		its bundle can be compared, since the two never share a path."""
+		found = subprocess.run([sys.executable, str(ROOT / "tools" / "xlint" / "xlint.py"), str(path)],
+			capture_output = True, text = True)
+		return sorted(line.split(": ", 1)[-1] for line in found.stdout.splitlines() if ": " in line)
+
 	def test_the_fixtures_themselves_are_lint_clean(self):
+		# Not an obligation on the bundler — D36 says it adds no findings and has
+		# no opinion about the input's own. This is here so that a finding in the
+		# bundle below can only be the bundler's.
 		for name, text in self.TREE.items():
 			self.write_files({name: text})
 			_, said = self._linted(self.root / name)
@@ -864,6 +874,16 @@ class TestEmittedOutputIsLintCleanD32(BundleTestCase):
 		path.write_text(self.bundle(self.TREE).getvalue(), encoding = "utf-8", newline = "")
 		code, said = self._linted(path)
 		self.assertEqual(said, "clean")
+
+	def test_a_pre_existing_violation_is_passed_through_and_not_special_cased(self):
+		# D36: the bundler adds no findings, and a finding the input already had
+		# is not its business — neither to fix silently nor to refuse over. Trailing
+		# whitespace is verbatim text, so it arrives exactly as it was written, and
+		# the bundle's findings have to be the source's and no others.
+		files = {"server.py": "value = 1   \n", "helper.py": "count = 1\n"}
+		path = self.root / "bundle.py"
+		path.write_text(self.bundle(files).getvalue(), encoding = "utf-8", newline = "")
+		self.assertEqual(self._findings(path), self._findings(self.root / "server.py"))
 
 	def test_the_bundle_parses(self):
 		# The shape the lint test cannot see: a statement emitted at the wrong

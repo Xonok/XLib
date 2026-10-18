@@ -1485,3 +1485,45 @@ failures, 1 skipped, against the source and against the bundle alike.**
 Nothing in D30 or D32 changes on this. It is here because those sections are the
 reason the number 2 appears in them, and a reader checking the claim would find
 the tests rather than the code.
+
+### D36 — The bundler adds no findings, and has no opinion about the ones already there
+
+**Ruled 2026-10-18**, and it widens D32's obligation into its general form. D32
+said a bundle of an xlint-clean library is xlint-clean, which is true and
+narrow. Verbatim:
+
+> **The bundler and xlint are separate but compatible tools. If the output can't
+> be made xlint clean, then neither was the input. The bundler should avoid
+> adding any lint violations, but shouldn't have any special treatment of cases
+> where the linter errors were pre-existing. In other words, the bundler needs to
+> be tested to never add linter errors on clean input, but can pass on errors
+> that already existed.**
+
+**What changes in the spec, and what does not.** D32's three emission rules stay
+exactly as they are — each one was a finding the bundler *introduced*, and a rule
+about not introducing one is unaffected by what the input did. What the ruling
+adds is the **other direction**: the bundler is not to treat a pre-existing
+finding as its business in either direction. Not to fix it silently, because that
+is a style claim the source never owed, and not to refuse the bundle over it,
+because that makes the tool's success depend on a linter it is not.
+
+**The consequence worth writing down** is about what a *test* may assert. The
+obvious test — "the fixture is clean and the bundle is clean" — quietly makes the
+input's cleanliness a precondition of the bundler working, and a library carrying
+one pre-existing finding would then look like the bundler failed. The general
+form is comparable instead: **the bundle's findings are the input's, and no
+others**, by message rather than by count, because line numbers move.
+
+**The obligation is therefore a property of the bundler, not of the corpus**, and
+that is also why the lint test invokes xlint rather than being a fixture: the two
+tools only stay in step if something actually runs one against the other.
+
+### What the tests must now cover
+
+- **A clean fixture bundles to a clean bundle** — D32's rule, unchanged.
+- **A fixture with a finding bundles with that same finding and no other**, which
+	is the direction D32 did not state. `test_a_pre_existing_violation_is_passed_
+	through_and_not_special_cased` does it with trailing whitespace, because that is
+	text the bundler copies verbatim and can therefore neither introduce nor lose.
+- The fixtures-clean assertion stays, with its comment corrected: it is there so a
+	finding in the bundle *can only* be the bundler's, not as a precondition.
