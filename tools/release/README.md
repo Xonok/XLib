@@ -31,10 +31,16 @@ It calls the bundler (`tools/pybundle/`) to pack the dev folder's modules into
 a single file. The bundler inlines internal modules (e.g. `csv_tok.py`) and renames
 their functions with a module prefix (e.g. `tokenize` becomes `csv_tok_tokenize`).
 
-**The bundler is not in the tree.** The five-phase implementation was deleted on
-2026-10-14 (`5e87ae8`) ahead of a from-scratch rewrite, and `release.py` imports
-it at module scope — so the script currently fails at *import* and no library can
-be released at all until a replacement lands. See epiq `6MFX0Z1`.
+**The bundler works, and the bridge is in this file.** The from-scratch
+replacement landed on 2026-10-17 (`ba063b5`, epiq `6MFX0Z1`) after the
+five-phase implementation was deleted in `5e87ae8`. It exposes `main(entry, out)`
+and takes a file-like sink, so the `bundle(entry) -> str` this script used to call
+is bridged here rather than added to the bundler — the spec's seven functions stay
+as written, which was the human's ruling on 2026-10-17.
+
+All five libraries in `dev/` bundle and every bundle is xlint-clean, measured
+2026-10-17. Nothing has been released since: the last six files in `xlib/` predate
+the rewrite.
 
 It does **not** resolve imports. Cross-library dependencies must already be written
 as versioned imports (`from xlib import somelib_5_9_27`) in the dev library's own

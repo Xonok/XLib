@@ -1,11 +1,11 @@
-import argparse,re,sys,time
+import argparse,io,re,sys,time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT))
 
-from pybundle import bundler
+from tools.pybundle import bundler
 
 _VERSION_RE = re.compile(r"^(.+?)_(\d+)_(\d+)_(\d+)\.py$")
 
@@ -48,6 +48,19 @@ def check_major_age(library, latest, force):
 		msg = f"refusing major: the previous major is only {months:.1f} months old; majors need at least {_MAJOR_MIN_AGE_MONTHS} months (--force overrides)"
 		raise ValueError(msg)
 
+def bundled(entry):
+	"""The bundle for an entry file, as text.
+
+	**The bridge lives here and not in the bundler**, because the human ruled
+	2026-10-17 to keep the spec as written — its seven functions end at
+	`main(entry, out)`, and `bundle(entry) -> str` is not among them. `main` takes a
+	file-like sink and never closes it (R5), so a buffer in and `.getvalue()` out
+	is the whole of the adaptation.
+	"""
+	sink = io.StringIO()
+	bundler.main(str(entry), sink)
+	return sink.getvalue()
+
 def release(library, bump, force):
 	if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", library) is None:
 		msg = f"not a valid library name: {library!r}"
@@ -71,7 +84,7 @@ def release(library, bump, force):
 	if target.is_file():
 		msg = f"{target.name} already exists in xlib/"
 		raise ValueError(msg)
-	text = bundler.bundle(str(entry))
+	text = bundled(entry)
 	target.write_text(text)
 	print(f"released {target.name}")
 
