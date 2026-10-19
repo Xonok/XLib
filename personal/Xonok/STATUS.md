@@ -20,7 +20,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `36b20c5` (2026-10-19), **snapshot taken 2026-10-19**, **in
+Basis: `master` at `383d8d5` (2026-10-19), **snapshot taken 2026-10-19**, **in
 sync with `origin/master`** — **PR #44 is merged and pushed, and it carries two
 fixes: `XP56NNC` (the linter inside a worktree) and `2X3PZT3` (the gate that
 never ran there)**. PR #42 (`YFJZRYC`, the html lint implementation) is merged
@@ -29,6 +29,30 @@ Traveller. PR #36 (`YFJZRYC`, the html lint *rules*) went in before it, and so
 did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state files).
 Fourteen board tickets are closed, and the Traveller acceptance test has been
 run: the bundle exists at `Space-Traveller/server-bundled.py` and does not run.
+
+**PR #47 is open and awaits the human's review: `agent-coord.py` had two
+defects that made the coordination tool lie, and both are fixed.** The
+`news` command — the only channel that carries a rule change out to the
+agents that have not read the file — reported "no new guideline changes"
+for every workspace and **took the claims of every agent on the machine with
+it** when it ran. Four breaks, all measured against the live tree: the
+workspace resolved to `$HOME` (under opencode 2 the process that carries a
+session's directory is the *client*, and the tool was asking the shared
+background service instead, which is the same process for every session on
+the machine); the migration dropped every claim whose owner was not a key in
+`ids.json`, and a claim is owned by an agent id while `ids.json` is keyed by
+session key, so the two key spaces never met; the rule files were globbed at
+`style/*.md` while XLib keeps them at `doc/style/*.md`; and the session key
+was the service's pid, so every session shared one identity, one notes file
+and one rule cursor. **Measured before and after, against a copy of the live
+`.agents`: workspace `/home/xonok` → `/storage/GitHub/Fun/XLib`; rule files
+0 → 41; claims after a `news` run wiped → intact.** A run that finds no rule
+files at all now says `nothing checked`, which is not the same answer as
+"no new guideline changes". The second defect is `check-clean` reporting
+**clean** for a dirty file inside a worktree — the guard that stops two
+agents editing one file, failing open. **21 new tests, each fix
+mutation-checked.** **Not merged by the agent:** this changes a live
+machine's coordination state, so the human reviews it.
 
 **Task updates 2026-10-19:** #117 (xhttp release survival) marked done — the released
 `xhttp_1_0_0.py` survives Space-Traveller use. #111 (Discord access design) marked done;
@@ -354,34 +378,19 @@ Also standing, from the abandoned single-pass attempt:
 	human should know their repo was briefly on a branch that does not belong to
 	them, and because the near-miss is the clearest possible demonstration of why
 	`checkout` is the banned one.
-- **`agent-coord.py news` silently destroys every agent's claims — and the rule
-	changes it exists to announce never arrive. Measured, not inferred; #142.**
-	`cmd_news` calls `my_id()`, which on the `pid-` path calls `migrate_ids()`
-	(`tools/agent-coord.py:325`). That function deletes any claim whose owner is
-	not a key in `ids.json` (`:306-309`). **`ids.json` is keyed by `session_key()`
-	(`pid-32731`) and `claims.json` by agent id (`xonok/unknown-1`), so the two key
-	spaces can never intersect and every claim matches the delete rule.** The same
-	loop empties `rule-cursor.json` (`:310-313`). Reproduced in one line: `claim`
-	a file (1 owner), run `news --status` (**read-only by name**), 0 owners.
-	`status`, `check-clean` and `release` do **not** trigger it — it is `news`
-	specific, and `news` is what every agent is told to run at session start and
-	before each subagent dispatch. **Two consequences.** Coordination holds only
-	between an agent's `claim` and its next `news`; another agent running `news`
-	in that window silently frees the files, so `check-clean`/`claim` are not
-	enforcing the "don't touch others' uncommitted work" rule they exist for. And
-	**the `git checkout` ban written today cannot reach anyone by the documented
-	mechanism** — which is why this file's entry for it records the rule as
-	written-but-not-propagated. **Two further defects in the same command, found
-	while checking the first.** `workspace_root()` resolves to `/home/xonok`
-	because this session's opencode process has cwd `$HOME` and `$HOME/.agents`
-	exists — following the documented rule, so this is an environment fact rather
-	than a code bug, but **any session launched from `$HOME` therefore finds no
-	`AGENTS.md`, no `.opencode/agent/*.md` and no rule files, and reports "no new
-	guideline changes" forever.** And `rule_files()` globs `style/*.md` (`:20`),
-	which does not exist in XLib — the style rules live at `doc/style/*.md`, so
-	that source never matches here even from the correct root. Three independent
-	breaks stacked in one command, each of which alone would produce the same
-	silent "nothing to report". → `tools/agent-coord.py`, taskview `#142`
+- **`agent-coord.py news` destroyed every agent's claims, and the rule changes
+	it exists to announce never arrived. FIXED, in review: PR #47. #142, and
+	`8FVW49J` for the guard beside it.** The four breaks and what they
+	measure are in the Snapshot above. What is left of it here is the two
+	things the fix does not do on its own. **The stale identity lingers:**
+	`ids.json` still holds `pid-15395` → `xonok/secretary-1`, the shared
+	service's pid, and the claims under it are left alone deliberately — a
+	live session is still using that id, and moving its claims under the new
+	one would pull the rug from under it. It is reaped when that pid dies.
+	**`$HOME/.agents/` still exists**, and a session whose window was opened in
+	the home directory resolves there, which is correct for that window and
+	not something to delete from outside the repo. → `tools/agent-coord.py`,
+	taskview `#142` and `#145`
 
 - **Three bundler tickets are now closed, and one of them was closed for a reason
 	that reads as done and is not.** Closed 2026-10-18: `F7KHKM8` (all three
