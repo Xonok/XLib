@@ -206,8 +206,8 @@ needed when there is no due date.
 	`AC9YJYQ`'s description claimed the six failures "are filed separately" and
 	they were not** — no ticket and no taskview task existed, which is how a
 	known defect goes quiet.
-- [ ] **#144 — xlint: reports clean inside a `.work/` worktree, checking nothing**
-	(by 2026-10-26, medium) — category: XLib. **Found 2026-10-19 while adding
+- [x] **#144 — xlint: reports clean inside a `.work/` worktree, checking nothing**
+	(done 2026-10-19, medium) — category: XLib. **Found 2026-10-19 while adding
 	html support to xlint.** The root repo's `.xlintignore` lists `.work/`, and
 	the exclusion applies to the worktrees the root contains — so `xlint .` in
 	`.work/<ticket>/` excludes everything and prints "clean" while checking
@@ -215,6 +215,19 @@ needed when there is no due date.
 	excluded the whole tree is indistinguishable from a run that found nothing.
 	Two of the exclusion tests fail there for the same reason, and pass from the
 	root checkout. The repair is in the exclusion matching, not in the pattern.
+	**DONE 2026-10-19 — PR #44, two tickets: `XP56NNC` (the linter) and
+	`2X3PZT3` (the hooks).** The repair is where the note said it would be: the
+	upward walk that finds `.xlintignore` files now **stops at the checkout that
+	owns the path**, and a worktree's `.git` is a *file*, so the old lookup
+	walked straight out of it and found the outer repository's rule. **A second
+	mechanism turned up while measuring it, and it is the bigger half: the
+	style gate did not run in a worktree at all** — `core.hooksPath` was the
+	relative path `.git/hooks`, which resolves inside a worktree to a *file*
+	rather than a directory, so git found no hook to run and neither the xlint
+	gate nor the ticket-ref check did anything there. Both fixed; a run over an
+	excluded path now says **"nothing checked"** instead of printing `clean`.
+	**Eight new tests; the suite is 98 green.** The gate's output at the
+	repository root is unchanged.
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
