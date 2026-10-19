@@ -133,11 +133,27 @@ def _glob_to_regex(part):
 			out.append(re.escape(char))
 	return "".join(out)
 
+def _is_checkout_root(path):
+	"""True when `path` is the root of a git checkout.
+
+	A worktree's `.git` is a *file* naming the main repository's administrative
+	directory, so a lookup that recognises only a `.git` directory walks straight past
+	every worktree and out into the directory that holds it.
+	"""
+	return (path / ".git").exists()
+
 def find_exclusion_roots(start):
 	"""Directories from `start` upward whose `.xlintignore` governs it, nearest last.
 
 	Walks up so a run from a subdirectory sees the same exclusions a run from the repo
 	root does, and so a nested repository's file overrides rather than disappears.
+
+	The walk stops at the checkout that owns `start`, because an ignore file belongs to
+	the repository it sits in. A worktree is a separate checkout of that same
+	repository rather than a subdirectory of it, and it holds its own copy of the
+	ignore file. The rule the outer repository keeps for the worktrees it contains
+	(`.work/`) says nothing about what is inside one of them, and applying it there
+	excluded every file the worktree held: a run that checked nothing, reported clean.
 	"""
 	roots = []
 	current = start.resolve()
@@ -146,16 +162,38 @@ def find_exclusion_roots(start):
 	while True:
 		if (current / _IGNORE_FILE).is_file():
 			roots.append(current)
-		if current.parent == current:
+		if _is_checkout_root(current) or current.parent == current:
 			return roots
 		current = current.parent
 
-def is_ignored(path, exclusions=None):
+def exclusion_reason(path, exclusions=None):
+	"""Why `path` is excluded, or None when it is not.
+
+	`is_ignored` says whether a path is skipped; this says which rule skipped it, so
+	a report of a skipped path can name the rule instead of guessing at one.
+	"""
 	if set(path.parts) & _BUILTIN_EXCLUDED:
-		return True
+		return "the built-in exclusions"
 	if exclusions is not None and exclusions.excluded(path, path.is_dir()):
-		return True
-	return False
+		return _IGNORE_FILE
+	return None
+
+def is_ignored(path, exclusions=None):
+	return exclusion_reason(path, exclusions) is not None
+
+def excluded_paths(paths, exclusions=None):
+	"""The requested paths that are excluded, each with the rule that excluded it.
+
+	A run over these checks nothing, and a run that checks nothing must not look like
+	a run that found nothing. One of the two is a statement about the code and the
+	other is a lie about it, and on a screen they are the same word.
+	"""
+	skipped = []
+	for path in paths:
+		reason = exclusion_reason(path, exclusions)
+		if reason is not None:
+			skipped.append((path, reason))
+	return skipped
 
 _JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
 _PY_MD_SUFFIXES = (".py", ".md")
@@ -1104,18 +1142,25 @@ def make_watcher(paths, exclusions):
 			pass
 	return _PollWatcher(paths, exclusions)
 
-def draw(snapshot):
+def draw(snapshot, skipped=()):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
+	for entry, reason in skipped:
+		print(f"{entry}: excluded by {reason} — nothing checked", flush=True)
 	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
 	for path, line, msg in sorted(found):
 		print(f"{path}:{line}: {msg}", flush=True)
-	print(f"{len(found)} problem(s)" if found else "clean", flush=True)
+	if found:
+		print(f"{len(found)} problem(s)", flush=True)
+	elif skipped:
+		print("nothing checked", flush=True)
+	else:
+		print("clean", flush=True)
 
-def watch(paths, args, exclusions):
+def watch(paths, args, exclusions, skipped=()):
 	snapshot = {path: check_file(path, args) for path in lint_files(paths, exclusions)}
 	watcher = make_watcher(paths, exclusions)
-	draw(snapshot)
+	draw(snapshot, skipped)
 	while True:
 		changed = {}
 		for action, path in watcher.collect():
@@ -1137,7 +1182,7 @@ def watch(paths, args, exclusions):
 				dirty = True
 				snapshot[path] = check_file(path, args)
 		if dirty:
-			draw(snapshot)
+			draw(snapshot, skipped)
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
@@ -1170,10 +1215,11 @@ def main():
 			parser.error(f"not found: {entry}")
 
 	exclusions = _Exclusions(find_exclusion_roots(args.paths[0]))
+	skipped = excluded_paths(args.paths, exclusions)
 
 	if args.watch:
 		try:
-			watch(args.paths, args, exclusions)
+			watch(args.paths, args, exclusions, skipped)
 		except KeyboardInterrupt:
 			pass
 		return 0
@@ -1181,8 +1227,10 @@ def main():
 	problems = []
 	for path in lint_files(args.paths, exclusions):
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
+	for entry, reason in skipped:
+		print(f"{entry}: excluded by {reason} — nothing checked")
 	if not problems:
-		print("clean")
+		print("nothing checked" if skipped else "clean")
 		return 0
 	for path, line, msg in problems:
 		print(f"{path}:{line}: {msg}")

@@ -11,6 +11,9 @@ tools/pybundle/test/fixtures/
 .agents/
 
 # .work/ holds per-ticket worktrees, one per ticket — not part of the project.
+# The rule governs this checkout only: a worktree holds its own copy of this file,
+# and the copy that applies inside a worktree is that worktree's own, so a worktree
+# is excluded here and linted there.
 .work/
 
 # dev/xhttp/compare/web/ holds the websocket RFC comparison material, and with it
