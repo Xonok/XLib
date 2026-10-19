@@ -33,7 +33,7 @@ The following rules live in dedicated docs files and are also linked from the ta
 | File | What it covers |
 |------|---------------|
 | `doc/epiq-workflow.md` | Epiq board mechanics: per-actor writes, syncing, stranded events |
-| `doc/working-tree.md` | Check-clean before editing, don't touch others' uncommitted changes; **`git checkout` is banned** — use `git switch` / `git restore`, and prefer a worktree to switching at all |
+| `doc/working-tree.md` | Check-clean before editing, don't touch others' uncommitted changes; **`git checkout` is banned** — use `git switch` / `git restore`, and prefer a worktree to switching at all. **`git reset --hard` and `git reset --merge` are banned**; plain `git reset` is allowed but it resets the index, so it silently unstages another agent's work |
 | `doc/paths-in-tracked-files.md` | No machine-specific paths in tracked files; use repo-relative or `.agents/machine-info.md` |
 | `doc/state-files-history.md` | STATUS.md vs HISTORY.md; append-only history policy |
 | `doc/versioning.md` | Library versioning scheme: revision/minor/major bumps, deprecation timeline |
