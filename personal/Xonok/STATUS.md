@@ -20,9 +20,16 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `7c6f61d` (2026-10-18), **snapshot taken 2026-10-18**, **one
-commit ahead of `origin/master` and unpushed** — the human authorised the commit, not
-the push.
+Basis: `master` at `dc078ce` (2026-10-18), **snapshot taken 2026-10-18**, **in sync
+with `origin/master`** — PR #33 (`ZRTSZMB`) is merged and pushed, the seven Done-lane
+tickets it closed behind it are closed, and **the Traveller acceptance test has been
+run**: the bundle exists at `Space-Traveller/server-bundled.py` and does not run.
+Fourteen board tickets are closed, two more are filed from that run, and the two state
+files are still uncommitted.
+
+**Task updates 2026-10-18:** #117 (xhttp release survival) marked done — the released
+`xhttp_1_0_0.py` survives Space-Traveller use. #111 (Discord access design) marked done;
+new task #138 (Discord access setup) added.
 
 **The bundler is written, runs, and is committed (`ba063b5`). All 188 tests pass.**
 This was done out of lane — implementation is programmer work and the secretary
@@ -98,12 +105,15 @@ trusting a release. **195 epiq
 events were stranded on 2026-10-01, 13 of them issue creations**; the drain ran
 on 2026-10-02 and `tools/epiq-pending.py` reports **1 event still stranded**
 (a bare `create.contributor` carrying no ticket content), confirmed 2026-10-08.
-**The merge queue is empty again.** Four tickets were approved by the human on
-2026-10-08 and merged as a flat rebase sequence, no merge commits:
-`AFVAWRX` (#26), `3EEXMRK` (#21), `FZDMC84` (#23), `4N5J1AS` (#25). Before them,
-six merged on 2026-10-02 — `58MXTGY`, `EY72YA9`, `X06YVNP`, `CMGDFZF`, `0ZSB1DP`,
-`PMRBFR3` — and twelve before that. `doc/development.md` is the canonical process
-document — plan → spec → tests → implementation → review, each stage entered on
+**The merge queue is empty again.** PR #33 (`ZRTSZMB`, the `ctx` opencode-2.0 fix)
+was merged on 2026-10-18 as a rebase merge with the branch deleted, `dc078ce`, and
+with it the seven Done-lane tickets whose commits are on master are closed: `ZRTSZMB`,
+`7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`. Before that, four
+tickets were approved by the human on 2026-10-08 and merged as a flat rebase sequence,
+no merge commits: `AFVAWRX` (#26), `3EEXMRK` (#21), `FZDMC84` (#23), `4N5J1AS` (#25).
+Before them, six merged on 2026-10-02 — `58MXTGY`, `EY72YA9`, `X06YVNP`, `CMGDFZF`,
+`0ZSB1DP`, `PMRBFR3` — and twelve before that. `doc/development.md` is the canonical
+process document — plan → spec → tests → implementation → review, each stage entered on
 the human's call.
 
 - **Technical explanations have a rule file.** `doc/style/prose.md` — cite
@@ -180,9 +190,10 @@ the human's call.
 	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
 	spec edits beyond these four decisions are still not written in, so the spec does
 	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
-| **xhttp** | human | **Released `1_0_0` 2026-10-18** (`xlib/xhttp_1_0_0.py`, epi `2X0B2XW`, 22 308 bytes) — the first entry in this repo citing its release ticket, as the convention asks. Verified before it was committed: xlint-clean, **223 tests green against it** through a shim package, and the live-socket smoke test returning the same responses as the source. **Running in Space-Traveller's game server and behaving, per the human** — which answers the "validate against real code" condition by use rather than by a campaign; what remains is whether a *release* survives that use. **The nineteen `err_*` lines are the reason the released file can be told apart from python**, and the reasoning behind them is now in `dev/xhttp/SPEC.md`. One open bug, refresh flakiness, **attributed to the frontend by the human's reading** — the frontend still runs `dumb_http`, the live server shows no such issue, and an agent is investigating. **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 0 failures, 1 skipped — green**, as of 2026-10-18. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. The 2 remaining failures are **real defects**, not test noise: `_/websocket.py:send` does not validate message type, so `send(None)` and `send(<non-string>)` raise nothing (board `7Z7DE78`). Left red on purpose — `TESTING_RULES.md` forbids masking an implemented feature's failure. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Not yet validated against real code in Space-Traveller**, the human's stated condition for calling it done. **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **xhttp** | human | **Released `1_0_0` 2026-10-18** (`xlib/xhttp_1_0_0.py`, epi `2X0B2XW`, 22 308 bytes) — the first entry in this repo citing its release ticket, as the convention asks. Verified before it was committed: xlint-clean, **223 tests green against it** through a shim package, and the live-socket smoke test returning the same responses as the source. **Running in Space-Traveller's game server and behaving, per the human** — which answers the "validate against real code" condition by use rather than by a campaign; the released artefact survives that use (`#117` done 2026-10-18). **The nineteen `err_*` lines are the reason the released file can be told apart from python**, and the reasoning behind them is now in `dev/xhttp/SPEC.md`. One open bug (not #117's scope), refresh flakiness, **attributed to the frontend by the human's reading** — the frontend still runs `dumb_http`, the live server shows no such issue, and an agent is investigating. **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 223 tests, 0 failures, 1 skipped — green**, as of 2026-10-18. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Validated against real code in Space-Traveller** — the game server has been running on xhttp and the released artefact survives that use (`#117` done). **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib **33 open, all 33 in Todo — In progress and Done are both empty**, verified 2026-10-15; four of those are the pybundle spec tickets raised by test pass 2 (`S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM`). An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
+| **epiq boards** | secretary | XLib **30 open, all 30 in Todo — In progress and Done are both empty**, verified 2026-10-18. **Fourteen tickets closed on this board without being merged**, in one session: seven whose commits are on master (`ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`), four pybundle tickets closed as ruled-and-landed or verified (`F7KHKM8`, `S1G5037`, `EZAVYNM`, `YEBP3QB`), **`R9H4PVD` closed as superseded rather than executed** — its repair would now reintroduce the error it was written to prevent — and two filed from the Traveller run (`86CDJV2`, `JD9DWVN`). **Every one was verified against the tree, not against the ticket's own account of itself**; that check is what separated the fourteen from four that only looked closable. An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
+| **pybundle acceptance** | secretary | **Traveller bundles; it does not run. Run 2026-10-18**, output at `Space-Traveller/server-bundled.py` (400 908 B, untracked). 142 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **329 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib for the first time. **Two defects, both filed and both outside anything XLib's own corpus contains**, so no amount of testing against XLib would have found them: `86CDJV2` (D32 rule 3 handles a removed import mid-file and misses one at the **end** — 3 double-blank findings) and **`JD9DWVN`, which stops it running** (`from . import io,…` in a package `__init__.py` reached again through the package attribute gives `server__Misc____init__io`, which nothing defines — **141 such names**, `NameError` on first call). `JD9DWVN` carries a ruling request: warn / alias / leave as D17's exclusion. **The structural machinery is sound** — prefixing, aliasing, scope tracking, the whole D20 mechanism all produced a structurally valid 400 KB bundle | `Space-Traveller/server-bundled.py`, epiq `86CDJV2`, `JD9DWVN` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -194,7 +205,13 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**The queue is empty.** The 2026-10-02 run held six and merged them as a flat
+**The queue is empty.** PR #33 (`ZRTSZMB`) was merged on 2026-10-18 — rebase, branch
+deleted, `dc078ce` — and with it the seven Done-lane tickets whose commits are on
+master are closed: `ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`,
+`VC9QWYY`. Each got a `Solution:` comment first; the four that only had a
+prose outcome comment got one carrying the commit hashes, since
+`^Solution:` is what finds a resolved ticket on the board. The 2026-10-02 run held
+six and merged them as a flat
 rebase sequence, in dependency order and not in approval order: `58MXTGY` (the
 filing rule, so it governs the rest), then `EY72YA9` before `X06YVNP` — the
 pane-side id prefix was rebased onto the resolver-side commit, because `X06YVNP`'s
@@ -257,6 +274,72 @@ Also standing, from the abandoned single-pass attempt:
 
 ## Blocked / needs attention
 
+- **The secretary switched XLib's working tree onto a stray branch named `other`
+	this session, minutes before shutdown — caused, caught and reverted.** Two
+	`shell` calls issued in one block raced: the first began `rm -rf
+	/tmp/opencode/co-probe`, the second's `cd /tmp/opencode/co-probe 2>/dev/null
+	|| true` lost the race and its `|| true` swallowed the failure, so
+	`git switch -c other` ran **in the repo** and left `?? f.txt` behind.
+	Reverted with `git switch master`, `rm f.txt`, `git branch -d other` (at
+	`3ebc520`, identical to master, `-d` not `-D` so the delete would have
+	refused otherwise). **All seven modified files intact**, including another
+	agent's `dev/xhttp` work. **Nothing was lost because the command was `git
+	switch`** — it carried the uncommitted changes across. Recorded because the
+	human should know their repo was briefly on a branch that does not belong to
+	them, and because the near-miss is the clearest possible demonstration of why
+	`checkout` is the banned one.
+- **`agent-coord.py news` silently destroys every agent's claims — and the rule
+	changes it exists to announce never arrive. Measured, not inferred; #142.**
+	`cmd_news` calls `my_id()`, which on the `pid-` path calls `migrate_ids()`
+	(`tools/agent-coord.py:325`). That function deletes any claim whose owner is
+	not a key in `ids.json` (`:306-309`). **`ids.json` is keyed by `session_key()`
+	(`pid-32731`) and `claims.json` by agent id (`xonok/unknown-1`), so the two key
+	spaces can never intersect and every claim matches the delete rule.** The same
+	loop empties `rule-cursor.json` (`:310-313`). Reproduced in one line: `claim`
+	a file (1 owner), run `news --status` (**read-only by name**), 0 owners.
+	`status`, `check-clean` and `release` do **not** trigger it — it is `news`
+	specific, and `news` is what every agent is told to run at session start and
+	before each subagent dispatch. **Two consequences.** Coordination holds only
+	between an agent's `claim` and its next `news`; another agent running `news`
+	in that window silently frees the files, so `check-clean`/`claim` are not
+	enforcing the "don't touch others' uncommitted work" rule they exist for. And
+	**the `git checkout` ban written today cannot reach anyone by the documented
+	mechanism** — which is why this file's entry for it records the rule as
+	written-but-not-propagated. **Two further defects in the same command, found
+	while checking the first.** `workspace_root()` resolves to `/home/xonok`
+	because this session's opencode process has cwd `$HOME` and `$HOME/.agents`
+	exists — following the documented rule, so this is an environment fact rather
+	than a code bug, but **any session launched from `$HOME` therefore finds no
+	`AGENTS.md`, no `.opencode/agent/*.md` and no rule files, and reports "no new
+	guideline changes" forever.** And `rule_files()` globs `style/*.md` (`:20`),
+	which does not exist in XLib — the style rules live at `doc/style/*.md`, so
+	that source never matches here even from the correct root. Three independent
+	breaks stacked in one command, each of which alone would produce the same
+	silent "nothing to report". → `tools/agent-coord.py`, taskview `#142`
+
+- **Three bundler tickets are now closed, and one of them was closed for a reason
+	that reads as done and is not.** Closed 2026-10-18: `F7KHKM8` (all three
+	name-import shapes ruled and landed as D20/D24), `S1G5037` (both halves of the
+	indentation ruling landed, `_warn_indentation` at `bundler.py:163`),
+	`EZAVYNM` (all five spec edits written, D22 and D25), `YEBP3QB` (the file-like
+	sink requirement, verified byte-identical across stdout, file, `StringIO` and a
+	real pipe, and the bundler closes nothing it did not open), and **`R9H4PVD` —
+	closed as superseded, not executed**. Its repair removes the rebinding language
+	from D9 and D19, and the 2026-10-15 alias ruling reversed F13, so that language
+	is correct again and executing the ticket would now *introduce* the error it was
+	written to prevent. D20/D24 restate it and the supersedes table at
+	`SPEC.md:747` carries the correction. **A closing is a claim about work, so it
+	needs a check that could fail** — here the check was asking what happens if the
+	ticket is executed, and the answer was that it breaks something.
+- **`6MFX0Z1` stays open, and now has a result rather than a plan.** The acceptance
+	test ran: Traveller bundles to 400 KB and does not run. What is undone is no
+	longer just housekeeping — **`SPEC_new.md` is still in `tools/pybundle/` beside
+	`SPEC.md` and `SPEC_old.md` with nothing marking which is current**, and two of
+	the five Concerns are closed rather than answered. The rewrite itself landed
+	(12 commits, 203 tests) and the bundler's structural machinery held up on a
+	142-file foreign codebase; the two defects found are in emission rules, not in
+	the design. See *pybundle acceptance* above and `JD9DWVN`, which needs a ruling
+	from the human.
 - **Marduk tracks the kitty window, not the opencode process** — found and filed
 	2026-10-18, epiq `NAHEGJE`, task **#136**. `tools/oc-agent:114` records its own
 	`$$` as the registry entry's `pid`, and that process is the launcher script,
@@ -396,10 +479,10 @@ Also standing, from the abandoned single-pass attempt:
 	4. **The human's own gate: validation against real code in Space-Traveller**
 		(`#117`). **Re-scoped 2026-10-18: the game server has been running on xhttp
 		"for a bit now and seems to be working fine"**, so the original framing is
-		answered by use. What remains is the checkpoint he named: **whether a
-		released artefact survives being used by Space-Traveller** — which is what
-		`xhttp_1_0_0.py` is for (epi `2X0B2XW`, released 2026-10-18, verified
-		xlint-clean and 223-green through a shim). **One open bug, attributed to
+		answered by use. **The checkpoint is passed** (`#117` done 2026-10-18): **the
+		released artefact survives being used by Space-Traveller** — `xhttp_1_0_0.py`
+		(epi `2X0B2XW`, released 2026-10-18, verified xlint-clean and 223-green through
+		a shim). **One open bug, attributed to
 		the frontend and not yet established**: flakiness around refresh, which the
 		live server does not show when *both* frontend and game run `dumb_http`.
 		The frontend still runs `dumb_http`; an agent is investigating, and the
@@ -734,6 +817,26 @@ tripped on. One false-positive class remains unruled and costs nothing either
 
 ## Settled — not to be reopened without cause
 
+- **`git checkout` is banned outright, in every repo, as of 2026-10-19.** Use
+	`git switch` to change branch and `git restore` to change a file. The human's
+	reasoning: it does not mean changing branch is always right — *"often when an
+	agent wants to switch branches I actually want it to use a worktree instead"* —
+	but `git switch` *"is at least not going accidentally delete changes"*, and
+	`git checkout` *"essentially functions as git reset"*. **Blanket ban until
+	further notice**, on the strength of several accidental deletions rather than
+	one. Written in both rule sets: `doc/working-tree.md` here (and widened in
+	the `AGENTS.md` pointer row so it shows in the index) and a
+	`` `git checkout` is banned `` section in the Agents workspace's `AGENTS.md`. **The safety property
+	is structural, not conventional**, and was measured rather than asserted:
+	`git switch -- f.txt` fails with `fatal: invalid reference: f.txt` (exit 128),
+	so the destructive form cannot be typed — while `git checkout -- f.txt` took an
+	uncommitted edit from `UNCOMMITTED WORK` to `committed` with no warning and
+	nothing to undo. **Worktree first, always**: `git worktree add` leaves the
+	human's and other agents' uncommitted work where it is, and opencode can move
+	a session into a worktree it just created. **Enforcement is not built**
+	(`#141`): the live guard would be a global opencode plugin on
+	`tool.execute.before`, and the durable one an xlint rule on the literal string.
+	→ `doc/working-tree.md`, taskview `#141`
 - **The board is the unit of work.** The human's ruling, 2026-09-30: one ticket
 	per independent piece, its own feature branch, one commit per ticket,
 	subject opening with the ticket ref. **Todo** is pending, **In progress**

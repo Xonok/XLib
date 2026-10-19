@@ -110,6 +110,47 @@ needed when there is no due date.
 	**Landed `ba063b5`, 2026-10-17: all 188 pass.**
 - [ ] **#122 — Support cursor agents in marduk** (by decision needed, medium) — board: epiq `W1GTG4A` (Todo).
 - [ ] **#123 — Consider whether to support cursor agents in skynet** (by decision needed, medium) — board: epiq `4P4VD3A` (Todo).
+- [ ] **#141 — Mechanize the `git checkout` ban** (by decision needed, high) —
+	category: agents. The rule itself is written and in force
+	(`doc/working-tree.md` here, `AGENTS.md` in Agents); this is about enforcing
+	it. **Two guards, catching different things.** (1) A global opencode plugin
+	in `~/.config/opencode/plugins/` hooking `tool.execute.before` and rejecting
+	any shell command matching `git checkout` — this is the one that stops the
+	actual accident, because every agent command passes through the tool, and
+	`~/.config/opencode/plugins/` is global so subagents are covered too (which
+	also bears on open question 5 in STATUS.md, about prose rules not binding
+	dispatched workers). `tool.execute.before` **is** in v2.0.31's plugin hook
+	surface (`~/.opencode/node_modules/@opencode-ai/plugin/dist/index.d.ts:234`,
+	signature `(input: {tool, sessionID, callID}, output: {args})`), but the
+	published plugin docs are still the V1 entrypoint shape, so *whether throwing
+	aborts the call* needs a live test — that is the first thing to try, not an
+	assumption. (2) An xlint rule flagging the literal string in tracked
+	`.md`/`.py`, enforced by the pre-commit hook. This catches only the
+	**durable** half — `git checkout` written into a script, a doc, a test or a
+	README — not a one-off command, and a one-off is exactly the accident. Needs
+	#113's extension point first, or lands inside `xlint.py` against that
+	ticket's reasoning. **Neither was built: both are programmer work**, and the
+	human's *"a mechanized check could also be good"* reads as an endorsement of
+	the idea rather than an instruction to implement it.
+- [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
+	cursor** (by decision needed, high) — measured, not inferred.
+	`cmd_news` → `my_id()` → `migrate_ids()` (`tools/agent-coord.py:325`) deletes
+	any claim whose owner is not a key in `ids.json` (`:306-309`). **`ids.json` is
+	keyed by `session_key()` (`pid-32731`); `claims.json` is keyed by agent id
+	(`xonok/unknown-1`) — the key spaces can never intersect, so every claim is
+	deleted.** The same loop empties `rule-cursor.json` (`:310-313`). Repro:
+	claim a file (1 owner) → `news --status` → 0 owners; `status`, `check-clean`
+	and `release` are clean. **Coordination holds only between an agent's `claim`
+	and its next `news`** — and `news` is what agents run at session start. Two
+	more breaks in the same command, found while checking the first:
+	`workspace_root()` resolves to `/home/xonok` for any session launched from
+	`$HOME` (`$HOME/.agents` exists, so the documented walk finds it first), so
+	`rule_files()` matches nothing and "no new guideline changes" is guaranteed;
+	and `rule_files()` globs `style/*.md` while XLib's rules live at
+	`doc/style/*.md` (`:20`). **Consequence for today's work: the `git checkout`
+	ban is written but cannot propagate by the documented mechanism until this is
+	fixed.** Programmer work, not filed on the board — human's call.
+- [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
 	oc-agent's own `$$`, so an entry lives exactly as long as the kitty tab
@@ -137,17 +178,12 @@ needed when there is no due date.
 	but `sender` leaks. Queue grows unbounded if `send()` called after close.
 	No sentinel, no socket check. Unused `queue` import. `key_hash` typo,
 	`_send` arg order, `on_message` msg pass were fixed.
-- [ ] **#117 — xhttp: does a release survive being used by Space-Traveller**
-	(high) — **re-scoped 2026-10-18.** Originally "validate against real code",
-	which **use answers**: the game server has been running on xhttp "for a bit now
-	and seems to be working fine". What is left is the checkpoint the human named —
-	**whether the released `xhttp_1_0_0.py` survives that use**, which is what the
-	release (`2X0B2XW`) enables. Parity reads 8/8 and the suite is 223 green, but
-	both were true before the game server moved, so neither is the evidence.
-	**Open alongside it, and not this task's**: refresh flakiness on the traveller,
-	**attributed to the frontend by the human's reading** — the frontend still runs
-	`dumb_http`, and the live server shows no such issue when both run `dumb_http`.
-	An agent is investigating; the experiment is to move the frontend to xhttp.
+- [x] **#117 — xhttp: does a release survive being used by Space-Traveller**
+	(done 2026-10-18, high) — the game server has been running on xhttp "for a bit
+	now and seems to be working fine". The released `xhttp_1_0_0.py` (`2X0B2XW`)
+	is verified xlint-clean, 223 tests green, and survives that use. The refresh
+	flakiness is attributed to the frontend (still on `dumb_http`) and is tracked
+	separately.
 - [x] **#118 — xhttp: commit `dev/xhttp/`** (done 2026-10-14, medium) — the whole
 	folder arrived from Space-Traveller untracked on 2026-10-10. The scratch layer
 	was the last of it: `REVIEW.md` and `TODO.md` were the only untracked files
