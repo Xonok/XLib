@@ -180,7 +180,7 @@ The programmer works from these inputs, and no others:
 2. tests (edges explicit)
 3. the project guidelines in `doc/style/` — always `architecture.md` and
 	`common.md`, plus the language-specific file for the language in hand
-	(`python.md`, `js.md`, `markdown.md`)
+	(`python.md`, `js.md`, `html.md`, `markdown.md`)
 
 The spec has already absorbed all flaws found during test derivation as the
 human's fixes, so it is the complete resolution *of those* — no third file is

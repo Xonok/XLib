@@ -156,19 +156,25 @@ needed when there is no due date.
 	`doc/style/*.md` (`:20`). **Consequence for today's work: the `git checkout`
 	ban is written but cannot propagate by the documented mechanism until this is
 	fixed.** Programmer work, not filed on the board — human's call.
-- [ ] **#139 — xlint: add html support** (by decision needed, medium) — board: epiq
-	`YFJZRYC` (Todo). **Ruled 2026-10-19, ready to implement.** Three html-specific
-	rules on top of the generic ones: **unclosed tags (strict — every non-void tag
-	must be closed explicitly)**, **closing tags that shouldn't be** (all three
-	readings: a closer for a void element, a closer with no matching open, and a
-	closer that does not match the innermost open), and **bad indentation** (both
-	depth-mismatch and spaces-instead-of-tabs, under separate flags, with depth
-	measured in the file's own unit). **Code in `tools/xlint/_html.py`**, imported by
-	`xlint.py`; `dev/xhttp/compare/web/` is already in `.xlintignore` so the repo's
-	own one html file does not turn `xlint .` red. **Measured on Traveller's 27 html
-	files: unclosed 0, stray 0, depth 773 — 588 of them one systematic off-by-one —
-	spaces 0, trailing whitespace 3, double blank 2, final newline 0.** The corpus
-	is clean on structure, so the two structural rules need their own fixtures
+- [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
+	`YFJZRYC` (In progress — PR #42 open for the human's review). **Implemented.**
+	Three html-specific rules on top of the generic ones, as ruled: **unclosed tags
+	(strict — every non-void tag must be closed explicitly)**, **closing tags that
+	shouldn't be** (all three readings: a closer for a void element, a closer with
+	no matching open, and a closer that does not match the innermost open), and
+	**bad indentation** (both depth-mismatch and spaces-instead-of-tabs, under
+	separate flags, with depth measured in the file's own unit). **Code in
+	`tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule
+	— imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag
+	family (7 flags). **23 new tests; the suite is 90 green.** **Measured on
+	Traveller's 27 html files and Mallesne's one: unclosed 0, stray 0, depth 774 —
+	589 of them the one systematic off-by-one — spaces 0, trailing whitespace 7,
+	double blank 2, final newline 0.** The depth is one finding from the earlier
+	measurement (773 and 588) and the shape matches: the same 184 deeper findings,
+	the same single -1 at `main.html:134`. **Trailing whitespace reads 7, not the
+	3 that earlier script found: the difference is four lines ending in a tab**,
+	which xlint's own generic rule catches and that script's did not. The corpus
+	is clean on structure, so the two structural rules have their own fixtures
 	rather than the acceptance test; Mallesne's one html file is clean on
 	everything.
 - [ ] **#140 — New XLib html-bundling library + watch option** (by decision needed,
@@ -199,6 +205,15 @@ needed when there is no due date.
 	`AC9YJYQ`'s description claimed the six failures "are filed separately" and
 	they were not** — no ticket and no taskview task existed, which is how a
 	known defect goes quiet.
+- [ ] **#144 — xlint: reports clean inside a `.work/` worktree, checking nothing**
+	(by 2026-10-26, medium) — category: XLib. **Found 2026-10-19 while adding
+	html support to xlint.** The root repo's `.xlintignore` lists `.work/`, and
+	the exclusion applies to the worktrees the root contains — so `xlint .` in
+	`.work/<ticket>/` excludes everything and prints "clean" while checking
+	nothing. **The failure mode is the one a linter cannot have**: a run that
+	excluded the whole tree is indistinguishable from a run that found nothing.
+	Two of the exclusion tests fail there for the same reason, and pass from the
+	root checkout. The repair is in the exclusion matching, not in the pattern.
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
