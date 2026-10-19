@@ -853,14 +853,38 @@ def under(base, path):
 	return path.startswith(base.rstrip("/") + "/")
 
 def nearest_git(path):
+	"""The checkout that owns `path`.
+
+	A worktree's `.git` is a *file* naming the main repository's administrative
+	directory, not a directory, so a lookup that recognises only a directory walks
+	past the worktree root and settles on the repository that contains it. They are
+	separate checkouts, and the worktree's own status is the one that says whether
+	the file is dirty; the parent's status cannot see it at all.
+	"""
 	base = os.path.dirname(os.path.abspath(path))
 	while True:
-		if os.path.isdir(os.path.join(base, ".git")):
+		if os.path.exists(os.path.join(base, ".git")):
 			return base
 		parent = os.path.dirname(base)
 		if parent == base:
 			return None
 		base = parent
+
+def repo_forms(repo, path):
+	"""The path as the repository names it, and the name behind a symlink.
+
+	The root of a workspace holds a symlink to the tracked file it stands for
+	(`STATUS.md` -> `personal/<person>/STATUS.md`), and git reports the tracked
+	name, so a check that used the symlink's own name matched nothing and called a
+	dirty file clean.
+	"""
+	forms = set()
+	for candidate in (os.path.abspath(path), os.path.realpath(path)):
+		try:
+			forms.add(os.path.relpath(candidate, repo))
+		except ValueError:
+			pass
+	return forms
 
 def cmd_check_clean(args):
 	abspaths = [os.path.abspath(p) for p in args.paths]
@@ -871,20 +895,24 @@ def cmd_check_clean(args):
 		for p in abspaths:
 			repos.setdefault(nearest_git(p) or p, []).append(p)
 	blocked_all = []
-	if len(repos) > 1:
-		sys_stderr("paths span multiple repos: %s" % ", ".join(sorted(repos)))
-		raise SystemExit(2)
 	for repo, paths in repos.items():
 		dirty = git_status(repo)
 		if dirty is None:
 			sys_stderr("%s is not a git repo (pass --repo)" % repo)
 			raise SystemExit(2)
-		want = [os.path.relpath(p, repo) for p in paths]
-		blocked_all += sorted({d for d in dirty if any(under(w, d) for w in want)})
+		want = set()
+		for p in paths:
+			want |= repo_forms(repo, p)
+		for d in dirty:
+			if any(under(w, d) for w in want):
+				# One checkout names its files relative to itself; several would
+				# name them the same way and mean different files, so the path
+				# that says which checkout is the one that gets printed.
+				blocked_all.append(d if len(repos) == 1 else os.path.join(repo, d))
 	if not blocked_all:
 		print("clean")
 		return
-	for d in blocked_all:
+	for d in sorted(set(blocked_all)):
 		print("dirty %s" % d)
 	raise SystemExit(1)
 
