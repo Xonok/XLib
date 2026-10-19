@@ -1,6 +1,11 @@
 import argparse,ast,ctypes,io,os,re,select,struct,sys,time,tokenize,subprocess
 from pathlib import Path
 
+try:
+	from . import _html
+except ImportError:
+	import _html
+
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
 _ALIASED_NAME_RE = re.compile(r"\bas\b")
@@ -154,7 +159,8 @@ def is_ignored(path, exclusions=None):
 
 _JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
 _PY_MD_SUFFIXES = (".py", ".md")
-_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES
+_HTML_SUFFIXES = (".html",)
+_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES
 
 def lint_files(paths, exclusions=None):
 	found = []
@@ -984,6 +990,23 @@ def check_file(path, args):
 		if not args.no_js_final_newline:
 			problems.extend((line, msg) for line, msg in check_js_trailing_blank(text_lines))
 			problems.extend((line, msg) for line, msg in check_js_final_newline(lines))
+	elif path.suffix in _HTML_SUFFIXES:
+		if not args.no_html_double_blank:
+			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
+		if not args.no_html_space_indent:
+			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
+		if not args.no_html_trailing:
+			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
+		if not args.no_html_final_newline:
+			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
+			problems.extend((line, msg) for line, msg in check_final_newline(lines))
+		html_problems = _html.check_html(text_lines)
+		if not args.no_html_unclosed:
+			problems.extend(html_problems["unclosed"])
+		if not args.no_html_bad_closer:
+			problems.extend(html_problems["bad_closer"])
+		if not args.no_html_depth:
+			problems.extend(html_problems["depth"])
 	return problems
 
 class _InotifyWatcher:
@@ -1117,7 +1140,7 @@ def watch(paths, args, exclusions):
 			draw(snapshot)
 
 def main():
-	parser = argparse.ArgumentParser(description="Check Python, Markdown, and JavaScript/TypeScript files against XLib style rules")
+	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
 	parser.add_argument("paths", nargs="+", type=Path)
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
@@ -1133,6 +1156,13 @@ def main():
 	parser.add_argument("--no-js-space-indent", action="store_true", help="disable JS/TS space indentation check")
 	parser.add_argument("--no-js-trailing", action="store_true", help="disable JS/TS trailing whitespace check")
 	parser.add_argument("--no-js-final-newline", action="store_true", help="disable JS/TS final newline and trailing blank line checks")
+	parser.add_argument("--no-html-double-blank", action="store_true", help="disable html double blank line check")
+	parser.add_argument("--no-html-space-indent", action="store_true", help="disable html space indentation check")
+	parser.add_argument("--no-html-trailing", action="store_true", help="disable html trailing whitespace check")
+	parser.add_argument("--no-html-final-newline", action="store_true", help="disable html final newline and trailing blank line checks")
+	parser.add_argument("--no-html-unclosed", action="store_true", help="disable the html unclosed tag check")
+	parser.add_argument("--no-html-bad-closer", action="store_true", help="disable the html closing tag check")
+	parser.add_argument("--no-html-depth", action="store_true", help="disable the html indentation depth check")
 	args = parser.parse_args()
 
 	for entry in args.paths:

@@ -21,6 +21,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `doc/style/common.md` | Maps, guard-first failures, return docs, single-pass, compatibility |
 | `doc/style/python.md` | Formatting, imports, naming, type hints, declarative style |
 | `doc/style/js.md` | The same, for JavaScript |
+| `doc/style/html.md` | The same, for HTML |
 | `doc/style/markdown.md` | Markdown formatting (indentation) |
 | `doc/style/prose.md` | How to explain technical things so the human can check them |
 | `doc/plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps; index in `doc/plans/README.md` |
