@@ -15,7 +15,7 @@ No file is written and no process is started, which is what keeps these fast eno
 to run on every edit.
 """
 
-import argparse,tempfile,unittest
+import argparse,contextlib,io,tempfile,unittest
 from pathlib import Path
 from tools.xlint import _html,xlint
 
@@ -361,6 +361,85 @@ class TestExclusions(unittest.TestCase):
 		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
 		found = xlint.lint_files([Path("tools/pybundle/test/fixtures")], excl)
 		self.assertEqual(found, [])
+
+class TestWorktreeExclusions(unittest.TestCase):
+	"""A worktree is a separate checkout of the same repository, not a subdirectory of it.
+
+	The defect these pin: the outer repository's `.xlintignore` lists the worktrees it
+	contains, the rule reached into the worktree, and every file in it was excluded. A
+	lint run there checked nothing and said `clean`.
+	"""
+
+	def _worktree(self, folder):
+		"""An outer repository holding one worktree, and the two paths that matter."""
+		outer = Path(folder) / "outer"
+		work = outer / ".work" / "ticket"
+		work.mkdir(parents=True)
+		(outer / ".git").mkdir()
+		(outer / ".xlintignore").write_text(".work/\n", encoding="utf-8")
+		(work / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+		return outer, work
+
+	def test_the_ignore_walk_stops_at_the_checkout_that_owns_the_path(self):
+		# The outer repository's ignore file does not govern the worktree's contents.
+		with tempfile.TemporaryDirectory() as folder:
+			outer, work = self._worktree(folder)
+			self.assertEqual(xlint.find_exclusion_roots(work), [])
+			self.assertEqual(xlint.find_exclusion_roots(outer), [outer])
+
+	def test_a_worktree_keeps_its_own_ignore_file(self):
+		# The worktree holds its own copy of the ignore file, and that copy is the one
+		# that applies to it.
+		with tempfile.TemporaryDirectory() as folder:
+			outer, work = self._worktree(folder)
+			(work / ".xlintignore").write_text("scratch/\n", encoding="utf-8")
+			excl = xlint._Exclusions(xlint.find_exclusion_roots(work))
+			self.assertTrue(xlint.is_ignored(work / "scratch" / "note.py", excl))
+			self.assertFalse(xlint.is_ignored(work / "code.py", excl))
+
+	def test_the_files_in_a_worktree_are_linted(self):
+		# The bug itself: the run over a worktree found nothing and reported clean.
+		with tempfile.TemporaryDirectory() as folder:
+			outer, work = self._worktree(folder)
+			(work / "code.py").write_text("x = 1\n", encoding="utf-8")
+			excl = xlint._Exclusions(xlint.find_exclusion_roots(work))
+			found = xlint.lint_files([work], excl)
+			self.assertEqual([path.name for path in found], ["code.py"])
+
+	def test_the_outer_repository_still_excludes_the_worktrees_it_holds(self):
+		# The rule keeps its purpose from the other side: the worktrees the outer
+		# repository contains are not linted twice.
+		with tempfile.TemporaryDirectory() as folder:
+			outer, work = self._worktree(folder)
+			excl = xlint._Exclusions(xlint.find_exclusion_roots(outer))
+			self.assertTrue(xlint.is_ignored(work / "code.py", excl))
+			self.assertFalse(xlint.is_ignored(outer / "code.py", excl))
+
+class TestExcludedPaths(unittest.TestCase):
+	"""A run that checks nothing must not look like a run that found nothing."""
+
+	def test_an_excluded_path_is_reported_with_the_rule_that_excluded_it(self):
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		skipped = xlint.excluded_paths([Path(".agents/agent-notes-x.md")], excl)
+		self.assertEqual([str(path) for path, reason in skipped], [".agents/agent-notes-x.md"])
+		self.assertEqual([reason for path, reason in skipped], [".xlintignore"])
+
+	def test_a_path_that_is_not_excluded_is_not_reported(self):
+		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
+		self.assertEqual(xlint.excluded_paths([Path("tools/xlint/xlint.py")], excl), [])
+
+	def test_a_run_that_checks_nothing_does_not_say_clean(self):
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			xlint.draw({}, skipped=[(Path("."), ".xlintignore")])
+		self.assertIn("nothing checked", out.getvalue())
+		self.assertNotIn("clean", out.getvalue())
+
+	def test_a_run_that_finds_nothing_still_says_clean(self):
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			xlint.draw({})
+		self.assertIn("clean", out.getvalue())
 
 def test_lint_files_directory_walk_skips_ignored(self):
 		# Walking a directory skips ignored subtrees entirely. The fixtures directory
