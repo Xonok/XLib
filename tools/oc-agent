@@ -23,6 +23,21 @@ die() {
 	exit 1
 }
 
+# Clock ticks since boot at which a process started — field 22 of
+# /proc/PID/stat. Paired with the pid, this names one specific process rather
+# than whatever inherits the number later; marduk reaps an entry when the pair no
+# longer matches. Prints nothing when /proc cannot answer.
+start_ticks_of() {
+	local stat rest
+	IFS= read -r stat < "/proc/$1/stat" 2>/dev/null || return 0
+	# Strip through the last ')' to drop the pid and the parenthesised comm,
+	# which may itself contain spaces. What is left starts at field 3, so the
+	# start time in field 22 is the 20th word of it.
+	rest=${stat##*) }
+	read -r -a _marduk_ticks <<< "$rest"
+	echo "${_marduk_ticks[19]:-}"
+}
+
 if [ -z "$AGENT" ]; then
 	echo "Available agents:"
 	agent_names
@@ -103,7 +118,22 @@ created=$(opencode api post /api/session --data "$(jq -nc \
 session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 [ -n "$session_id" ] || die "could not create a session for '$AGENT' (is the opencode service running? try: opencode service status)"
 
-# One file per session, named for the id so a stale entry is unambiguous.
+# Attach to the session just created. Run in the current project directory
+# (agents are global via ~/.config/opencode/agent).
+#
+# The TUI goes to the background so that its pid can be recorded below. What
+# marduk tracks is the opencode process; this script is a child of the kitty
+# window's shell, so its own pid stands for the window instead — a different and
+# longer lifetime, which is the bug this shape fixes. Deliberately no `set -m`:
+# with job control on, the TUI would land in a background process group and its
+# first read of the terminal would stop it with SIGTTIN. Sharing this script's
+# process group leaves the terminal and Ctrl-C behaving as a foreground launch.
+opencode --session "$session_id" --log-level warn &
+oc_pid=$!
+oc_ticks=$(start_ticks_of "$oc_pid")
+
+# One file per session, named for the id so a stale entry is unambiguous. Written
+# after the TUI starts, because the process it describes has to exist first.
 registry_file="$registry_dir/$session_id.json"
 jq -nc \
 	--arg session "$session_id" \
@@ -111,11 +141,15 @@ jq -nc \
 	--arg agent "$AGENT" \
 	--arg dir "$project_dir" \
 	--argjson slot "$N" \
-	--argjson pid "$$" \
-	'{session_id:$session,role:$role,agent:$agent,workspace:$dir,slot:$slot,pid:$pid,started_at:(now*1000|floor)}' \
+	--argjson pid "$oc_pid" \
+	--argjson ticks "$oc_ticks" \
+	'{session_id:$session,role:$role,agent:$agent,workspace:$dir,slot:$slot,pid:$pid,start_ticks:$ticks,started_at:(now*1000|floor)}' \
 	> "$registry_file" 2>/dev/null
 
-# Attach to the session just created. Run in the current project directory
-# (agents are global via ~/.config/opencode/agent).
-opencode --session "$session_id" --log-level warn
+# An entry marduk cannot read is a session it will not show, and the failure is
+# otherwise silent — jq refuses a non-numeric field, so an unreadable /proc lands
+# here with an empty start time.
+[ -s "$registry_file" ] || echo "oc-agent: could not register this session for marduk" >&2
+
+wait "$oc_pid"
 exit $?

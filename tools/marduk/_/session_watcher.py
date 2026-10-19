@@ -3,9 +3,11 @@
 Two sources, because neither alone answers the question:
 
 - the **registry** (`~/.opencode/agents/<sessionID>.json`), written by
-  `tools/oc-agent` when a window launches. This is the only record of a window
-  that is open but idle: the service's `/api/session/active` means *executing*,
-  not *open*, so an idle agent is absent from it entirely.
+  `tools/oc-agent` once the opencode process is up. This is the only record of an
+  agent that is open but idle: the service's `/api/session/active` means
+  *executing*, not *open*, so an idle agent is absent from it entirely. Each entry
+  names the opencode process by pid **and** start time, so its lifetime is that
+  process's — not the kitty window's, which outlives it.
 - the **service**, for sessions running outside any oc-agent window.
 
 A session is shown when it is in either. Registry entries outrank the service
@@ -21,8 +23,8 @@ REGISTRY_DIR=Path.home()/".opencode"/"agents"
 def read_registry(registry_dir:Path=REGISTRY_DIR) -> dict:
 	"""Live registry entries keyed by session id, skipping stale or broken files.
 
-	A file whose launcher process is gone is stale: oc-agent removes it on exit,
-	so this covers the case where it could not (a kill, a crash).
+	A file whose process is gone is stale: oc-agent removes it on exit, so this
+	covers the case where it could not (a kill, a crash, a closed window).
 	"""
 	entries={}
 	try:
@@ -32,8 +34,7 @@ def read_registry(registry_dir:Path=REGISTRY_DIR) -> dict:
 	for path in paths:
 		try:
 			entry=json.loads(path.read_text())
-			pid=entry.get("pid")
-			if isinstance(pid,int) and not _alive(pid):
+			if not _running(entry):
 				path.unlink(missing_ok=True)
 				continue
 			session_id=entry.get("session_id")
@@ -42,6 +43,42 @@ def read_registry(registry_dir:Path=REGISTRY_DIR) -> dict:
 		except (OSError,json.JSONDecodeError,AttributeError):
 			continue
 	return entries
+
+def _running(entry:dict) -> bool:
+	"""Whether the process an entry was written for is still that same process.
+
+	`pid` on its own is not an identity. The number is handed out again as
+	processes die, and a reused one would hold a finished session on the panel for
+	as long as the unrelated process it now names goes on living. `start_ticks`
+	is what closes that: the pair names one process for as long as the machine is
+	up, which is what makes an entry's lifetime the opencode process's rather
+	than whatever inherits its pid.
+
+	An entry carrying no usable handle counts as not running. "Cannot be checked"
+	and "still running" are different claims and only one of them can be acted on;
+	a session nobody can vouch for is not one to keep on the panel.
+	"""
+	pid=entry.get("pid")
+	ticks=entry.get("start_ticks")
+	if not isinstance(pid,int) or not isinstance(ticks,int):
+		return False
+	if not _alive(pid):
+		return False
+	return _start_ticks(pid)==ticks
+
+def _start_ticks(pid:int):
+	"""Clock ticks since boot at which a process started, or None if unreadable.
+
+	Field 22 of `/proc/<pid>/stat`. The `comm` field (2) is parenthesised and may
+	contain spaces, so the line is cut after its *last* `)` before it is split —
+	cutting at the first would miscount every field behind a parenthesis in the
+	process name.
+	"""
+	try:
+		after=Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()
+		return int(after[19])
+	except (OSError,ValueError,IndexError):
+		return None
 
 def _alive(pid:int) -> bool:
 	"""Whether a process id is still running."""

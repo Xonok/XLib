@@ -10,11 +10,11 @@ produce `on_removed`, and — the subtle one — that a session the service
 reports as active *before* it appears in the session list is still picked up on
 a later scan instead of being marked known and forgotten.
 """
-import json,os,tempfile,unittest
+import json,os,subprocess,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from tools.marduk._ import service
-from tools.marduk._.session_watcher import SessionWatcher,read_registry
+from tools.marduk._.session_watcher import SessionWatcher,read_registry,_start_ticks
 
 _EMPTY_REGISTRY=Path(tempfile.gettempdir())/"marduk-test-empty-registry"
 
@@ -124,8 +124,20 @@ class TestRegistry(unittest.TestCase):
 		watcher=SessionWatcher("http://x","pw",on_new=added.append,on_removed=removed.append,poll_seconds=0.01,registry_dir=reg)
 		return watcher,added,removed
 
-	def _write(self,reg,session_id,role="secretary-1",pid=None):
-		(reg/f"{session_id}.json").write_text(json.dumps({"session_id":session_id,"role":role,"agent":role.split("-")[0],"workspace":"/w","slot":1,"pid":os.getpid() if pid is None else pid,"started_at":1}))
+	def _write(self,reg,session_id,role="secretary-1",pid=None,ticks=None,drop=()):
+		"""Write a registry entry.
+
+		`pid` and `ticks` default to this process and its own start time, which is
+		a live entry; `drop` removes fields, to write the entries a real oc-agent
+		no longer produces.
+		"""
+		entry={"session_id":session_id,"role":role,"agent":role.split("-")[0],"workspace":"/w","slot":1,
+			"pid":os.getpid() if pid is None else pid,
+			"start_ticks":_start_ticks(os.getpid()) if ticks is None else ticks,
+			"started_at":1}
+		for field in drop:
+			entry.pop(field,None)
+		(reg/f"{session_id}.json").write_text(json.dumps(entry))
 
 	def test_idle_registry_session_is_shown(self):
 		"""The regression this whole file exists for: not in /active, still shown."""
@@ -150,7 +162,7 @@ class TestRegistry(unittest.TestCase):
 			self.assertEqual(added[0]["location"]["directory"],"/w")
 
 	def test_stale_pid_file_is_reaped(self):
-		"""A killed launcher leaves its file behind; it must not linger."""
+		"""A killed opencode leaves its file behind; it must not linger."""
 		with tempfile.TemporaryDirectory() as tmp:
 			reg=Path(tmp)
 			self._write(reg,"ses_dead",pid=999999)
@@ -158,6 +170,50 @@ class TestRegistry(unittest.TestCase):
 			with patch.object(service,"active_session_ids",return_value=set()),patch.object(service,"all_sessions",return_value=[]):
 				self.assertEqual(watcher.run_once(),set())
 			self.assertFalse((reg/"ses_dead.json").exists())
+
+	def test_recycled_pid_is_reaped(self):
+		"""The regression behind `start_ticks`: a live pid is not a live session.
+
+		The number belongs to whatever process holds it now. An unrelated long-lived
+		process reusing a dead agent's pid would otherwise keep that agent on the
+		panel until it exits itself, which is the window-bound lifetime all over
+		again with a different cause.
+		"""
+		with tempfile.TemporaryDirectory() as tmp:
+			reg=Path(tmp)
+			self._write(reg,"ses_recycled",ticks=_start_ticks(os.getpid())+1)
+			watcher,added,removed=self._watcher(reg)
+			with patch.object(service,"active_session_ids",return_value=set()),patch.object(service,"all_sessions",return_value=[]):
+				self.assertEqual(watcher.run_once(),set())
+			self.assertFalse((reg/"ses_recycled.json").exists())
+
+	def test_entry_without_a_usable_pid_is_reaped(self):
+		"""`isinstance(pid,int) and not _alive(pid)` used to skip the check entirely.
+
+		An entry whose pid is missing or the wrong type fell through to "keep", so it
+		was never reaped at all — the one leak no kill could clear.
+		"""
+		for field in ("pid","start_ticks"):
+			with self.subTest(missing=field),tempfile.TemporaryDirectory() as tmp:
+				reg=Path(tmp)
+				self._write(reg,f"ses_no_{field}",drop=(field,))
+				with patch.object(service,"active_session_ids",return_value=set()),patch.object(service,"all_sessions",return_value=[]):
+					self.assertEqual(self._watcher(reg)[0].run_once(),set())
+				self.assertFalse((reg/f"ses_no_{field}.json").exists())
+
+	def test_entry_from_the_pre_fix_launcher_is_reaped(self):
+		"""An entry oc-agent wrote before this fix names the kitty window's shell.
+
+		Nothing in it is a usable handle any more, so it goes rather than sitting on
+		the panel under a pid that now means a live bash.
+		"""
+		with tempfile.TemporaryDirectory() as tmp:
+			reg=Path(tmp)
+			self._write(reg,"ses_legacy",drop=("start_ticks",))
+			watcher,added,removed=self._watcher(reg)
+			with patch.object(service,"active_session_ids",return_value=set()),patch.object(service,"all_sessions",return_value=[]):
+				watcher.run_once()
+			self.assertFalse((reg/"ses_legacy.json").exists())
 
 	def test_malformed_entry_is_skipped(self):
 		with tempfile.TemporaryDirectory() as tmp:
@@ -217,8 +273,29 @@ class TestReadRegistry(unittest.TestCase):
 	def test_entry_without_session_id_is_dropped(self):
 		with tempfile.TemporaryDirectory() as tmp:
 			reg=Path(tmp)
-			(reg/"x.json").write_text(json.dumps({"role":"nope","pid":os.getpid()}))
+			(reg/"x.json").write_text(json.dumps({"role":"nope","pid":os.getpid(),"start_ticks":_start_ticks(os.getpid())}))
 			self.assertEqual(read_registry(reg),{})
+
+class TestStartTicks(unittest.TestCase):
+	"""Field 22 is behind a parenthesised `comm`, which is the whole difficulty."""
+
+	def test_reads_this_process(self):
+		self.assertIsInstance(_start_ticks(os.getpid()),int)
+
+	def test_is_stable_across_calls(self):
+		self.assertEqual(_start_ticks(os.getpid()),_start_ticks(os.getpid()))
+
+	def test_distinguishes_a_different_process(self):
+		"""The value the check rests on: two live processes, two answers."""
+		child=subprocess.Popen(["sleep","5"])
+		try:
+			self.assertNotEqual(_start_ticks(child.pid),_start_ticks(os.getpid()))
+		finally:
+			child.kill()
+			child.wait()
+
+	def test_missing_process_is_none(self):
+		self.assertIsNone(_start_ticks(999999))
 
 class TestEmptyAndFailedScans(unittest.TestCase):
 	def test_nothing_running_announces_nothing(self):
@@ -243,7 +320,7 @@ class TestEmptyAndFailedScans(unittest.TestCase):
 		"""The registry is local, so a dead service must not empty the panel."""
 		with tempfile.TemporaryDirectory() as tmp:
 			reg=Path(tmp)
-			(reg/"ses_r1.json").write_text(json.dumps({"session_id":"ses_r1","role":"reviewer-1","agent":"reviewer","workspace":"/w","slot":1,"pid":os.getpid()}))
+			(reg/"ses_r1.json").write_text(json.dumps({"session_id":"ses_r1","role":"reviewer-1","agent":"reviewer","workspace":"/w","slot":1,"pid":os.getpid(),"start_ticks":_start_ticks(os.getpid())}))
 			watcher=SessionWatcher("http://x","pw",on_new=lambda s:None,on_removed=lambda s:None,registry_dir=reg)
 			with patch.object(service,"active_session_ids",return_value=None),patch.object(service,"all_sessions",return_value=None):
 				self.assertEqual(watcher.run_once(),{"ses_r1"})
