@@ -228,6 +228,18 @@ needed when there is no due date.
 	excluded path now says **"nothing checked"** instead of printing `clean`.
 	**Eight new tests; the suite is 98 green.** The gate's output at the
 	repository root is unchanged.
+- [ ] **#145 — agent-coord: check-clean reports clean for a dirty file in a
+	worktree** (by decision needed, medium) — category: XLib. Board epiq
+	`8FVW49J`, open since 2026-10-01 and unassigned. `nearest_git`
+	(`tools/agent-coord.py:791`) requires `.git` to be a **directory**, so a path
+	inside a worktree walks past the worktree root to the parent repository; the
+	relative path then never matches the parent's dirty list, and the guard
+	reports `clean` for a file that is dirty. **The same shape as the linter
+	blind spot fixed in PR #44, in different code** — xlint never used
+	`nearest_git`, so fixing it there would not have fixed the linter, and
+	fixing the linter did not fix this. A guard that says "clean" about a dirty
+	file is the failure mode the coordinator exists to prevent: two agents edit
+	the same file and neither is told.
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
