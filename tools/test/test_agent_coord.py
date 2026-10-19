@@ -157,5 +157,107 @@ class TestSessionIdentity(CoordTestCase):
 	def test_no_opencode_process_at_all_is_no_answer(self):
 		self.assertIsNone(self.tool.pick_opencode_pid([(300, "bash", ["/bin/bash"])]))
 
+class TestNearestGit(CoordTestCase):
+	"""A worktree's `.git` is a file, and a lookup that recognises only a
+	directory walks past it to the repository that contains it."""
+
+	def test_a_worktree_root_is_a_checkout_of_its_own(self):
+		outer = Path(self.folder.name) / "outer"
+		work = outer / ".work" / "ticket"
+		work.mkdir(parents=True)
+		(outer / ".git").mkdir()
+		(work / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+		self.assertEqual(self.tool.nearest_git(str(work / "code.py")), str(work))
+
+	def test_a_plain_checkout_is_still_found(self):
+		outer = Path(self.folder.name) / "outer"
+		(outer / ".git").mkdir(parents=True)
+		self.assertEqual(self.tool.nearest_git(str(outer / "code.py")), str(outer))
+
+	def test_a_path_outside_any_checkout_has_no_repository(self):
+		loose = Path(self.folder.name) / "loose"
+		loose.mkdir()
+		self.assertIsNone(self.tool.nearest_git(str(loose / "code.py")))
+
+class TestCheckClean(CoordTestCase):
+	"""`check-clean` is the guard that stops an agent editing a file another
+	agent has edited, and in a worktree it reported clean for a dirty file."""
+
+	def _repo(self):
+		repo = Path(self.folder.name) / "repo"
+		repo.mkdir()
+		self._git(repo, "init", "-q")
+		self._git(repo, "config", "user.email", "t@example.com")
+		self._git(repo, "config", "user.name", "T")
+		(repo / ".gitignore").write_text(".work/\n", encoding="utf-8")
+		(repo / "code.py").write_text("x = 1\n", encoding="utf-8")
+		self._git(repo, "add", ".gitignore", "code.py")
+		self._git(repo, "commit", "-qm", "first")
+		return repo
+
+	def _git(self, repo, *args):
+		result = subprocess.run(["git", "-C", str(repo)] + list(args), capture_output=True, text=True)
+		if result.returncode != 0:
+			raise AssertionError("git %s failed: %s" % (" ".join(args), result.stderr))
+		return result.stdout
+
+	def test_a_dirty_file_in_a_worktree_is_reported_dirty(self):
+		repo = self._repo()
+		work = repo / ".work" / "wt"
+		self._git(repo, "worktree", "add", "-q", str(work), "-b", "side")
+		(work / "code.py").write_text("x = 2\n", encoding="utf-8")
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			with self.assertRaises(SystemExit) as raised:
+				self.tool.cmd_check_clean(argparse.Namespace(paths=[str(work / "code.py")], repo=None))
+		self.assertEqual(raised.exception.code, 1)
+		self.assertIn("dirty", out.getvalue())
+
+	def test_a_clean_file_in_a_worktree_is_reported_clean(self):
+		repo = self._repo()
+		work = repo / ".work" / "wt"
+		self._git(repo, "worktree", "add", "-q", str(work), "-b", "side")
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			self.tool.cmd_check_clean(argparse.Namespace(paths=[str(work / "code.py")], repo=None))
+		self.assertIn("clean", out.getvalue())
+
+	def test_a_file_in_each_of_two_checkouts_is_checked_against_its_own(self):
+		repo = self._repo()
+		work = repo / ".work" / "wt"
+		self._git(repo, "worktree", "add", "-q", str(work), "-b", "side")
+		(repo / "code.py").write_text("x = 9\n", encoding="utf-8")
+		(work / "code.py").write_text("x = 2\n", encoding="utf-8")
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			with self.assertRaises(SystemExit) as raised:
+				self.tool.cmd_check_clean(argparse.Namespace(paths=[str(repo / "code.py"), str(work / "code.py")], repo=None))
+		self.assertEqual(raised.exception.code, 1)
+		self.assertIn(str(repo / "code.py"), out.getvalue())
+		self.assertIn(str(work / "code.py"), out.getvalue())
+
+	def test_a_file_behind_a_symlink_is_reported_dirty(self):
+		repo = self._repo()
+		(repo / "real.py").write_text("x = 1\n", encoding="utf-8")
+		self._git(repo, "add", "real.py")
+		self._git(repo, "commit", "-qm", "second")
+		(repo / "link.py").symlink_to(repo / "real.py")
+		self._git(repo, "add", "link.py")
+		self._git(repo, "commit", "-qm", "third")
+		(repo / "real.py").write_text("x = 3\n", encoding="utf-8")
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			with self.assertRaises(SystemExit) as raised:
+				self.tool.cmd_check_clean(argparse.Namespace(paths=[str(repo / "link.py")], repo=None))
+		self.assertEqual(raised.exception.code, 1)
+		self.assertIn("dirty", out.getvalue())
+
+	def test_a_clean_file_is_reported_clean(self):
+		repo = self._repo()
+		out = io.StringIO()
+		with contextlib.redirect_stdout(out):
+			self.tool.cmd_check_clean(argparse.Namespace(paths=[str(repo / "code.py")], repo=None))
+		self.assertIn("clean", out.getvalue())
+
 if __name__ == "__main__":
 	unittest.main()
