@@ -131,7 +131,13 @@ needed when there is no due date.
 	#113's extension point first, or lands inside `xlint.py` against that
 	ticket's reasoning. **Neither was built: both are programmer work**, and the
 	human's *"a mechanized check could also be good"* reads as an endorsement of
-	the idea rather than an instruction to implement it.
+	the idea rather than an instruction to implement it. **The target grew on
+	2026-10-19: the ban now covers `git reset --hard` and `git reset --merge`
+	as well, so a guard that matches only `git checkout` would miss the two
+	forms that actually destroy work** — and plain `git reset` is *not* on the
+	list, on the measured grounds that it never touches the working tree and only
+	resets the index. A guard matching `git reset` as a prefix would be wrong:
+	it would block the safe `--soft` and path forms too.
 - [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
 	cursor** (by decision needed, high) — measured, not inferred.
 	`cmd_news` → `my_id()` → `migrate_ids()` (`tools/agent-coord.py:325`) deletes
@@ -179,6 +185,20 @@ needed when there is no due date.
 	source mtimes fs against fs, never against a wall clock, because a watcher that
 	misses a change is worse than no watcher — it is trusted, so nothing checks it
 	by hand.
+- [ ] **#143 — xhttp: gzip regardless of Accept-Encoding** (by decision needed, medium) —
+	board: epiq `BFNRBG7` (Todo). **The only red in xhttp**: `send_response_full`
+	compresses whenever `compress=True`, which is the default, so a client that
+	sent no `Accept-Encoding`, an empty one, or `gzip;q=0` is answered with gzip
+	anyway. `ContentNegotiationTest` (`dev/xhttp/test/test_response.py:282`) is
+	the marker — six failures, deliberately not fixed, per the 1_0_1 release note
+	(epi `VC9QWYY`). **The shape is already sketched there**: reuse the
+	thread-local pattern `closing` uses — `wrap_handler` reads the header off the
+	request, `send_response_full` consults it, no public signature change. **One
+	case needs a ruling rather than an assumption**: what `send_response_full`
+	should do when it is called outside any request. **Filed 2026-10-19 because
+	`AC9YJYQ`'s description claimed the six failures "are filed separately" and
+	they were not** — no ticket and no taskview task existed, which is how a
+	known defect goes quiet.
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
