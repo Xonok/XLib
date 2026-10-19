@@ -124,11 +124,14 @@ session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 # The TUI goes to the background so that its pid can be recorded below. What
 # marduk tracks is the opencode process; this script is a child of the kitty
 # window's shell, so its own pid stands for the window instead — a different and
-# longer lifetime, which is the bug this shape fixes. Deliberately no `set -m`:
-# with job control on, the TUI would land in a background process group and its
-# first read of the terminal would stop it with SIGTTIN. Sharing this script's
-# process group leaves the terminal and Ctrl-C behaving as a foreground launch.
-opencode --session "$session_id" --log-level warn &
+# longer lifetime, which is the bug this shape fixes.
+#
+# An asynchronous command is handed /dev/null for stdin when job control is off,
+# which is exactly this script: the TUI opens, draws, and never sees a keystroke,
+# while the terminal echoes the typing over its own output. So the terminal is
+# kept on a spare descriptor above and handed back explicitly.
+exec 3<&0
+opencode --session "$session_id" --log-level warn <&3 &
 oc_pid=$!
 oc_ticks=$(start_ticks_of "$oc_pid")
 
