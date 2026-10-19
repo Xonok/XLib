@@ -150,6 +150,35 @@ needed when there is no due date.
 	`doc/style/*.md` (`:20`). **Consequence for today's work: the `git checkout`
 	ban is written but cannot propagate by the documented mechanism until this is
 	fixed.** Programmer work, not filed on the board — human's call.
+- [ ] **#139 — xlint: add html support** (by decision needed, medium) — board: epiq
+	`YFJZRYC` (Todo). **Ruled 2026-10-19, ready to implement.** Three html-specific
+	rules on top of the generic ones: **unclosed tags (strict — every non-void tag
+	must be closed explicitly)**, **closing tags that shouldn't be** (all three
+	readings: a closer for a void element, a closer with no matching open, and a
+	closer that does not match the innermost open), and **bad indentation** (both
+	depth-mismatch and spaces-instead-of-tabs, under separate flags, with depth
+	measured in the file's own unit). **Code in `tools/xlint/_html.py`**, imported by
+	`xlint.py`; `dev/xhttp/compare/web/` is already in `.xlintignore` so the repo's
+	own one html file does not turn `xlint .` red. **Measured on Traveller's 27 html
+	files: unclosed 0, stray 0, depth 773 — 588 of them one systematic off-by-one —
+	spaces 0, trailing whitespace 3, double blank 2, final newline 0.** The corpus
+	is clean on structure, so the two structural rules need their own fixtures
+	rather than the acceptance test; Mallesne's one html file is clean on
+	everything.
+- [ ] **#140 — New XLib html-bundling library + watch option** (by decision needed,
+	medium) — board: epiq `WAH4BYM` (the library) + `6BGG7TH` (the watch option),
+	both Todo. **A separate library, by the human's own ruling 2026-10-19**: *"I
+	guess the bundler is also an XLib issue."* Source is Space-Traveller's
+	`server/Misc/html.py` (210 lines), which expands `page_insert` components and
+	concatenates page scripts into `_cache/`. **Three findings recorded on the
+	ticket:** a dead near-duplicate at `Space-Traveller/lib/HTML.py` (212 lines, no
+	longer imports); `load()` and `load_html()` are two drifted copies of the same
+	logic; and the traveller-specific parts — `js/pageinit.js`, the `/main.js` in
+	`<head>` convention, `html/comp/`, `class="page_insert"` — are convention, not
+	code, and have to become configuration. **The watch option's trap:** compare
+	source mtimes fs against fs, never against a wall clock, because a watcher that
+	misses a change is worse than no watcher — it is trusted, so nothing checks it
+	by hand.
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is

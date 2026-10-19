@@ -12,3 +12,9 @@ tools/pybundle/test/fixtures/
 
 # .work/ holds per-ticket worktrees, one per ticket — not part of the project.
 .work/
+
+# dev/xhttp/compare/web/ holds the websocket RFC comparison material, and with it
+# the only .html file in this repo. It is 4-space indented and not code the project
+# owns, so the html rules would report it for its indent unit rather than for
+# anything about it. The narrow path: the 10 .py files beside it stay linted.
+dev/xhttp/compare/web/
