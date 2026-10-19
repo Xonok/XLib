@@ -20,39 +20,42 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `383d8d5` (2026-10-19), **snapshot taken 2026-10-19**, **in
-sync with `origin/master`** — **PR #44 is merged and pushed, and it carries two
-fixes: `XP56NNC` (the linter inside a worktree) and `2X3PZT3` (the gate that
-never ran there)**. PR #42 (`YFJZRYC`, the html lint implementation) is merged
-and pushed, so xlint lints `.html` on master and the human can run it over
-Traveller. PR #36 (`YFJZRYC`, the html lint *rules*) went in before it, and so
-did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state files).
-Fourteen board tickets are closed, and the Traveller acceptance test has been
-run: the bundle exists at `Space-Traveller/server-bundled.py` and does not run.
+Basis: `master` at `806253e` (2026-10-19), **snapshot taken 2026-10-19**, **in
+sync with `origin/master`** — **PR #47 is merged and pushed, and it carries the
+two coordination fixes: `K93Z39B` (the `news` command) and `8FVW49J` (the
+`check-clean` guard)**. PR #44 is merged and pushed too, and it carries two
+fixes of its own: `XP56NNC` (the linter inside a worktree) and `2X3PZT3` (the
+gate that never ran there). PR #42 (`YFJZRYC`, the html lint implementation) is
+merged and pushed, so xlint lints `.html` on master and the human can run it
+over Traveller. PR #36 (`YFJZRYC`, the html lint *rules*) went in before it, and
+so did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state
+files). Fourteen board tickets are closed, and the Traveller acceptance test has
+been run: the bundle exists at `Space-Traveller/server-bundled.py` and does not
+run.
 
-**PR #47 is open and awaits the human's review: `agent-coord.py` had two
-defects that made the coordination tool lie, and both are fixed.** The
-`news` command — the only channel that carries a rule change out to the
-agents that have not read the file — reported "no new guideline changes"
-for every workspace and **took the claims of every agent on the machine with
-it** when it ran. Four breaks, all measured against the live tree: the
-workspace resolved to `$HOME` (under opencode 2 the process that carries a
-session's directory is the *client*, and the tool was asking the shared
-background service instead, which is the same process for every session on
-the machine); the migration dropped every claim whose owner was not a key in
-`ids.json`, and a claim is owned by an agent id while `ids.json` is keyed by
-session key, so the two key spaces never met; the rule files were globbed at
-`style/*.md` while XLib keeps them at `doc/style/*.md`; and the session key
-was the service's pid, so every session shared one identity, one notes file
-and one rule cursor. **Measured before and after, against a copy of the live
-`.agents`: workspace `/home/xonok` → `/storage/GitHub/Fun/XLib`; rule files
-0 → 41; claims after a `news` run wiped → intact.** A run that finds no rule
-files at all now says `nothing checked`, which is not the same answer as
-"no new guideline changes". The second defect is `check-clean` reporting
-**clean** for a dirty file inside a worktree — the guard that stops two
-agents editing one file, failing open. **21 new tests, each fix
-mutation-checked.** **Not merged by the agent:** this changes a live
-machine's coordination state, so the human reviews it.
+**`agent-coord.py` had two defects that made the coordination tool report
+something untrue, and both are fixed and on master.** The `news` command — the
+only channel that carries a rule change out to the agents that have not read
+the file — reported "no new guideline changes" for every workspace and **took
+the claims of every agent on the machine with it** when it ran. Four breaks, all
+measured against the live tree: the workspace resolved to `$HOME` (under
+opencode 2 the process that carries a session's directory is the *client*, and
+the tool was asking the shared background service instead, which is the same
+process for every session on the machine); the migration dropped every claim
+whose owner was not a key in `ids.json`, and a claim is owned by an agent id
+while `ids.json` is keyed by session key, so the two key spaces never met; the
+rule files were globbed at `style/*.md` while XLib keeps them at
+`doc/style/*.md`; and the session key was the service's pid, so every session
+shared one identity, one notes file and one rule cursor. **Measured before and
+after, against a copy of the live `.agents`: workspace `/home/xonok` →
+`/storage/GitHub/Fun/XLib`; rule files 0 → 41; claims after a `news` run wiped
+→ intact.** A run that finds no rule files at all now says `nothing checked`,
+which is not the same answer as "no new guideline changes". The second defect
+is `check-clean` reporting **clean** for a dirty file inside a worktree — the
+guard that stops two agents editing one file, failing open. **21 new tests,
+each fix mutation-checked, and the suite is green on master.** **Verified on
+the live state after the merge:** `news` reports the 41 rule files and the
+machine's claims are still there.
 
 **Task updates 2026-10-19:** #117 (xhttp release survival) marked done — the released
 `xhttp_1_0_0.py` survives Space-Traveller use. #111 (Discord access design) marked done;
@@ -379,17 +382,17 @@ Also standing, from the abandoned single-pass attempt:
 	them, and because the near-miss is the clearest possible demonstration of why
 	`checkout` is the banned one.
 - **`agent-coord.py news` destroyed every agent's claims, and the rule changes
-	it exists to announce never arrived. FIXED, in review: PR #47. #142, and
-	`8FVW49J` for the guard beside it.** The four breaks and what they
-	measure are in the Snapshot above. What is left of it here is the two
-	things the fix does not do on its own. **The stale identity lingers:**
-	`ids.json` still holds `pid-15395` → `xonok/secretary-1`, the shared
-	service's pid, and the claims under it are left alone deliberately — a
-	live session is still using that id, and moving its claims under the new
-	one would pull the rug from under it. It is reaped when that pid dies.
-	**`$HOME/.agents/` still exists**, and a session whose window was opened in
-	the home directory resolves there, which is correct for that window and
-	not something to delete from outside the repo. → `tools/agent-coord.py`,
+	it exists to announce never arrived. FIXED and on master: PR #47, commits
+	`36554c9` and `806253e`. #142, and `8FVW49J` for the guard beside it.**
+	The four breaks and what they measure are in the Snapshot above. What is
+	left of it here is the two things the fix does not do on its own. **The
+	stale identity lingers:** `ids.json` still holds `pid-15395` →
+	`xonok/secretary-1`, the shared service's pid, and the claims under it are
+	left alone deliberately — a live session is still using that id, and moving
+	its claims under the new one would pull the rug from under it. It is reaped
+	when that pid dies. **`$HOME/.agents/` still exists**, and a session whose
+	window was opened in the home directory resolves there, which is correct for
+	that window and not something to delete from outside the repo. → `tools/agent-coord.py`,
 	taskview `#142` and `#145`
 
 - **Three bundler tickets are now closed, and one of them was closed for a reason

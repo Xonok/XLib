@@ -138,9 +138,9 @@ needed when there is no due date.
 	list, on the measured grounds that it never touches the working tree and only
 	resets the index. A guard matching `git reset` as a prefix would be wrong:
 	it would block the safe `--soft` and path forms too.
-- [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
-	cursor** (by decision needed, high) — **FIXED, in review: PR #47, commit
-	`cc423ae`.** Board: epiq `K93Z39B` (In progress, assigned).
+- [x] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
+	cursor** (done 2026-10-19, high) — **FIXED and on master: PR #47, commit
+	`36554c9`.** Board: epiq `K93Z39B` (Done).
 	**Four breaks, all measured against the live tree, not inferred.** The
 	ticket named three; the fourth was found while checking the first.
 	**(1) The workspace resolved to `$HOME`** — `workspace_root()` asks the
@@ -174,11 +174,11 @@ needed when there is no due date.
 	network, against a temporary state folder and never the live `.agents`; each
 	fix mutation-checked, and two mutants killed by the wrong test and one
 	that survived were fixed rather than accepted.
-	**Left for the human:** the merge. This changes a live machine's
-	coordination state, so it is not merged by the agent. The stale
-	`pid-15395` entry in `ids.json` is left alone on purpose — a live session
-	is still using that id, and moving its claims would pull the rug from
-	under it; it is reaped when that pid dies.
+	**Left for the human: nothing.** The stale `pid-15395` entry in
+	`ids.json` is left alone on purpose — a live session is still using that
+	id, and moving its claims would pull the rug from under it; it is reaped
+	when that pid dies. **Verified on the live state after the merge:** `news`
+	reports the 41 rule files, and the machine's claims are still there.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
@@ -251,9 +251,9 @@ needed when there is no due date.
 	excluded path now says **"nothing checked"** instead of printing `clean`.
 	**Eight new tests; the suite is 98 green.** The gate's output at the
 	repository root is unchanged.
-- [ ] **#145 — agent-coord: check-clean reports clean for a dirty file in a
-	worktree** (by decision needed, medium) — category: XLib. Board epiq
-	`8FVW49J`, open since 2026-10-01 and unassigned. `nearest_git`
+- [x] **#145 — agent-coord: check-clean reports clean for a dirty file in a
+	worktree** (done 2026-10-19, medium) — category: XLib. Board epiq
+	`8FVW49J`, open since 2026-10-01 and unassigned until this session. `nearest_git`
 	(`tools/agent-coord.py:791`) requires `.git` to be a **directory**, so a path
 	inside a worktree walks past the worktree root to the parent repository; the
 	relative path then never matches the parent's dirty list, and the guard
@@ -262,8 +262,8 @@ needed when there is no due date.
 	`nearest_git`, so fixing it there would not have fixed the linter, and
 	fixing the linter did not fix this. A guard that says "clean" about a dirty
 	file is the failure mode the coordinator exists to prevent: two agents edit
-	the same file and neither is told. **FIXED, in review: PR #47, commit
-	`92bd6cd`** (board epiq `8FVW49J`, now assigned and In progress). The
+	the same file and neither is told. **FIXED and on master: PR #47, commit
+	`806253e`** (board epiq `8FVW49J`, Done). The
 	walk stops at the checkout that owns the path, a worktree's `.git` counts
 	whether it is a file or a directory, and a file behind a symlink is compared
 	under the tracked name as well (`STATUS.md` → `personal/<person>/STATUS.md`).
