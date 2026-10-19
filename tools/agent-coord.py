@@ -15,8 +15,15 @@ BATCH_FLUSH_N = 3
 BATCH_FLUSH_AGE = 60
 
 def rule_files(ws_root):
+	"""The rule files of a workspace.
+
+	XLib keeps its style rules in `doc/style/`, and the pointer table in `AGENTS.md`
+	names that folder, so a glob of `style/` alone finds nothing: the announcement
+	that carries the rules out to other agents had no rules to announce.
+	"""
 	paths = [os.path.join(ws_root, "AGENTS.md")]
 	paths += sorted(glob.glob(os.path.join(ws_root, ".opencode", "agent", "*.md")))
+	paths += sorted(glob.glob(os.path.join(ws_root, "doc", "style", "*.md")))
 	paths += sorted(glob.glob(os.path.join(ws_root, "style", "*.md")))
 	return paths
 
@@ -185,7 +192,39 @@ def locked():
 		finally:
 			fcntl.flock(f, fcntl.LOCK_UN)
 
+def proc_argv(pid):
+	"""The argument vector of a process, as a list of strings."""
+	try:
+		with open("/proc/%s/cmdline" % pid, "rb") as f:
+			return f.read().decode("utf-8", "replace").split("\0")
+	except OSError:
+		return []
+
+def pick_opencode_pid(entries):
+	"""Choose the opencode client among ancestor processes, nearest first.
+
+	`entries` is a list of (pid, comm, argv). Under opencode 2 one service runs for
+	the whole machine and every session's tool shell is its child, while the client
+	that carries the session is its parent. The service is the wrong process to ask:
+	it is the same one for every session on the machine, it works out of the home
+	directory, and it gives every session one identity. So the walk steps over it
+	and settles on the client, and takes the service only when there is no client
+	to be had.
+	"""
+	service = None
+	for pid, comm, argv in entries:
+		if comm != "opencode":
+			continue
+		if argv[1:2] == ["serve"]:
+			if service is None:
+				service = pid
+			continue
+		return pid
+	return service
+
 def opencode_pid():
+	"""The pid of the opencode client that owns this session, or None."""
+	entries = []
 	pid = os.getpid()
 	while True:
 		with open("/proc/%s/stat" % pid) as f:
@@ -193,12 +232,19 @@ def opencode_pid():
 		comm = parts[1].strip("()")
 		ppid = int(parts[3])
 		if comm == "opencode":
-			return pid
+			entries.append((pid, comm, proc_argv(pid)))
 		if pid in (1, ppid):
-			return None
+			break
 		pid = ppid
+	return pick_opencode_pid(entries)
 
 def session_key():
+	"""The key that stands for this session in `ids.json`.
+
+	Unless `OPENCODE_AGENT_ID` names one, it is the client's pid: two windows are
+	two sessions, and one window keeps one identity across a `/new`, because the
+	instance is the window and the notes file belongs to it.
+	"""
 	name = os.environ.get("OPENCODE_AGENT_ID")
 	if name:
 		return name
@@ -208,7 +254,14 @@ def session_key():
 def workspace_root():
 	"""Workspace folder of this session: nearest ancestor of the opencode
 	process's cwd that has a .agents dir, else this process's cwd ancestry,
-	else ROOT."""
+	else ROOT.
+
+	The opencode process is the client, which is the process that carries the
+	session's directory. Under opencode 1 the client *was* that process; under
+	opencode 2 the shared service sits between the client and the shell, and it
+	works out of the home directory, so asking it put every session in the same
+	place and found no rules there.
+	"""
 	start = ROOT
 	pid = opencode_pid()
 	if pid:
@@ -288,27 +341,31 @@ def allocate_instance(role, tag, ids):
 def migrate_ids():
 	"""Upgrade old-format ids, claims, and cursors to new role-N format.
 	Old slot-based IDs (workspace/a1) are simply dropped -- fresh start per plan."""
-	tag = ws_tag()
 	ids = load(IDS, {})
 	changed = False
 	# Remove old slot-based entries (workspace/a1, workspace/a2, etc.)
 	old_slots = {k for k, v in ids.items() if "/" in v and v.split("/", 1)[1].startswith("a") and v.split("/", 1)[1][1:].isdigit()}
+	dropped = {ids[k] for k in old_slots}
 	for k in old_slots:
 		del ids[k]
 		changed = True
 	if changed:
 		save(IDS, ids)
-	# Clean claims and cursors of old slot references
+	# Clean claims and cursors of the old slot references, and of nothing else.
+	# A claim is owned by an agent id while `ids.json` is keyed by session key, so
+	# the two key spaces never meet: dropping every claim whose owner is not a
+	# session key dropped every claim there was. `news` runs at session start, so
+	# that is where the claims of the whole machine went.
 	claims = load(CLAIMS, {})
 	cursors = load(RULE_CURSOR, {})
 	changed_c = False
 	changed_cu = False
 	for k in list(claims.keys()):
-		if k not in ids:
+		if k in dropped:
 			claims.pop(k, None)
 			changed_c = True
 	for k in list(cursors.keys()):
-		if k not in ids:
+		if k in dropped:
 			cursors.pop(k, None)
 			changed_cu = True
 	if changed_c:
@@ -734,9 +791,16 @@ def cmd_ctx(args):
 def cmd_news(args):
 	agent = my_id()
 	with locked():
+		ws = workspace_root()
 		seen = load(RULE_CURSOR, {}).get(agent, {})
-		files = [p for p in rule_files(workspace_root()) if file_hash(p) is not None]
+		files = [p for p in rule_files(ws) if file_hash(p) is not None]
 		changed = [p for p in files if file_hash(p) != seen.get(p)]
+		if not files:
+			# A run that checked nothing must not read like a run that found no
+			# changes. The first is a broken lookup, the second is the answer, and
+			# an agent reading "no new guideline changes" stops looking.
+			print("no rule files found in %s — nothing checked" % ws)
+			return
 		if args.status:
 			print("not caught up" if changed else "caught up")
 		else:
