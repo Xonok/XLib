@@ -139,23 +139,46 @@ needed when there is no due date.
 	resets the index. A guard matching `git reset` as a prefix would be wrong:
 	it would block the safe `--soft` and path forms too.
 - [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
-	cursor** (by decision needed, high) — measured, not inferred.
-	`cmd_news` → `my_id()` → `migrate_ids()` (`tools/agent-coord.py:325`) deletes
-	any claim whose owner is not a key in `ids.json` (`:306-309`). **`ids.json` is
-	keyed by `session_key()` (`pid-32731`); `claims.json` is keyed by agent id
-	(`xonok/unknown-1`) — the key spaces can never intersect, so every claim is
-	deleted.** The same loop empties `rule-cursor.json` (`:310-313`). Repro:
-	claim a file (1 owner) → `news --status` → 0 owners; `status`, `check-clean`
-	and `release` are clean. **Coordination holds only between an agent's `claim`
-	and its next `news`** — and `news` is what agents run at session start. Two
-	more breaks in the same command, found while checking the first:
-	`workspace_root()` resolves to `/home/xonok` for any session launched from
-	`$HOME` (`$HOME/.agents` exists, so the documented walk finds it first), so
-	`rule_files()` matches nothing and "no new guideline changes" is guaranteed;
-	and `rule_files()` globs `style/*.md` while XLib's rules live at
-	`doc/style/*.md` (`:20`). **Consequence for today's work: the `git checkout`
-	ban is written but cannot propagate by the documented mechanism until this is
-	fixed.** Programmer work, not filed on the board — human's call.
+	cursor** (by decision needed, high) — **FIXED, in review: PR #47, commit
+	`cc423ae`.** Board: epiq `K93Z39B` (In progress, assigned).
+	**Four breaks, all measured against the live tree, not inferred.** The
+	ticket named three; the fourth was found while checking the first.
+	**(1) The workspace resolved to `$HOME`** — `workspace_root()` asks the
+	opencode process for its directory, and under opencode 2 that process is the
+	shared background service, whose cwd is the home directory — and it is the
+	*same* process for every session on the machine, because every session's
+	shell descends from it. The client is the process that carries the
+	session's directory, so the walk now steps over the service and settles on
+	the client. **Measured: `/home/xonok` → `/storage/GitHub/Fun/XLib`.**
+	**(2) `news` wiped the claims** — `cmd_news` → `my_id()` → `migrate_ids()`
+	deleted every claim whose owner was not a key in `ids.json`; a claim is
+	owned by an *agent id* and `ids.json` is keyed by *session key*, so the two
+	key spaces never meet and every claim matched. The migration now drops the
+	claims of the old slot-based ids it actually removes, and nothing else.
+	**Measured: 0 owners after a `news` run → intact.**
+	**(3) `rule_files()` globbed `style/*.md`** while XLib's rules live at
+	`doc/style/*.md` — the folder `AGENTS.md` itself points at. **Measured: 0
+	rule files found → 41.**
+	**(4) The session key was the service's pid**, so every session on the
+	machine shared one identity, one notes file and one rule cursor. It is the
+	*client's* pid now: two windows are two sessions, and one window keeps one
+	identity across a `/new` — which is the continuity the human asked for when
+	they said "I'll use /new" and expected the state to survive. The agent id
+	becomes the real workspace name (`XLib/secretary-1`, not
+	`xonok/secretary-1` — the home directory's name was never a workspace).
+	**A fifth thing, about the answer rather than the lookup:** a run that finds
+	no rule files at all now prints `nothing checked`, which is not the same
+	answer as `no new guideline changes` — the first is a broken lookup, the
+	second is the answer, and an agent reading the second stops looking.
+	**13 tests in `tools/test/test_agent_coord.py`**, stdlib `unittest`, no
+	network, against a temporary state folder and never the live `.agents`; each
+	fix mutation-checked, and two mutants killed by the wrong test and one
+	that survived were fixed rather than accepted.
+	**Left for the human:** the merge. This changes a live machine's
+	coordination state, so it is not merged by the agent. The stale
+	`pid-15395` entry in `ids.json` is left alone on purpose — a live session
+	is still using that id, and moving its claims would pull the rug from
+	under it; it is reaped when that pid dies.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
@@ -239,7 +262,18 @@ needed when there is no due date.
 	`nearest_git`, so fixing it there would not have fixed the linter, and
 	fixing the linter did not fix this. A guard that says "clean" about a dirty
 	file is the failure mode the coordinator exists to prevent: two agents edit
-	the same file and neither is told.
+	the same file and neither is told. **FIXED, in review: PR #47, commit
+	`92bd6cd`** (board epiq `8FVW49J`, now assigned and In progress). The
+	walk stops at the checkout that owns the path, a worktree's `.git` counts
+	whether it is a file or a directory, and a file behind a symlink is compared
+	under the tracked name as well (`STATUS.md` → `personal/<person>/STATUS.md`).
+	**One consequence to say out loud:** with a worktree resolving to its own
+	checkout, a check naming a file in the worktree *and* a file in the parent
+	names two checkouts — the old code refused that outright ("paths span
+	multiple repos"), which is the failure `STATUS.md` recorded on 2026-10-01
+	and `.agents/shared-notes.md` says "did not reproduce". Each checkout is now
+	checked against its own status, and the path printed says which one it is.
+	**8 more tests; the suite is 21.**
 - [ ] **#138 — Set up Discord access for agents (bot token, permissions, channel bindings)** (by decision needed, high) — category: agents. Follows from #111 (how it would work); now needs actual bot creation, token management, and channel/role bindings for the agent workflow.
 - [ ] **#136 — marduk: track the opencode process, not the window** (by
 	2026-10-23, medium) — board: epiq `NAHEGJE` (Todo). The registry's `pid` is
