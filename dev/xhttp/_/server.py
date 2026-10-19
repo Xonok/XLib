@@ -56,7 +56,9 @@ def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests):
 	except err.HTTPHeaderVersion:
 		if client and client.fileno() != -1:
 			response.send_response(client,505)
-			client.close()
+	except err.HTTPDoubleDotForbidden:
+		if client and client.fileno() != -1:
+			response.send_response(client,400)
 	except TimeoutError:
 		pass # idle keep-alive expiry - a normal close, not an error
 	except Exception as e:

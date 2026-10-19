@@ -13,8 +13,8 @@ from ._ import helper,err,websocket,request,response,server
 _MB = 1024*1024
 
 #Server and handler
-def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None):
-	return server.serve_forever(addr,handler,handler_args,ssl_keys,new_thread,promise)
+def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120):
+	return server.serve_forever(addr,handler,handler_args,ssl_keys,new_thread,promise,max_requests)
 def await_startup(promise,timeout=5):
 	return server.await_startup(promise,timeout)
 def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=120):
