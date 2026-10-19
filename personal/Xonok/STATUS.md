@@ -20,20 +20,21 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `b8151d4` (2026-10-19), **snapshot taken 2026-10-19**, **in sync
-with `origin/master`** — PR #36 (`YFJZRYC`, the html lint *rules*) is merged and
-pushed, and so is PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state
-files) behind it. **PR #42 (`YFJZRYC`, the html lint *implementation*) is open for
-the human's review** — xlint lints `.html` now. Fourteen board tickets are closed,
-and the Traveller acceptance test has been run: the bundle exists at
-`Space-Traveller/server-bundled.py` and does not run.
+Basis: `master` at `5c1865e` (2026-10-19), **snapshot taken 2026-10-19**, **in sync
+with `origin/master`** — **PR #42 (`YFJZRYC`, the html lint implementation) is
+merged and pushed**, so xlint lints `.html` on master and the human can run it
+over Traveller. PR #36 (`YFJZRYC`, the html lint *rules*) went in before it, and
+so did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state files).
+Fourteen board tickets are closed, and the Traveller acceptance test has been
+run: the bundle exists at `Space-Traveller/server-bundled.py` and does not run.
 
 **Task updates 2026-10-19:** #117 (xhttp release survival) marked done — the released
 `xhttp_1_0_0.py` survives Space-Traveller use. #111 (Discord access design) marked done;
 new task #138 (Discord access setup) added. #139 and #140 (the html linter and the
 html bundler library) **were open in the store and missing from `TASKS.md`
 entirely** — both are there now, with the html rules ruled. **#139 is done: the
-html linter is written, on `feat/YFJZRYC-html-lint`, PR #42 open for review.**
+html linter is written and **merged** — PR #42 is on master as `5c1865e`, so the
+html rules can be run over Traveller today.**
 #141 (mechanize the checkout ban) now has a wider target: the ban covers `git reset
 --hard` and `git reset --merge` as well, so the guard has to catch those too.
 
@@ -235,7 +236,7 @@ the human's call.
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **43 tickets — 37 in Todo, 3 in progress, 3 in Done**, verified 2026-10-19. **The In progress lane was empty on 2026-10-18 and is not now**: `NAHEGJE` (marduk), `AC9YJYQ` (xhttp collect) and `YFJZRYC` (the html lint implementation — taken and assigned 2026-10-19). The Done lane holds `MY4ZS5D`, `DW94JXN` and `PHF9QZQ`. **Fourteen tickets closed on this board without being merged**, in one session: seven whose commits are on master (`ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`), four pybundle tickets closed as ruled-and-landed or verified (`F7KHKM8`, `S1G5037`, `EZAVYNM`, `YEBP3QB`), **`R9H4PVD` closed as superseded rather than executed** — its repair would now reintroduce the error it was written to prevent — and two filed from the Traveller run (`86CDJV2`, `JD9DWVN`). **Every one was verified against the tree, not against the ticket's own account of itself**; that check is what separated the fourteen from four that only looked closable. An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **pybundle acceptance** | secretary | **Traveller bundles; it does not run. Run 2026-10-18**, output at `Space-Traveller/server-bundled.py` (400 908 B, untracked). 142 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **329 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib for the first time. **Two defects, both filed and both outside anything XLib's own corpus contains**, so no amount of testing against XLib would have found them: `86CDJV2` (D32 rule 3 handles a removed import mid-file and misses one at the **end** — 3 double-blank findings) and **`JD9DWVN`, which stops it running** (`from . import io,…` in a package `__init__.py` reached again through the package attribute gives `server__Misc____init__io`, which nothing defines — **141 such names**, `NameError` on first call). `JD9DWVN` carries a ruling request: warn / alias / leave as D17's exclusion. **The structural machinery is sound** — prefixing, aliasing, scope tracking, the whole D20 mechanism all produced a structurally valid 400 KB bundle | `Space-Traveller/server-bundled.py`, epiq `86CDJV2`, `JD9DWVN` |
-| **xlint: html rules** | secretary | **IMPLEMENTED 2026-10-19, on `feat/YFJZRYC-html-lint`, PR #42 open for the human's review.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + Mallesne's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md` | epiq `YFJZRYC`, taskview `#139` |
+| **xlint: html rules** | secretary | **IMPLEMENTED AND MERGED 2026-10-19 — PR #42, on master as `5c1865e`.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + Mallesne's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md`. **The human merged it on their own instruction so they could run it over Traveller** — `xlint /storage/GitHub/Fun/Space-Traveller/html` gives 783 findings (774 depth, 7 trailing whitespace, 2 double blank), and Mallesne's one html file is clean | epiq `YFJZRYC`, taskview `#139` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 

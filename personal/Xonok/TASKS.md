@@ -157,7 +157,8 @@ needed when there is no due date.
 	ban is written but cannot propagate by the documented mechanism until this is
 	fixed.** Programmer work, not filed on the board — human's call.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
-	`YFJZRYC` (In progress — PR #42 open for the human's review). **Implemented.**
+	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
+	merged on the human's own instruction so they could run it over Traveller.
 	Three html-specific rules on top of the generic ones, as ruled: **unclosed tags
 	(strict — every non-void tag must be closed explicitly)**, **closing tags that
 	shouldn't be** (all three readings: a closer for a void element, a closer with
