@@ -501,6 +501,11 @@ def run_episode(model,request,root,max_turns=MAX_TURNS,max_tokens=4096):
 		{"role":"system","content":PROTOCOL},
 		{"role":"user","content":f"PROJECT FILES:\n{listing}\n\nTASK:\n{request}\n\nBegin."},
 	]
+	# What the model was asked, kept whole. The measurement layer has to carry the
+	# prompt: a benchmark constructed later looks at the stored data, and a stored
+	# measurement that does not say what it asked is a measurement nobody can re-ask.
+	trace["prompt"] = "\n\n".join(f"{m['role']}: {m['content']}" for m in messages)
+	trace["messages"] = messages
 	for turn in range(1,max_turns+1):
 		out = transport.call_chat(model,messages,max_tokens=max_tokens)
 		actions = parse_actions(out["text"])
@@ -509,8 +514,15 @@ def run_episode(model,request,root,max_turns=MAX_TURNS,max_tokens=4096):
 		results = [execute(a,root) for a in actions]
 		first = actions[0]
 		step = {"turn":turn,"action":first.kind,"path":first.path,"cmd":first.cmd,
-			"parsed":first.ok,"exit":None,"result_head":results[0][:400],
-			"reply":out["text"][:1500],"tokens":out["raw_tokens"],
+			"parsed":first.ok,"exit":None,
+			# The whole of what the model said and of what it saw. These used to be cut
+			# to 1500 and 400 characters, and the cut was not harmless: the checker's own
+			# verdict is the evidence for G2, and a report longer than 1500 characters is
+			# most of a report. Keeping more than needed is the safe default — deciding
+			# that something is irrelevant is easy afterwards and impossible before.
+			"result":results[0],"reply":out["text"],
+			"raw":out.get("raw"),"finish_reason":out.get("finish_reason"),
+			"tokens":out["raw_tokens"],
 			"n_actions":len(actions),"batched":len(actions) > 1 or first.batched,
 			"protocol":"tool_call" if "<|tool_call_start|>" in out["text"] else "text"}
 		for a,r in zip(actions,results):
@@ -651,7 +663,9 @@ def _harness_turn(part,turn,root,protocol="opencode"):
 	cmd = spec.get("command") or spec.get("cmd") or ""
 	return {"turn":turn,"action":kind,"path":path,"cmd":cmd,
 		"parsed":kind != "other","exit":_exit_of(part) if kind == "run" else None,
-		"result_head":str(state.get("output") or "")[:400],
+		# The whole of what the model saw. It used to be cut to 400 characters, and the
+		# cut could hide the checker's own verdict — which is the evidence for G2.
+		"result":str(state.get("output") or ""),
 		"reply":"","tokens":None,"n_actions":1,"batched":False,
 		"tool":part.get("tool"),"protocol":protocol}
 
@@ -721,17 +735,34 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 		if part.get("reason") == "stop":
 			stopped = True
 	final_text = "".join(texts).strip()
+	# The session's own id. opencode keeps every session in its database, with the
+	# prompt, the reasoning, the tool calls and their outputs, so this is a handle: the
+	# raw data can be restored from there if the copy in the record is ever lost, and a
+	# record that names its session can be joined to one.
+	session = ""
+	for ev in events:
+		sid = ev.get("sessionID") or (ev.get("part") or {}).get("sessionID")
+		if sid:
+			session = sid
+			break
 	# A clean stop with a final message is the model reporting; a clock kill or a crash is
 	# not, and must not be laundered into "finished".
 	finished = _finished(final_text,info,stopped)
 	if finished:
 		turns.append({"turn":len(turns)+1,"action":"finish","path":"","cmd":"","parsed":True,
-			"exit":None,"result_head":"episode ended","reply":final_text[:1500],"tokens":None,
+			"exit":None,"result":"episode ended","reply":final_text,"tokens":None,
 			"n_actions":1,"batched":False,"tool":None,"protocol":"opencode"})
 	return {"model":model.get("id"),"root":root,"turns":turns,"finished":finished,
-		"claim":final_text[:2000],"status":_declared_status(final_text),
+		"claim":final_text,"status":_declared_status(final_text),
 		"n_turns":len(turns),"usage":tokens or 0,
 		"transport":"harness","timed_out":info["timed_out"],
 		"returncode":info["returncode"],"turn_budget":max_turns,
 		"over_budget":len(turns) > max_turns,
-		"stderr":info["stderr"],"provider_error":info.get("provider_error","")}
+		"stderr":info["stderr"],"provider_error":info.get("provider_error",""),
+		# What the model was asked, and the session's own output verbatim. The harness
+		# path's input is opencode's event stream, so the stream IS the raw end of the
+		# measurement: without it, a change to the mapping cannot be re-applied to this
+		# row, and a mapping change that cannot be re-applied is a row nobody can
+		# re-derive. The per-turn texts the model wrote are in here too, which is why
+		# every harness turn's own `reply` is empty.
+		"prompt":prompt,"raw":info.get("stdout",""),"session":session}

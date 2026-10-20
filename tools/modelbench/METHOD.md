@@ -106,6 +106,35 @@ rule, and the one whose absence is hardest to notice:
 		is not a reason to compress, aggregate or prune, and pruning is a recorded decision with a
 		stated reason, never housekeeping.
 
+### Three parts, kept apart
+
+The work here has three parts, and the point of keeping them apart is that **a benchmark can
+be built later over measurements already collected**:
+
+| | What it is | Where it lives | How it changes |
+|---|---|---|---|
+| **Measurement** | the actual run: the prompt, the turns, the model, the settings, the timestamps, the raw output, the final state | the record's `trace` block | a new run |
+| **Benchmark** | the bar: the episode, the checker, the gates, the ladder | `episodes/`, `trace.py` | `bench_version` moves — earlier results are invalid |
+| **Evaluation** | the synthesis: what the measurement means against the bar | the record's gates, grade and detail; the ledger | `grade_version` moves — earlier results are re-derivable |
+
+**The measurement is the part that has to stand on its own.** It must not depend on the
+benchmark or the evaluation being the way they are today, because the point of storing it is
+that somebody can look at it later and ask a question the present benchmark does not ask. So
+the record carries: the prompt as the model saw it, every turn whole, the model's own words,
+the provider's own response, the settings, the timestamps, the hash of the episode content
+it ran against, and where its final state is kept.
+
+**Nothing stored is cut short.** The reply used to be truncated at 1500 characters and the
+tool output at 400, and the cut was not harmless: the checker's own verdict is the evidence
+for G2, and a report longer than 1500 characters is most of a report. The human's rule, and
+it is the safe default: **keep as much data as possible. Deciding that some data is
+irrelevant can easily be done after the fact, but the reverse is impossible.**
+
+**And much of it can be restored from elsewhere.** opencode keeps every session in its own
+database — the prompt, the reasoning, the tool calls and their outputs — so a record that
+names its session can have its raw data restored, and a record can be joined to one. The
+copy in the record is still kept: the database is on one machine and the corpus is in git.
+
 ## The instrument's defects are not findings about the subject
 
 **A harness failure is a hole in the run, never a finding about the model.** This is the rule
