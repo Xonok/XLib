@@ -1,7 +1,17 @@
 import json,os,shutil,subprocess,sys,tempfile,time
-sys.path.insert(0, "dev/xtest")
+# xtest, found relative to this file rather than to the working directory: a
+# path relative to the cwd only works from the repository root, and a test
+# that runs from one directory and fails from another is worse than one that
+# never runs.
+sys.path.insert(0, os.path.join(
+	os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+	"dev", "xtest"))
 import xtest
-TOOL = "tools/epiq-pending.py"
+# The tool under test, relative to this file rather than to the working
+# directory: a test that passes from one directory and fails from another is
+# worse than one that never runs.
+TOOL = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+	os.path.abspath(__file__)))), "tools", "epiq-pending.py")
 
 def _event(event_id: str, parent: str, **fields) -> str:
 	return json.dumps({"v": 1, "id": [event_id, parent], **fields})
@@ -194,3 +204,7 @@ def test_repo_filter_restricts_to_one_project():
 		xtest.contains("ISSUE9", out)
 	finally:
 		shutil.rmtree(root)
+
+if __name__ == "__main__":
+	import sys
+	sys.exit(xtest.run(__file__))

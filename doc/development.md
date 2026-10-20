@@ -141,6 +141,34 @@ Where they live: a library's tests go in a `test/` folder in its dev folder, not
 `tests/` — the human's ruling, 2026-09-30. `dev/xprod/` already complies; the
 other four dev libraries still use `tests/` and are being renamed (epiq `2VD2XZC`).
 
+**How they are run: one command.**
+
+```
+python3 tools/run_tests.py
+```
+
+Every suite in the repository, run by `xtest` — the repository's own testing
+library, in `dev/xtest/`. A suite can also be run on its own:
+
+```
+python3 dev/xtest/xtest.py tools/xlint/test     # a folder
+python3 dev/xtest/xtest.py tools/xlint/test/test_xlint.py   # one file
+```
+
+**A test file that cannot be run is a test file that does not exist**, and one
+that cannot be run by the obvious command is worse than one that fails loudly:
+it reports success over content it never examined. Five suites were in that
+state on 2026-10-20 — `tools/test/test_epiq_pending.py`, `dev/xconf`,
+`dev/xschema` and xtest's own two — and every one of them exited 0 having run
+nothing. `tools/test/test_suites.py` now pins the shape that keeps it from
+happening again: every test file is in a suite the runner knows about, and
+every test file can be run on its own.
+
+**A test's style is not a reason for it not to run.** The suites are written in
+two styles — plain functions and `unittest.TestCase` classes — and xtest runs
+both. New tests are written in xtest's own idiom: a plain function, or a
+method of an `xtest.TestCase` when there is setup to do.
+
 Example of the gap discipline in practice: `test-design-2d-space-game.md` in the
 Agents workspace (`plans/done/`).
 

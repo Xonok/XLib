@@ -1,5 +1,14 @@
+import os,sys
+# `dev/` for the library and the repository root for the `xlib_dev` override,
+# so the suite runs the development xtest rather than the released one.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_DEV = os.path.dirname(os.path.dirname(_HERE))
+_ROOT = os.path.dirname(_DEV)
+for _entry in (_DEV, _ROOT):
+	if _entry not in sys.path:
+		sys.path.insert(0, _entry)
+from xlib_dev import xtest
 from xschema.xschema import BoolType,CompositeType,DictType,FloatType,IntGt0,IntNat,IntType,ListType,NumType,Schema,StrType,Type,ValidationError,format_path,parse,validate
-from xlib import xtest
 
 def test_simple_int():
 	validate(3, "int")
@@ -191,3 +200,7 @@ def test_schema_decorator_validates():
 	xtest.equal(validated(3), 8)
 	xtest.equal(validated(3, 4), 7)
 	xtest.raises(ValidationError, lambda: validated("x", 2))
+
+if __name__ == "__main__":
+	import sys
+	sys.exit(xtest.run(__file__))
