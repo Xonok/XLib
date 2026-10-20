@@ -26,6 +26,24 @@ RETRY_STATUS = {429,500,502,503,504}
 class TransportError(Exception):
 	pass
 
+def token_total(part):
+	"""The session's token total, wherever this opencode version keeps it.
+
+	opencode 1 put it at `part.tokens.total`. opencode 2 dropped that field and carries
+	the components instead, so reading `total` alone gave every harness run a token count
+	of zero — and a run that looks free was not. That is E12's defect class returning
+	under the upgrade.
+	"""
+	tok = (part or {}).get("tokens") or {}
+	total = tok.get("total")
+	if isinstance(total,int):
+		return total
+	cache = tok.get("cache") or {}
+	parts = [tok.get("input"),tok.get("output"),tok.get("reasoning"),cache.get("read"),cache.get("write")]
+	if not any(isinstance(p,int) for p in parts):
+		return None
+	return sum(p for p in parts if isinstance(p,int))
+
 def _openrouter_key():
 	# Read lazily and never log it: a benchmark run writes every prompt to disk.
 	with open(AUTH_PATH) as f:
@@ -109,10 +127,11 @@ def _harness_call(model,prompt,workdir,max_tokens,timeout):
 		elif ev.get("type") == "step_finish":
 			# Usage is at part.tokens, not ev.tokens — reading the top level returned None
 			# for every harness model, so harness runs reported zero token cost and looked
-			# free. `total` is CUMULATIVE for the session, so the last one is the run's.
-			totals = (part.get("tokens") or {}).get("total")
-			if isinstance(totals,int):
-				tokens = totals
+			# free. `total` is CUMULATIVE for the session, so the last one is the run's —
+			# and opencode 2 dropped the field, so it is recomputed from the components.
+			total = token_total(part)
+			if isinstance(total,int):
+				tokens = total
 	return {"text":text,"reasoning":reasoning or "","raw_tokens":tokens,
 		"timed_out":info["timed_out"]}
 
