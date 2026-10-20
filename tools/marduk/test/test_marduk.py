@@ -40,8 +40,8 @@ class TestRegistration(unittest.TestCase):
 
 	def test_workspace_is_carried_through(self):
 		m=_marduk()
-		m._on_new_session(_session(directory="/storage/x"))
-		self.assertEqual(next(iter(m._agents.values())).workspace,"/storage/x")
+		m._on_new_session(_session(directory="/srv/agents"))
+		self.assertEqual(next(iter(m._agents.values())).workspace,"/srv/agents")
 
 	def test_repeat_registration_keeps_the_same_object(self):
 		"""A fresh AgentState would reset the event age every poll."""

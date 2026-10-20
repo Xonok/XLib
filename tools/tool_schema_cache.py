@@ -11,7 +11,7 @@ Usage:
 	python3 tool_schema_cache.py schema read          # Get full schema for a tool
 	python3 tool_schema_cache.py verify               # Check if cached IDs match current schemas
 
-This tool lives in /storage/GitHub/Fun/XLib/tools/tool_schema_cache.py
+This tool lives in `tools/tool_schema_cache.py` in the XLib repository.
 """
 
 import argparse,hashlib,json,os,sys
