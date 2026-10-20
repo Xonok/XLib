@@ -47,11 +47,32 @@ def _state_dir(root,src,row):
 	final files through trace['root'], so turns alone cannot reproduce a grade. A record
 	whose sandbox is gone therefore cannot be re-graded even when it stored its turns —
 	which is the second half of why the state has to be kept, not just the turns.
+
+	**The state directory is named after the TRACE FILE, which is named after the registry
+	key.** That is the robust correspondence, because the run directory is organised around
+	the trace file's name and the name cannot drift from it. The record's own model id is
+	the wrong thing to look it up by: the 2026-09-27 wave used one registry and named its
+	state after the model, and the 2026-10-20 waves added registries whose keys are
+	prefixed (`or-`, `console-`, `google-`), so the two stopped corresponding. Measured on
+	the 2026-10-20 wave: **22 of 42 measured records found their state and 20 did not**,
+	and all 20 store their raw turns, so they look re-gradeable in the ledger's own summary
+	and are not.
+
+	The old naming is still tried, because the 2026-09-27 wave's traces are named after the
+	model rather than after the key, and its state must stay findable.
 	"""
 	repeat = row["repeat"] if row["repeat"] is not None else 0
-	guess = os.path.join(root,os.path.dirname(src),"state",
-		f'{row["model"]}--{row["episode"]}--{repeat}')
-	return guess if os.path.isdir(guess) else None
+	stem = os.path.basename(src)
+	if stem.endswith(".jsonl"):
+		stem = stem[:-len(".jsonl")]
+	guesses = [stem, f'{row["model"]}--{row["episode"]}']
+	if row.get("model_id"):
+		guesses.append(f'{row["model_id"]}--{row["episode"]}')
+	for name in guesses:
+		guess = os.path.join(root,os.path.dirname(src),"state",f"{name}--{repeat}")
+		if os.path.isdir(guess):
+			return guess
+	return None
 
 def _baselines():
 	"""The pristine checker result per episode, recomputed rather than stored.
