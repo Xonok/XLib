@@ -18,7 +18,7 @@ native tool calling is a later addition once the controls are green.
 Every step is appended to the trace. The trace is the measurement; the reply text is not.
 """
 
-import hashlib,json,os,re,shlex,subprocess,time
+import hashlib,json,os,re,shlex,shutil,subprocess,time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 import transport
@@ -356,6 +356,28 @@ def _harness_prompt(request,root,max_turns):
 	return (f"{HARNESS_PROTOCOL}\n\nPROJECT FILES:\n{listing}\n\n"
 		f"TASK:\n{request}\n\nWork within roughly {max_turns} tool calls, then report.")
 
+def _plant_agent_definition(model,root):
+	"""Put the requested agent definition into the sandbox, if the model asks for one.
+
+	opencode resolves `--agent <name>` from the session's own project directory, so the
+	definition has to exist at `<sandbox>/.opencode/agent/<name>.md` before the run
+	starts. The definition's CONTENT is data and lives wherever the caller keeps it; the
+	tool only knows how to plant a file it is told about, and says so plainly when it
+	is told about one that is not there.
+	"""
+	name = model.get("agent")
+	if not name:
+		return
+	source = model.get("agent_file")
+	if not source:
+		raise ValueError(f"model {model.get('id')!r} names the agent {name!r} but no "
+			"agent_file to plant it from")
+	if not os.path.isfile(source):
+		raise ValueError(f"agent definition not found: {source}")
+	target = os.path.join(root,".opencode","agent")
+	os.makedirs(target,exist_ok=True)
+	shutil.copyfile(source,os.path.join(target,f"{name}.md"))
+
 def _classify(tool):
 	name = (tool or "").lower()
 	if name in OPENCODE_READ:
@@ -448,6 +470,7 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 	   enforced only by wall clock. A run killed by the clock sets finished=False, which
 	   fails G4 exactly as a turn-capped run does."""
 	prompt = _harness_prompt(request,root,max_turns)
+	_plant_agent_definition(model,root)
 	events,info = transport.harness_stream(model,prompt,root,timeout)
 	turns,texts,tokens,stopped = [],[],None,False
 	step_actions = 0

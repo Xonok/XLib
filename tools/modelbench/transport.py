@@ -152,6 +152,16 @@ def harness_cmd(model,workdir,prompt):
 	flags = cli_flags()
 	if "--pure" in flags:
 		cmd.append("--pure")
+	if model.get("agent"):
+		# An agent definition is selected by NAME, and opencode resolves that name from
+		# the session's own project directory — so the definition has to be planted in the
+		# sandbox before the run, not passed on the command line. A `--agent` this opencode
+		# does not have is an error and not a shrug: silently running the default agent
+		# would record a row that says "arm B" and is really arm C.
+		if "--agent" not in flags:
+			raise TransportError(f"{model['id']}: this opencode has no --agent flag, so the "
+				f"definition {model['agent']!r} cannot be selected")
+		cmd += ["--agent",model["agent"]]
 	if "--dir" in flags:
 		cmd += ["--dir",workdir]
 	cmd.append(prompt)
@@ -288,6 +298,8 @@ def validate_registry(registry):
 			problems.append(f"{name}: transport {model.get('transport')!r} not in {VALID_TRANSPORTS}")
 		if model.get("transport") == "http" and not model.get("endpoint"):
 			problems.append(f"{name}: http transport with no endpoint")
+		if model.get("agent") and not model.get("agent_file"):
+			problems.append(f"{name}: names the agent {model['agent']!r} but no agent_file to plant it from")
 	return problems
 
 def probe(registry):
