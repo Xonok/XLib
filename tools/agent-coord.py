@@ -550,6 +550,39 @@ def absorb_leftover(ids, key, role):
 		save(RULE_CURSOR, cursors)
 	return new_id
 
+def retag_if_moved(ids, key, agent_id):
+	"""Re-tag an identity that names another workspace.
+
+	A session key is a process's pid, and a pid can be recycled: the session
+	that had it dies, and a later session in another workspace is given the
+	same pid. The identity it inherits names the *old* session's workspace,
+	which sends its notes to another repository and leaves its claims under a
+	name the session cannot see. The tag is the workspace, so the identity is
+	re-tagged to the workspace the session is actually in.
+	"""
+	tag = ws_tag()
+	if "/" not in agent_id:
+		return agent_id
+	old_tag, suffix = agent_id.split("/", 1)
+	if old_tag == tag:
+		return agent_id
+	new_id = "%s/%s" % (tag, suffix)
+	ids[key] = new_id
+	save(IDS, ids)
+	# The old session is gone: its pid belongs to a different process now, so
+	# the dead-pid reaper will never collect it. Its claims are stale, and
+	# moving them to this session would have this session holding files it
+	# never touched, blocking whoever comes next. They are dropped.
+	claims = load(CLAIMS, {})
+	if agent_id in claims:
+		claims.pop(agent_id, None)
+		save(CLAIMS, claims)
+	cursors = load(RULE_CURSOR, {})
+	if agent_id in cursors:
+		cursors.pop(agent_id, None)
+		save(RULE_CURSOR, cursors)
+	return new_id
+
 def my_id():
 	key = session_key()
 	if not key.startswith("pid-"):
@@ -562,7 +595,7 @@ def my_id():
 		if absorbed:
 			return qualify(absorbed)
 		if key in ids:
-			return qualify(ids[key])
+			return qualify(retag_if_moved(ids, key, ids[key]))
 		tag = ws_tag()
 		role = agent_role()
 		n = allocate_instance(role, tag, ids)
