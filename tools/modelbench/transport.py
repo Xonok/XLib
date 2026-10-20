@@ -11,7 +11,7 @@ Zen sends `reasoning_content`); everything downstream needs one name, so it is
 normalised here rather than at each call site.
 """
 
-import json,os,subprocess,time,urllib.error,urllib.request
+import json,os,re,subprocess,time,urllib.error,urllib.request
 
 AUTH_PATH = os.path.expanduser("~/.local/share/opencode/auth.json")
 HARNESS_TIMEOUT = 900
@@ -101,6 +101,52 @@ def _http_call(model,messages,endpoint,headers,max_tokens,temperature,timeout):
 		"finish_reason":choice.get("finish_reason"),
 	}
 
+_CLI_FLAGS = None
+
+def cli_flags():
+	"""The flags this opencode actually has, read from the binary rather than assumed.
+
+	opencode 2 removed `--pure` and `--dir`. `--pure` prints the usage text and exits 0,
+	so a command that still carried it produced no events and no error at all — a silent
+	failure that reads like a model that did nothing, and that capped every harness
+	model at `supervision` for a day. Reading the flags makes the tool work on either
+	version instead of on one and not the other.
+	"""
+	global _CLI_FLAGS
+	if _CLI_FLAGS is None:
+		try:
+			proc = subprocess.run(["opencode","run","--help"],capture_output=True,text=True,timeout=30)
+			text = proc.stdout + proc.stderr
+		except Exception:
+			text = ""
+		_CLI_FLAGS = set(re.findall(r"^\s{2,}(--[a-z][a-z-]*)",text,re.M))
+	return _CLI_FLAGS
+
+def harness_cmd(model,workdir,prompt):
+	"""The `opencode run` command line for one harness session.
+
+	Separate from the call so that what is asked for can be checked without running it —
+	the route, the flags and the directory are three ways of asking for a session that
+	does not exist, and only one of them says so.
+	"""
+	# --pure keeps external plugins out; --format json is the only format reporting usage.
+	# The ~13k preamble is unavoidable, which is the whole reason this path is last.
+	# Deliberately NOT --auto: auto-approving permissions would hide a model asking for
+	# consent, which is behaviour worth seeing.
+	#
+	# The flags are asked of the binary rather than assumed: opencode 2 dropped `--pure`
+	# and `--dir`, and `--pure` there prints the usage text and exits 0, so a command that
+	# still carried it produced no events and no error — a silent failure that reads like
+	# a model that did nothing.
+	cmd = ["opencode","run","--format","json","-m",route_of(model)]
+	flags = cli_flags()
+	if "--pure" in flags:
+		cmd.append("--pure")
+	if "--dir" in flags:
+		cmd += ["--dir",workdir]
+	cmd.append(prompt)
+	return cmd
+
 def harness_stream(model,prompt,workdir,timeout):
 	"""Run one whole `opencode run` session and return its raw event list.
 
@@ -109,13 +155,16 @@ def harness_stream(model,prompt,workdir,timeout):
 	transcript rather than one reply. `agent.run_episode_harness` reconstructs a trace
 	from these events so every model reaches the same gates.
 	"""
-	# --pure keeps external plugins out; --format json is the only format reporting usage.
-	# The ~13k preamble is unavoidable, which is the whole reason this path is last.
-	# Deliberately NOT --auto: auto-approving permissions would hide a model asking for
-	# consent, which is behaviour worth seeing.
-	cmd = ["opencode","run","--pure","--format","json","-m",route_of(model),"--dir",workdir,prompt]
+	cmd = harness_cmd(model,workdir,prompt)
+	# opencode 2 takes the session directory from $PWD, not from the process cwd, so both
+	# are set. A run that opens the wrong directory still succeeds, checks out a
+	# different tree and says so in its own words — it graded `not-capable` on five turns
+	# that way, and the ledger's standing audit admitted it as a result.
+	env = dict(os.environ)
+	env["PWD"] = workdir
 	try:
-		proc = subprocess.run(cmd,capture_output=True,text=True,timeout=timeout)
+		proc = subprocess.run(cmd,capture_output=True,text=True,timeout=timeout,
+			cwd=workdir,env=env)
 	except subprocess.TimeoutExpired as e:
 		# A timeout is a result, not a crash. The partial stream is the measurement: it
 		# shows what the model did before it stopped converging, and a killed run must
