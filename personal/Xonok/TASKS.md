@@ -499,6 +499,23 @@ needed when there is no due date.
 - [x] **#17 — pybundle spec** — cancelled 2026-09-30, not done. Its subject was
 	"hammer out the kinks in `pybundle/SPEC.md`", and the human is writing a new
 	spec from scratch instead (epi `6MFX0Z1`), which makes those kinks moot.
+- [x] **#121 — xlint: `--watch` never reloads `.xlintignore`** (done 2026-10-20,
+	low) — board: epiq `62624K9` (In progress). **The watch read `.xlintignore`
+	once, at startup, and kept it for the life of the process** — a rule edited
+	mid-session changed nothing until the tool was restarted, and restarting is
+	the workaround watch mode exists to avoid. **Not only a reload**: the inotify
+	watch set was built once from the same stale rules, so a directory excluded at
+	startup had no watch at all, and re-reading the file would not have produced
+	events from it. **The rules are now part of what is watched** — an ignore file
+	edited, added or removed is noticed; the watch set is rebuilt over the new
+	scope in both directions; a rules change re-reads the whole scope and redraws
+	silently, so a newly ignored file leaves the report and a newly un-ignored one
+	enters it. **The other half of the ticket**: `main()` built the rules from
+	`args.paths[0]` alone, so a run over two repositories was governed by the first
+	one's chain — each path is now governed by its own, and the deepest watched
+	path wins for a file under two of them. **PR #68, commit `2cdb36b` — open and
+	not merged**, for the human's review: it changes what a tool does. **13 new
+	tests, all 13 failing against the old code**, and mutation-checked.
 
 ## Scheduling
 
