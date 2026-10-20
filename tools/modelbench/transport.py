@@ -26,6 +26,27 @@ RETRY_STATUS = {429,500,502,503,504}
 class TransportError(Exception):
 	pass
 
+# The console's own gateway is reached in opencode's namespace. The registry's
+# `provider` is a backend, and the two are not the same thing.
+CONSOLE_NAMESPACE = "opencode"
+
+def route_of(model):
+	"""The `provider/model` route to ask opencode for.
+
+	The registry's `provider` is the backend. The console's Zen gateway is reached as
+	`opencode/<id>`; an OpenRouter model is reached as `openrouter/<vendor>/<model>`. A
+	hardcoded `opencode/{id}` therefore asked for a route that does not exist for most
+	of the registry, and the answer was `provider.no-route` — which reads like a model
+	that cannot answer, and was recorded as one. It is why a model the human cared most
+	about read as "unmeasurable" for a month.
+	"""
+	namespace = model.get("namespace") or model.get("provider") or ""
+	if namespace == "zen":
+		namespace = CONSOLE_NAMESPACE
+	if not namespace:
+		raise TransportError(f"{model.get('id')}: no provider, so there is no route to ask for")
+	return f"{namespace}/{model['id']}"
+
 def token_total(part):
 	"""The session's token total, wherever this opencode version keeps it.
 
@@ -92,7 +113,7 @@ def harness_stream(model,prompt,workdir,timeout):
 	# The ~13k preamble is unavoidable, which is the whole reason this path is last.
 	# Deliberately NOT --auto: auto-approving permissions would hide a model asking for
 	# consent, which is behaviour worth seeing.
-	cmd = ["opencode","run","--pure","--format","json","-m",f"opencode/{model['id']}","--dir",workdir,prompt]
+	cmd = ["opencode","run","--pure","--format","json","-m",route_of(model),"--dir",workdir,prompt]
 	try:
 		proc = subprocess.run(cmd,capture_output=True,text=True,timeout=timeout)
 	except subprocess.TimeoutExpired as e:
