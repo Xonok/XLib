@@ -102,6 +102,7 @@ def _row(root,src,line,rec,baselines):
 		"grade":rec.get("grade"),"gates":rec.get("gates"),
 		"failed_gates":rec.get("failed_gates"),
 		"bench_version":rec.get("bench_version"),"grade_version":rec.get("grade_version"),
+		"mapping_version":rec.get("mapping_version"),
 		"n_turns":detail.get("n_turns"),"n_writes":detail.get("n_writes"),
 		"n_runs":detail.get("n_runs"),"tokens":detail.get("tokens"),
 		"cases":len(checker.get("cases") or []),
