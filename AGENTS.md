@@ -6,6 +6,12 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 Multiple agents may work in this repo at once. Coordinate through `tools/agent-coord.py`: claim files before editing, release when done, `status` to see who holds what. Claim fails if the other agent holds the same path.
 
+**Testing**: the repository's testing solution is `xtest` (`dev/xtest/`), and
+standardising on it means eventually using only xtest. Two rules: **rewrite to
+xtest if it gets in the way** — when a test needs something xtest cannot do,
+xtest grows — and **always write new tests with xtest**. Never start a new
+`unittest` suite here. `doc/development.md` has the detail.
+
 **Merging**: the human reviews anything that could break something. A change that breaks nothing — documentation, comments, formatting — may be merged without review: open the PR, merge it, and say so on the ticket. (Human, 2026-10-19: *"For things that don't break anything, you can merge without my review."*)
 
 ## Pointers

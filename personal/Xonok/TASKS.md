@@ -183,14 +183,36 @@ needed when there is no due date.
 	two" tasks, and `TASKS.md` has **28** open. The 16 tasks that genuinely have
 	no due date are a different set (#104–#110, #122, #123, #127, #133, #137,
 	#138, #140, #141, #143) and are not mentioned.
-- [ ] **#155 — xtest: release 1_1_0, and migrate the unittest suites to
-	xtest's own idiom** (by 2026-10-27, medium) — the xtest work of 2026-10-20
-	(PR #52) is merged but **not released**: `dev/xtest/VERSIONS.md` still reads
-	1_0_0, and a release is the human's call. The additions are additive —
-	`TestCase`, `unittest.TestCase` support, assertion messages, running a
-	single file, `main` — so the next release is 1_1_0. **The 852 unittest tests
-	run under xtest but are still written in unittest's idiom**; migrating them
-	is optional and a separate piece of work.
+- [ ] **#155 — xtest: rewrite the unittest suites in xtest's own idiom** (by
+	2026-10-27, medium) — board: epiq `QJEA7EM` (Todo, tagged
+	`rewrite-to-xtest` and `new-tests-xtest`). **The release half is done:**
+	**xtest 1_1_0 is on master as `e8ffe49`** (epi `48GH7NW`), verified against
+	the release rather than the source — `from xlib import xtest` resolves to
+	`xlib/xtest_1_1_0.py` and that file runs xtest's own suite, 13 passed. **The
+	decision is written down** in `AGENTS.md`, `doc/development.md` and
+	`dev/xtest/SPEC.md`: **rewrite to xtest if it gets in the way**, and
+	**always write new tests with xtest**. What is left is the migration: the
+	852 tests in `unittest.TestCase` classes **run** under xtest but are still
+	**written** in unittest's idiom. Start with `tools/marduk/test/` (101 tests,
+	the most varied use of unittest's features), then `tools/taskview/test/`
+	(123) and `tools/xlint/test/` (98); `dev/xhttp/test/` (239) is last, because
+	its runner has a `--core` flag, an `edge` tag convention and a `preflight()`
+	that the migration has to keep or reinvent.
+- [ ] **#158 — skynet: always stay within the window bounds, and say what was
+	cut** (by 2026-10-21, high) — board: epiq `VTJVHMY` (Todo). **NOT STARTED
+	— the human said to hold it until after the next `/new`.** The human's
+	format, 2026-10-20: *"the Today section gets a row limit and shows extra as
+	'N more' or something like that. The rolling window section should work in a
+	similar way. Currently it might truncate the list, but it doesn't show 'N
+	more'."* **The acceptance criteria the ticket was missing are now on it.**
+	Three requirements: the Today section gets a row limit (it has none today,
+	so it overflows the pane); a capped section says how much it left out; the
+	Window section works the same way — it is already capped at a hard-coded
+	`max_models=10` (`tools/skynet.py:170`) and says nothing, which is the
+	silent cut the ticket was filed about. **And the caps come from the space
+	available**, so the output fits a short pane and a tall terminal alike. The
+	budget is shared arithmetic: nine lines are spoken for before a model is
+	shown, and an overflow note costs a row of its own.
 - [ ] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
 	(by 2026-10-22, low) — the Agents panel's comment and category list were
 	updated to the house style on 2026-10-20 but **not committed**: the epiq
