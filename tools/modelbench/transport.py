@@ -89,13 +89,14 @@ def _post(url,payload,headers,timeout):
 	all_headers = {"Content-Type":"application/json","User-Agent":"opencode-model-bench/1.0",**headers}
 	req = urllib.request.Request(url,data=body,headers=all_headers)
 	with urllib.request.urlopen(req,timeout=timeout) as r:
-		return json.loads(r.read())
+		raw = r.read()
+		return json.loads(raw),raw.decode("utf-8","replace")
 
 def _http_call(model,messages,endpoint,headers,max_tokens,temperature,timeout):
 	payload = {"model":model["id"],"messages":messages,"max_tokens":max_tokens}
 	if temperature is not None:
 		payload["temperature"] = temperature
-	data = _post(f"{endpoint}/chat/completions",payload,headers,timeout)
+	data,raw = _post(f"{endpoint}/chat/completions",payload,headers,timeout)
 	if "error" in data:
 		raise TransportError(f"{model['id']}: {data['error'].get('message',data['error'])}")
 	choice = data["choices"][0]
@@ -109,6 +110,12 @@ def _http_call(model,messages,endpoint,headers,max_tokens,temperature,timeout):
 		# with finish_reason "length". That is a budget problem, not a network failure, and
 		# the two must never land in the same bucket.
 		"finish_reason":choice.get("finish_reason"),
+		# The provider's own response, verbatim. The text above is what the model said;
+		# this is what the provider said about it — the envelope, the usage, the ids. It
+		# costs a few hundred bytes and it is the raw end of the measurement, so it is
+		# kept: the human's rule, 2026-10-20, is to keep as much data as possible, because
+		# deciding that some of it is irrelevant is easy afterwards and impossible before.
+		"raw":raw,
 	}
 
 _CLI_FLAGS = None
@@ -218,10 +225,10 @@ def harness_stream(model,prompt,workdir,timeout):
 		# read as "did not finish" so it fails G4 the same way a turn-capped run does.
 		events = _parse_events(e.stdout or "")
 		return events,{"returncode":None,"timed_out":True,"stderr":(e.stderr or "")[:400],
-			"provider_error":provider_error(events)}
+			"provider_error":provider_error(events),"stdout":e.stdout or ""}
 	events = _parse_events(proc.stdout)
 	return events,{"returncode":proc.returncode,"timed_out":False,"stderr":proc.stderr[:400],
-		"provider_error":provider_error(events)}
+		"provider_error":provider_error(events),"stdout":proc.stdout or ""}
 
 def _parse_events(stdout):
 	events = []

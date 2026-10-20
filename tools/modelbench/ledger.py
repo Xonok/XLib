@@ -60,7 +60,16 @@ def _state_dir(root,src,row):
 
 	The old naming is still tried, because the 2026-09-27 wave's traces are named after the
 	model rather than after the key, and its state must stay findable.
+
+	**A record that says where its state is wins.** Since 2026-10-20 the record carries a
+	`state` field — the path of the kept state, relative to the trace file — so the lookup
+	does not have to guess at all. The guessing is kept for the rows that predate it, and
+	for the case where the named directory has gone.
 	"""
+	if row.get("state"):
+		named = os.path.join(root,os.path.dirname(src),row["state"])
+		if os.path.isdir(named):
+			return named
 	repeat = row["repeat"] if row["repeat"] is not None else 0
 	stem = os.path.basename(src)
 	if stem.endswith(".jsonl"):
@@ -107,6 +116,9 @@ def _row(root,src,line,rec,baselines):
 		"failed_gates":rec.get("failed_gates"),
 		"bench_version":rec.get("bench_version"),"grade_version":rec.get("grade_version"),
 		"mapping_version":rec.get("mapping_version"),
+		# Where the run's final state is kept, relative to the trace file. A record that
+		# says so needs no guessing to find it.
+		"state":rec.get("state"),
 		"n_turns":detail.get("n_turns"),"n_writes":detail.get("n_writes"),
 		"n_runs":detail.get("n_runs"),"tokens":detail.get("tokens"),
 		"cases":len(checker.get("cases") or []),

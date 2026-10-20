@@ -5,7 +5,7 @@ the previous run's fix. That is the whole point of repeating: whether a model fi
 bug on its own second and third attempts is part of what trust means.
 """
 
-import argparse,agent,json,os,shutil,subprocess,sys,tempfile,time,tomllib,trace,transport
+import argparse,agent,hashlib,json,os,shutil,subprocess,sys,tempfile,time,tomllib,trace,transport
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EPISODES = os.path.join(HERE,"episodes")
@@ -41,6 +41,25 @@ def fingerprints(model):
 		"grade_version":trace.grade_version(),
 		"mapping_version":agent.mapping_version(transport_name)}
 
+def episode_hash(dir_path):
+	"""A hash of one episode's files: what the model was actually asked to do.
+
+	The record names the episode by name, and a name does not survive the episode being
+	edited — `invoicer` was the same name before and after its reconciliation table was
+	re-aligned. A measurement that cannot say which episode content it ran against
+	cannot be compared with one that did, and the point of storing a measurement is that
+	somebody can look at it later.
+	"""
+	h = hashlib.sha256()
+	for dirpath,dirnames,files in os.walk(dir_path):
+		dirnames[:] = sorted(n for n in dirnames if n != "__pycache__")
+		for f in sorted(files):
+			p = os.path.join(dirpath,f)
+			h.update(os.path.relpath(p,dir_path).encode())
+			try: h.update(open(p,"rb").read())
+			except OSError: pass
+	return "ep-" + h.hexdigest()[:12]
+
 def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 	"""One episode attempt in a throwaway copy of the episode directory."""
 	sandbox = tempfile.mkdtemp(prefix=f"ep-{episode['name']}-",dir=run_root)
@@ -50,6 +69,7 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 	# with it, so hiding it would be a lie, and it holds no secret (every expected value is
 	# already in SPEC.md's reconciliation table). Error (f) — the right information in
 	# context, unaccounted for — is only measurable if the information really is there.
+	started = int(time.time())
 	if model.get("transport") == "harness":
 		raw = agent.run_episode_harness(model,episode["request"],sandbox,
 			max_turns=max_turns,max_tokens=max_tokens)
@@ -67,13 +87,30 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 		# changes invalidate, grade_* changes are re-derivable, and mapping_version says
 		# which part of the measurement was the mapping.
 		**fingerprints(model),
+		# When it ran, and under what settings. A measurement without a timestamp cannot
+		# be placed, and a measurement without its settings cannot be reproduced — and
+		# the point of keeping a measurement is that somebody can build a benchmark over
+		# it later, which needs both.
+		"started":started,"ended":int(time.time()),
+		"settings":{"model":model.get("id"),"provider":model.get("provider"),
+			"namespace":model.get("namespace"),"endpoint":model.get("endpoint"),
+			"agent":model.get("agent"),"max_turns":max_turns,"max_tokens":max_tokens},
+		"episode_hash":episode_hash(episode["dir"]),
 		# The raw turns are KEPT. analyse() reads them, so a new gate used to cost a
 		# re-measurement — which is how six criterion changes in one day turned into
 		# discarded runs. With them in the record, evaluation can be re-derived offline and
 		# measurement stops being repeated for the sake of a scoring change.
+		#
+		# And the rest of the measurement: what the model was asked, the provider's own
+		# response, the session's raw output. **This is the measurement layer, and it is
+		# meant to stand on its own** — a benchmark can be constructed later over the
+		# stored measurements, which is only possible if the measurement says what it was
+		# asked, what came back, and under what settings.
 		"trace":{"turns":raw.get("turns",[]),"finished":raw.get("finished"),
 			"claim":raw.get("claim"),"status":raw.get("status"),
-			"n_turns":raw.get("n_turns"),"usage":raw.get("usage")},
+			"n_turns":raw.get("n_turns"),"usage":raw.get("usage"),
+			"prompt":raw.get("prompt"),"messages":raw.get("messages"),
+			"raw":raw.get("raw"),"session":raw.get("session")},
 		# The confounds of the harness path travel with the result, so a report cannot
 		# quote a harness grade beside a direct grade without the difference showing.
 		# The provider's own explanation of a failed session, and the process's stderr.
@@ -131,6 +168,17 @@ def main():
 				fh.flush()
 				continue
 			result["repeat"] = rep
+			# The final state is kept for EVERY run, holes included, and it is kept
+			# BEFORE the record is written so the record can say where it is. A hole in a
+			# run is still a measurement of a hole — it is how anyone finds out what
+			# happened — and the state's path is relative, so a record means the same
+			# thing on another machine.
+			if not args.keep_sandbox:
+				keep = os.path.join(state_root,f"{args.model}--{episode['name']}--{rep}")
+				shutil.copytree(result["sandbox"],keep,dirs_exist_ok=True)
+				shutil.rmtree(result["sandbox"],ignore_errors=True)
+				result["state"] = os.path.relpath(keep,os.path.dirname(os.path.abspath(args.out)))
+			result.pop("sandbox",None)
 			fh.write(json.dumps(result)+"\n")
 			fh.flush()
 			if result["grade"] == "not-measurable":
@@ -158,15 +206,6 @@ def main():
 					f"{result['detail'].get('claim','')[:160]!r}",flush=True)
 			if result["grade"] == "self-corrected":
 				print("        hit its own failing check and recovered unprompted — High, not Highest",flush=True)
-			if not args.keep_sandbox:
-				# The final on-disk state is raw data, kept by default beside the trace it came
-				# from. Deleting it is what made the E18 diagnosis impossible on the 2026-09-27
-				# runs, and the 2026-09-28 runs had to be rescued from /tmp by accident. The
-				# human's point: "failure to account for data that you already have simply
-				# because you can't use it effectively anymore."
-				keep = os.path.join(state_root,f"{args.model}--{episode['name']}--{rep}")
-				shutil.copytree(result["sandbox"],keep,dirs_exist_ok=True)
-				shutil.rmtree(result["sandbox"],ignore_errors=True)
 	fh.close()
 	kept = "kept for inspection" if args.keep_sandbox else "removed (--keep-sandbox to retain)"
 	print(f"\ntrace: {args.out}\nbench {agent.bench_version(model.get('transport'))} / {trace.grade_version()}")
