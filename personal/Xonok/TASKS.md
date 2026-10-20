@@ -198,25 +198,27 @@ needed when there is no due date.
 	(123) and `tools/xlint/test/` (98); `dev/xhttp/test/` (239) is last, because
 	its runner has a `--core` flag, an `edge` tag convention and a `preflight()`
 	that the migration has to keep or reinvent.
-- [ ] **#158 — skynet: always stay within the window bounds, and say what was
-	cut** (by 2026-10-21, high) — board: epiq `VTJVHMY` (Todo). **NOT STARTED
-	— the human said to hold it until after the next `/new`.** **The whole shape
-	of the change is now fixed**, because the two questions that were open are
-	answered: *"Today and Window should get an equal split"* and *"the wording
-	in the ticket is fine"* — so the note is `… +16 more`.
-	- **The cap comes from the space available** — the terminal size of the
-		process, which in a tmux pane is the pane.
-	- **Each section gets a row limit, and says how much it left out.** Today
-		has no limit today and overflows the pane; Window is capped at a
-		hard-coded `max_models=10` (`tools/skynet.py:170`) and says nothing.
-	- **The split is equal**, and the two tables share what is left of the room.
-	- **An overflow note costs a row of its own**, so a table with *n* rows of
-		allowance shows *n − 1* models and one line of `… +N more`.
-	- **Nine lines are spoken for before a model is shown**: the `Skynet` header,
-		a blank, two section headers, two table headers, two separators, a blank.
-	**Only the arithmetic of an odd remainder is left**, and it is a one-line
-	decision: the extra row goes to Today (the "now" view, already first) or to
-	Window (the wider view, where the overflow is larger).
+- [x] **#158 — skynet: always stay within the window bounds, and say what was
+	cut** (done 2026-10-20, high) — board: epiq `VTJVHMY` (Done). **PR #58,
+	commit `a46cf2f` — it waits for the human's review, and the merge is the
+	agent's action once that review is given.** The shape the human fixed is
+	what was built: the caps come from the space available (the terminal's own
+	height, which in a tmux pane is the pane), the two sections split what is
+	left of the room evenly, **the odd line goes to Today**, an overflow note
+	costs a row of its own, and a capped table ends with `… +N more`.
+	- **Measured**: the display fits every pane height from 1 to 49 lines,
+		checked through a pty at each height. At 30 lines it is exactly 30:
+		nine of structure, eleven for Today, ten for Window.
+	- **The suite is 25 tests**, 18 of them new, in xtest's idiom. `xlint` is
+		clean, and the repository's runner is unchanged (the same six known
+		`ContentNegotiationTest` failures, epi `BFNRBG7`).
+	- **Two decisions the ticket does not cover**, both flagged on the PR: the
+		blank line after the `Skynet` header was added, because the ticket's own
+		count of the nine lines includes it; and a pane shorter than seven lines
+		gets the counts on one line (`Skynet: 19 models today, 53 models in
+		window`) rather than a display that runs past the edge.
+	- **One thing the requirement forced**: the watch loop watches the
+		terminal's size as well as the database's, so a resized pane redraws.
 - [x] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
 	(done 2026-10-20, low) — **committed: `cd7900e` on the Agents repo's master.**
 	Board: epiq `YQK582P` (Agents board, Done). The panel's comment now names
