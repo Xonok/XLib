@@ -56,6 +56,28 @@ you make it:
 | the measurement side | **invalid** — the model was measuring something else |
 | the evaluation side | **re-derivable** — the stored trace is still a measurement |
 
+### The mapping is part of the measurement
+
+The **mapping** is the code that turns a model's output into the trace the gates read — on
+the harness path, the translation of opencode's event stream into turns. It is as much a
+part of the measurement as the prompt is, so for a harness run **its source is folded into
+`bench_version`**.
+
+It was not, and that is what let the opencode-2 upgrade break the harness path twice
+(E19–E22, then E26–E27) without anything being supposed to notice: every harness row
+measured under the broken mapping had to be thrown out and re-measured, because the thing
+that had changed was not in the fingerprint.
+
+A row also carries `mapping_version` — the mapping's own hash, alone — so a reader can
+tell that the mapping moved the grades and not the prompt. The direct path has no mapping
+hash yet: what counts as the measurement there is a decision that has not been taken, and
+`None` says so rather than implying a coverage that is not there.
+
+The list of what the mapping is has to be kept honest, or the hole reopens with a lid on
+it: a function added to the harness path and left out of the list would move the grades
+without moving the fingerprint again. A test walks the call graph from the harness runner
+and says what is missing.
+
 ## Store the raw data, or it was not a measurement
 
 **A result that cannot be re-derived from stored data is a sample.** The cheapest possible

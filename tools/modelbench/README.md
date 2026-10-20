@@ -186,6 +186,15 @@ writes the per-model table; `--check` re-grades every record that stored its tur
 reports the disagreements, and it deliberately does not write its verdict into the ledger,
 because a verdict about the grader is not a property of the run.
 
+**Each row says what it was measured under.** `bench_version` is the measurement side
+hashed from its own content — the prompt, the episodes, and for a harness run the
+*mapping*, the code that turns opencode's event stream into the trace the gates read.
+`grade_version` is the evaluation side. `mapping_version` is the mapping's own hash
+alone, so a reader can tell that the mapping moved the grades and not the prompt. A
+change to the measurement side invalidates earlier results; a change to the evaluation
+side does not, because the stored turns are still a measurement. `METHOD.md` has the
+rules.
+
 **Two things make a record re-gradeable, and both are easy to lose.** `analyse()` reads the
 model's final files through `trace['root']`, so a record that stored its turns but not its
 final on-disk state still cannot be reproduced. The tool keeps the state by default; if you

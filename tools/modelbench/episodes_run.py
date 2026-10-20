@@ -26,6 +26,21 @@ def load_episode(name):
 	return {"name":name,"dir":dir_path,"request":request,
 		"baseline_pass":baseline_pass,"baseline":baseline}
 
+def fingerprints(model):
+	"""The fingerprints that say what this row was measured and evaluated on.
+
+	Three, and the third is new. `bench_version` is the measurement side, `grade_version`
+	the evaluation side, and `mapping_version` names the part of the measurement that is
+	the mapping — the code that turns a model's output into the trace the gates read. It
+	is carried in the row because a fingerprint nobody can see in the row is a fingerprint
+	nobody can use: the 2026-10-20 wave's mapping marker was dropped on the way to disk
+	and not one of its 55 graded harness rows carried it.
+	"""
+	transport_name = model.get("transport")
+	return {"bench_version":agent.bench_version(transport_name),
+		"grade_version":trace.grade_version(),
+		"mapping_version":agent.mapping_version(transport_name)}
+
 def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 	"""One episode attempt in a throwaway copy of the episode directory."""
 	sandbox = tempfile.mkdtemp(prefix=f"ep-{episode['name']}-",dir=run_root)
@@ -48,10 +63,10 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 		# Which measurement and which evaluation produced this. The human's rule
 		# (2026-09-28): changing the benchmark invalidates earlier results and should be
 		# reserved for when the benchmark is wrong, so a result has to be able to say what it
-		# was measured on. Two versions because the two sides are allowed to move at
-		# different rates: bench_* changes invalidate, grade_* changes are re-derivable.
-		"bench_version":agent.bench_version(model.get("transport")),
-		"grade_version":trace.grade_version(),
+		# was measured on. The three are allowed to move at different rates: bench_*
+		# changes invalidate, grade_* changes are re-derivable, and mapping_version says
+		# which part of the measurement was the mapping.
+		**fingerprints(model),
 		# The raw turns are KEPT. analyse() reads them, so a new gate used to cost a
 		# re-measurement — which is how six criterion changes in one day turned into
 		# discarded runs. With them in the record, evaluation can be re-derived offline and

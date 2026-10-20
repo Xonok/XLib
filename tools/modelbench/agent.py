@@ -18,7 +18,7 @@ native tool calling is a later addition once the controls are green.
 Every step is appended to the trace. The trace is the measurement; the reply text is not.
 """
 
-import hashlib,json,os,re,shlex,shutil,subprocess,time
+import hashlib,inspect,json,os,re,shlex,shutil,subprocess,sys,time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 import transport
@@ -217,12 +217,18 @@ def bench_version(transport_name=None):
 	direct one. Without that, asking the harness model to declare its status would have
 	changed what is being measured while every harness row still carried the old
 	fingerprint, which is the invisible invalidation this hash exists to prevent.
+
+	For a harness run the MAPPING is folded in as well: the code that turns opencode's
+	event stream into the trace the gates read. It is as much a part of the measurement
+	as the prompt is, and leaving it out is what let two waves of harness damage pass
+	without anything being supposed to notice. See HARNESS_MAPPING below.
 	"""
 	h = hashlib.sha256()
 	h.update(PROTOCOL.encode())
 	h.update(str(MAX_TURNS).encode())
 	if transport_name == "harness":
 		h.update(HARNESS_PROTOCOL.encode())
+		h.update(mapping_source().encode())
 	root = os.path.join(os.path.dirname(os.path.abspath(__file__)),"episodes")
 	for ep in sorted(os.listdir(root)):
 		d = os.path.join(root,ep)
@@ -235,6 +241,132 @@ def bench_version(transport_name=None):
 				try: h.update(open(p,"rb").read())
 				except OSError: pass
 	return "bench-" + h.hexdigest()[:12]
+
+# --- the mapping ------------------------------------------------------------------
+#
+# The MAPPING is the code that turns a model's output into the trace the gates read.
+# On the harness path that is opencode's event stream, and it belongs in the
+# fingerprint as much as the prompt does: a change to it moves every grade, and before
+# this hash existed it moved them SILENTLY. The opencode-2 upgrade broke the mapping in
+# four ways (E19-E22) and again in two (E26, E27), and every harness row measured under
+# the broken mapping had to be thrown out — with nothing supposed to have noticed,
+# because the thing that had changed was not in the fingerprint.
+#
+# The direct path's fingerprint is deliberately untouched. Its corpus has been measured
+# over weeks, and invalidating it over a change to a path it does not use would be the
+# same mistake pointed the other way.
+HARNESS_MAPPING = (
+	"agent.run_episode_harness",
+	"agent._harness_prompt",
+	"agent._plant_agent_definition",
+	"agent._walk",
+	"agent._classify",
+	"agent._relativise",
+	"agent._harness_turn",
+	"agent._exit_of",
+	"agent._finished",
+	"agent._declared_status",
+	"transport.harness_cmd",
+	"transport.harness_stream",
+	"transport._parse_events",
+	"transport.token_total",
+	"transport.route_of",
+	"transport.cli_flags",
+	# The constants the mapping reads. A tool name mapped to the wrong action, or a
+	# session allowed to run for a different length, is as much a change of
+	# measurement as an edit to a function body.
+	"agent.OPENCODE_READ",
+	"agent.OPENCODE_WRITE",
+	"agent.OPENCODE_RUN",
+	"agent.HARNESS_PROTOCOL",
+	"agent.MAX_TURNS",
+	"transport.CONSOLE_NAMESPACE",
+	"transport.HARNESS_TIMEOUT",
+)
+
+def _mapping_object(name):
+	"""The thing a mapping entry names: a function or a constant in this module or in
+	transport. None when the name is stale, which is a hole in the fingerprint rather
+	than a shrug."""
+	mod_name,attr = name.split(".",1)
+	if mod_name == "agent":
+		mod = sys.modules[__name__]
+	elif mod_name == "transport":
+		mod = transport
+	else:
+		return None
+	return getattr(mod,attr,None)
+
+class MappingUnreadable(Exception):
+	"""The mapping's source could not be read, so its fingerprint would be a guess.
+
+	A fingerprint that quietly omits part of the measurement is worse than no
+	fingerprint: it says a row was measured under something it was not. The run
+	becomes a hole rather than a result with a wrong number on it.
+	"""
+
+def _canonical(value):
+	"""A stable rendering of a constant, so the fingerprint does not move by itself.
+
+	A set's `repr` depends on its iteration order, and Python randomises string
+	hashing per process — so the repr of a set of tool names differs between two runs
+	of the same code. A fingerprint that moves on its own is the invisible
+	invalidation this hash exists to prevent, and worse: it makes two runs of
+	unchanged code disagree about what they were measured under.
+	"""
+	if isinstance(value,(set,frozenset)):
+		return "{" + ",".join(sorted(repr(v) for v in value)) + "}"
+	if isinstance(value,dict):
+		return "{" + ",".join(sorted(f"{k!r}:{v!r}" for k,v in value.items())) + "}"
+	if isinstance(value,(list,tuple)):
+		return "[" + ",".join(repr(v) for v in value) + "]"
+	return repr(value)
+
+def mapping_source(names=None):
+	"""The harness mapping as one blob of text, to be hashed.
+
+	A function contributes its source and its default arguments — a default is a
+	constant too, and it is part of what the model is measured under. A constant
+	contributes its value, canonically rendered. A name that resolves to nothing is
+	written down as MISSING rather than skipped, so a stale entry shows up in the
+	fingerprint instead of silently removing itself from it.
+	"""
+	parts = []
+	for name in (names or HARNESS_MAPPING):
+		obj = _mapping_object(name)
+		if obj is None:
+			parts.append(f"{name}: MISSING")
+			continue
+		if inspect.isfunction(obj):
+			try:
+				source = inspect.getsource(obj)
+			except OSError as e:
+				raise MappingUnreadable(f"cannot read the source of {name}: {e}") from e
+			parts.append(f"--- {name} ---\n{source}")
+			parts.append(f"defaults: {_canonical(obj.__defaults__)} "
+				f"{_canonical(obj.__kwdefaults__)}")
+		else:
+			parts.append(f"--- {name} ---\n{_canonical(obj)}")
+	return "\n".join(parts)
+
+def mapping_version(transport_name=None):
+	"""The fingerprint of the MAPPING alone, for a harness run.
+
+	bench_version says which measurement a row was taken under; this says which part of
+	it was the mapping, so a reader can tell that a change to the mapping moved the
+	grades and not the prompt. It travels in the record, because a fingerprint nobody
+	can see in the row is a fingerprint nobody can use — the 2026-10-20 wave carried a
+	mapping marker that was dropped on the way to disk, and not one of its 55 graded
+	harness rows had it.
+
+	The direct path has no mapping hash yet, and None says so rather than implying a
+	coverage that is not there: `agent.run_episode` builds the trace and `trace.analyse`
+	reads it, and what counts as the measurement on that path is a decision that has not
+	been taken. Folding it in would invalidate a corpus measured over weeks.
+	"""
+	if transport_name != "harness":
+		return None
+	return "map-" + hashlib.sha256(mapping_source().encode()).hexdigest()[:12]
 
 def _safe_join(root,path):
 	"""Contain every file operation to the episode directory. The model under test is
