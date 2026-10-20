@@ -200,25 +200,32 @@ needed when there is no due date.
 	that the migration has to keep or reinvent.
 - [ ] **#158 — skynet: always stay within the window bounds, and say what was
 	cut** (by 2026-10-21, high) — board: epiq `VTJVHMY` (Todo). **NOT STARTED
-	— the human said to hold it until after the next `/new`.** The human's
-	format, 2026-10-20: *"the Today section gets a row limit and shows extra as
-	'N more' or something like that. The rolling window section should work in a
-	similar way. Currently it might truncate the list, but it doesn't show 'N
-	more'."* **The acceptance criteria the ticket was missing are now on it.**
-	Three requirements: the Today section gets a row limit (it has none today,
-	so it overflows the pane); a capped section says how much it left out; the
-	Window section works the same way — it is already capped at a hard-coded
-	`max_models=10` (`tools/skynet.py:170`) and says nothing, which is the
-	silent cut the ticket was filed about. **And the caps come from the space
-	available**, so the output fits a short pane and a tall terminal alike. The
-	budget is shared arithmetic: nine lines are spoken for before a model is
-	shown, and an overflow note costs a row of its own.
-- [ ] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
-	(by 2026-10-22, low) — the Agents panel's comment and category list were
-	updated to the house style on 2026-10-20 but **not committed**: the epiq
-	board was unreachable, so no Agents-board ticket could be filed, and that
-	repository's commit-msg hook refuses a commit without one. The file is live
-	in the working tree, so the panel is right; only the commit is missing.
+	— the human said to hold it until after the next `/new`.** **The whole shape
+	of the change is now fixed**, because the two questions that were open are
+	answered: *"Today and Window should get an equal split"* and *"the wording
+	in the ticket is fine"* — so the note is `… +16 more`.
+	- **The cap comes from the space available** — the terminal size of the
+		process, which in a tmux pane is the pane.
+	- **Each section gets a row limit, and says how much it left out.** Today
+		has no limit today and overflows the pane; Window is capped at a
+		hard-coded `max_models=10` (`tools/skynet.py:170`) and says nothing.
+	- **The split is equal**, and the two tables share what is left of the room.
+	- **An overflow note costs a row of its own**, so a table with *n* rows of
+		allowance shows *n − 1* models and one line of `… +N more`.
+	- **Nine lines are spoken for before a model is shown**: the `Skynet` header,
+		a blank, two section headers, two table headers, two separators, a blank.
+	**Only the arithmetic of an odd remainder is left**, and it is a one-line
+	decision: the extra row goes to Today (the "now" view, already first) or to
+	Window (the wider view, where the overflow is larger).
+- [x] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
+	(done 2026-10-20, low) — **committed: `cd7900e` on the Agents repo's master.**
+	Board: epiq `YQK582P` (Agents board, Done). The panel's comment now names
+	the categories in use in the house style, and says what the second level is
+	for XLib work. **The filter itself did not change** — this panel is the
+	unfiltered one, so it picks up whatever no other panel claims. The change
+	had been live in the working tree since 2026-10-20; this was the commit,
+	which the commit-msg hook would not take without a ref, and which needed a
+	ticket on the board where the change lands.
 - [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-24, medium)
 	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
 	wide tool *always orders by due date* — changing the order is simply a
