@@ -464,7 +464,9 @@ Numbered, each with what was rejected.
 	authority and the others are derivatives. *Rejected:* inventing a fresh
 	life-area axis for the CSV, which would have guaranteed the two files never
 	agree. Consequence: a category name that appears in `TASKS.md` is the correct
-	spelling, and renaming a section there is a change to the vocabulary.
+	*word*, and renaming a section there is a change to the vocabulary. **The
+	spelling is settled separately, 2026-10-20: lowercase, no `-` or space,
+	`_` for them.**
 20. **The column had been carrying three different axes simultaneously** (found
 	during the labelling, 2026-09-27). Repository (`XLib`, `Agents`), life area
 	(`Maintenance`, `personal`) and activity (`research`, `ai-docs`) were all in
@@ -474,30 +476,63 @@ Numbered, each with what was rejected.
 	a time, per session, invisible until someone counted. Tracked as epiq
 	`SNXBR23`; those tasks are left unchanged because a live session owns that work.
 
-## Category vocabulary, as applied 2026-09-27
+## Category vocabulary, as ruled 2026-10-20
 
-Eleven values, all of them either a project that warrants its own tracker or a
-`TASKS.md` life area. A bucket is no longer needed: every open task is
-categorised. Counts are open tasks as at 2026-09-27, and move as work does —
-`XLib` shows 3 because #56 closed the same day.
+**Thirteen values, and the rules that made them.** The human's ruling, 2026-10-20,
+after the vocabulary had grown by accretion to eighteen:
 
-| Category | Open | What it is |
+- **Categories are by topic, so there are more of them than there are repos.**
+	The Agents panel is unfiltered and picks up whatever no other panel claims,
+	which is how a category with no repository behind it is still seen — the same
+	accepted tension as `Maintenance` (Decision 16).
+- **Names are lowercase, and carry no `-` or space; `_` stands in for them.**
+	`Business / Career` became `business_career`, `Personal Development` became
+	`personal_development`, `Traveller` became `traveller`. The rule applies to
+	the tags as well, for the same reason: the two levels are one vocabulary.
+- **There are two levels of filter.** The category generally matches where the
+	work happens; the tag is more specific than that. The mms-frontend slice of
+	`work` is one category narrowed by a tag (Decision 18).
+- **Work that is clearly XLib work is scoped to `xlib` *and* to whatever part of
+	XLib it is about** — the second level is the tag: `xlint`, `pybundle`,
+	`xhttp`, `marduk`, `skynet`, `taskview`, `release`, `agent_coord`,
+	`xlib_dev`, `modelbench`, `bundler`, `state`.
+- **XLib work that is not about any particular library or tool there gets one
+	word** — `xlib` — rather than a new word per task. That is what stops the
+	vocabulary expanding again: the second level is always set, and the set of
+	words does not grow with the work.
+
+| Category | Tasks | What it is |
 |---|---|---|
-| `Maintenance` | 12 | the machine and self-hosted infrastructure (Decision 16) |
-| `Hobby` | 8 | the bucket for hobby projects without their own tracker |
-| `work` | 3 | employment; repos separated by tag (Decision 18) |
-| `XLib` | 3 | the shared library tooling |
-| `Agents` | 3 | the agent workspace restructure |
-| `Personal Development` | 3 | learning and skills |
-| `Traveller` | 2 | Space-Traveller (Decision 17) |
-| `Business / Career` | 2 | marketing, networking, gamedev community |
-| `research`, `ai-docs`, `personal` | 5 | **off-vocabulary, pending** — epiq `SNXBR23` |
+| `xlib` | 49 | the shared library tooling; the tag says which part |
+| `work` | 25 | employment; repos separated by tag (Decision 18) |
+| `maintenance` | 14 | the machine and self-hosted infrastructure (Decision 16) |
+| `models` | 13 | the model-benchmark and provider work |
+| `agents` | 9 | the agent workspace restructure |
+| `hobby` | 8 | hobby projects without their own tracker |
+| `personal_development` | 6 | learning and skills |
+| `business_career` | 3 | marketing, networking, gamedev community |
+| `mistlands` | 3 | the Mistlands project |
+| `traveller` | 2 | Space-Traveller (Decision 17) |
+| `projects` | 1 | a project without a tracker of its own |
+| `research` | 1 | research that is not any of the above |
 
-Only `XLib` has a project `.taskview.yaml`; `Agents` holds the unfiltered one.
-The rest have no repository behind them and are reachable only through the
-unfiltered view — the same accepted tension as `Maintenance` (Decision 16).
-`Hobby` is the one name chosen by the secretary rather than taken from
-`TASKS.md`; the human has not confirmed it. Within `work`, the tags are
+Counts are all tasks as at 2026-10-20 and move as work does. **The bucket is
+the twenty uncategorised tasks, all of them closed** — a bucket is no longer
+needed for anything open.
+
+**What changed from the 2026-09-27 vocabulary:** `XLib` → `xlib`, and the
+`pybundle` and `xhttp` categories folded into it with their part as a tag;
+`Agents` and `agents` (the same category in two cases) → `agents`; `Models` →
+`models`; `Traveller` → `traveller`; `Hobby` → `hobby`; `Maintenance` →
+`maintenance`; `Mistlands` → `mistlands`; `Personal Development` →
+`personal_development`; `Business / Career` → `business_career`; `Projects` →
+`projects`; and `dev` and `testcat` — one cancelled scratch task each, and the
+only two categories that named nothing — left the vocabulary.
+
+**Decision 19's consequence is now a rule of spelling rather than of
+meaning.** The vocabulary still comes from `TASKS.md`'s sections, so
+`Personal Development` is still the word; the house style decides how it is
+written. Within `work`, the tags are
 `note-viewer`, `mms-frontend` and `career`; within `Hobby` and `Maintenance`
 they are the project or subsystem name.
 
