@@ -14,6 +14,8 @@ xtest grows — and **always write new tests with xtest**. Never start a new
 
 **Merging**: the human reviews anything that could break something. A change that breaks nothing — documentation, comments, formatting — may be merged without review: open the PR, merge it, and say so on the ticket. (Human, 2026-10-19: *"For things that don't break anything, you can merge without my review."*)
 
+**For the model benchmark, "breaks nothing" includes changing the grades.** (Human, 2026-10-20: *"Changing grades based on current knowledge is fine and doesn't need a PR. A breaking change for benchmarking would be changing previous measurement results after the fact. Adjusting judgements as more results come in is fine."*) So a fix to a gate, a repair to the harness mapping or a new episode may be merged without review — it changes what the grades *will* be, not what they *were*. **What would break is rewriting a measurement already recorded**: the traces and the ledger rows are the record, corrections are new records beside old ones, and a row that turns out to have been an artefact stays on disk with its disposition stated.
+
 ## Pointers
 
 Rules are split across files. Read the relevant one before work on that topic:
