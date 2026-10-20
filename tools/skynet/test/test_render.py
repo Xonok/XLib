@@ -32,11 +32,11 @@ class _NotATerminal:
 
 def test_the_room_left_is_split_evenly():
 	today, window = skynet.section_allowances(26)
-	xtest.equal((today, window), (9, 9), "an even budget splits evenly")
+	xtest.equal((today, window), (10, 10), "an even budget splits evenly")
 
 def test_an_odd_line_goes_to_today():
 	today, window = skynet.section_allowances(25)
-	xtest.equal((today, window), (9, 8), "the odd line goes to Today")
+	xtest.equal((today, window), (10, 9), "the odd line goes to Today")
 
 def test_the_note_costs_a_row_of_its_own():
 	xtest.equal(skynet.row_cap(5, 4), 3, "four lines of room show three rows and a note")
@@ -68,13 +68,20 @@ def test_the_display_uses_the_room_it_is_given():
 def test_both_sections_say_what_they_left_out():
 	out = skynet.render(_rows(30), NOW, height=30)
 	xtest.equal(out.count("… +"), 2, "both sections carry a note")
-	xtest.contains("… +20 more", out, "each of them leaves twenty of thirty out")
+	xtest.contains("… +19 more", out, "each of them leaves nineteen of thirty out")
 
 def test_the_today_section_gets_a_row_limit():
 	out = skynet.render(_rows(30), NOW, height=24)
 	today = out.split("=== Models (Window) ===")[0]
 	rows = [line for line in today.splitlines() if line.startswith("model-")]
-	xtest.equal(len(rows), 7, "Today shows seven rows, and a note for the rest")
+	xtest.equal(len(rows), 8, "Today shows eight rows, and a note for the rest")
+
+def test_the_title_carries_the_column_labels():
+	out = skynet.render(_rows(3), NOW, height=24)
+	title = out.splitlines()[1]
+	xtest.contains("=== Models (Today) ===", title, "the title is the model column's header")
+	xtest.contains("Msgs", title, "the column labels ride along on the title's line")
+	xtest.not_equal(title.startswith("Model"), True, "the 'Model' label is gone")
 
 def test_the_today_section_comes_first():
 	out = skynet.render(_rows(30), NOW, height=30)
