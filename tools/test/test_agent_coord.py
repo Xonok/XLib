@@ -7,6 +7,7 @@ test that wrote to it would take the claims of every agent on it with it.
 """
 import argparse,contextlib,importlib.util,io,json,os,subprocess,tempfile,unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "tools" / "agent-coord.py"
@@ -36,7 +37,9 @@ class CoordTestCase(unittest.TestCase):
 		self.tool.IDS = str(agents / "ids.json")
 		self.tool.CLAIMS = str(agents / "claims.json")
 		self.tool.RULE_CURSOR = str(agents / "rule-cursor.json")
+		self.workspace_root = self.tool.workspace_root
 		self.tool.workspace_root = lambda: str(self.ws)
+		self.session_key = self.tool.session_key
 		self.tool.agent_role = lambda: "secretary"
 		# The session key is the client's pid, and a pid that is alive is one the
 		# recycling pass keeps. The identity itself is left to the real code, so
@@ -143,9 +146,11 @@ class TestSessionIdentity(CoordTestCase):
 		]
 		self.assertEqual(self.tool.pick_opencode_pid(entries), 100)
 
-	def test_the_service_is_the_answer_when_there_is_no_client(self):
+	def test_the_service_is_not_an_answer_because_it_is_one_for_the_machine(self):
+		# One service runs for the whole machine, so it is the same process for
+		# every session on it. It is not evidence about the session asking.
 		entries = [(200, "opencode", ["opencode", "serve", "--service"])]
-		self.assertEqual(self.tool.pick_opencode_pid(entries), 200)
+		self.assertIsNone(self.tool.pick_opencode_pid(entries))
 
 	def test_a_process_that_is_not_opencode_is_skipped(self):
 		entries = [
@@ -156,6 +161,158 @@ class TestSessionIdentity(CoordTestCase):
 
 	def test_no_opencode_process_at_all_is_no_answer(self):
 		self.assertIsNone(self.tool.pick_opencode_pid([(300, "bash", ["/bin/bash"])]))
+
+class TestSessionClient(CoordTestCase):
+	"""Under opencode 2 the tool shell descends from the service, not from the
+	client, so the client is found by what it says about itself."""
+
+	def test_the_client_that_names_the_session_is_the_answer(self):
+		clients = [
+			(100, ["opencode", "--session", "ses_aaa"], "/repo"),
+			(200, ["opencode", "--session", "ses_bbb"], "/other"),
+		]
+		self.assertEqual(self.tool.pick_session_client(clients, "ses_bbb", "/repo", set()), 200)
+
+	def test_the_only_client_in_the_session_directory_is_the_answer(self):
+		clients = [
+			(100, ["opencode", "--session", "ses_aaa"], "/repo"),
+			(200, ["opencode", "--session", "ses_bbb"], "/other"),
+		]
+		self.assertEqual(self.tool.pick_session_client(clients, None, "/repo", set()), 100)
+
+	def test_a_new_in_the_same_window_keeps_the_client_already_known(self):
+		# The client keeps its process across a `/new`, so it keeps the identity
+		# with it. The session id changes, so it cannot be what names the client.
+		clients = [
+			(100, ["opencode", "--session", "ses_aaa"], "/repo"),
+			(200, ["opencode", "--session", "ses_bbb"], "/repo"),
+		]
+		# The other client is the newer one, so the fallback that takes the
+		# newest would pick it and lose the identity.
+		self.tool.proc_starttime = lambda pid: pid
+		self.assertEqual(self.tool.pick_session_client(clients, None, "/repo", {"pid-100"}), 100)
+
+	def test_the_service_is_never_a_candidate(self):
+		clients = [(200, ["opencode", "serve", "--service"], "/home")]
+		self.assertIsNone(self.tool.pick_session_client(clients, "ses_aaa", "/home", set()))
+
+	def test_no_client_at_all_is_no_answer(self):
+		self.assertIsNone(self.tool.pick_session_client([], "ses_aaa", "/repo", set()))
+
+class TestWorkspaceRoot(CoordTestCase):
+	"""The workspace is the session's directory. The service's directory is not:
+	one service runs for the whole machine and works out of the home directory,
+	so a session attached to it resolved every workspace to the home directory
+	and found no rules there."""
+
+	def setUp(self):
+		super().setUp()
+		self.tool.workspace_root = self.workspace_root
+		self.home = Path(self.folder.name) / "home"
+		(self.home / ".agents").mkdir(parents=True)
+		self.repo = Path(self.folder.name) / "repo"
+		(self.repo / ".agents").mkdir(parents=True)
+
+	def test_the_client_directory_is_the_workspace(self):
+		self.tool.opencode_pid = lambda: None
+		self.tool.opencode_clients = lambda: [(100, ["opencode", "--session", "ses_aaa"], str(self.repo))]
+		self.tool.proc_cwd = lambda pid: str(self.repo)
+		with mock.patch.dict(os.environ, {"OPENCODE_SESSION_ID": "ses_aaa"}):
+			with mock.patch.object(os, "getcwd", return_value=str(self.home)):
+				self.assertEqual(self.tool.workspace_root(), str(self.repo))
+
+	def test_a_session_opened_in_the_home_directory_still_resolves_to_it(self):
+		# A window opened in the home directory is a session in the home
+		# directory, and that is correct for that window.
+		self.tool.opencode_pid = lambda: None
+		self.tool.opencode_clients = lambda: [(100, ["opencode", "--session", "ses_aaa"], str(self.home))]
+		self.tool.proc_cwd = lambda pid: str(self.home)
+		with mock.patch.dict(os.environ, {"OPENCODE_SESSION_ID": "ses_aaa"}):
+			with mock.patch.object(os, "getcwd", return_value=str(self.home)):
+				self.assertEqual(self.tool.workspace_root(), str(self.home))
+
+	def test_a_directory_without_a_agents_folder_walks_up_to_the_workspace(self):
+		nested = self.repo / "tools" / "sub"
+		nested.mkdir(parents=True)
+		self.tool.opencode_pid = lambda: None
+		self.tool.opencode_clients = lambda: [(100, ["opencode", "--session", "ses_aaa"], str(nested))]
+		self.tool.proc_cwd = lambda pid: str(nested)
+		with mock.patch.dict(os.environ, {"OPENCODE_SESSION_ID": "ses_aaa"}):
+			with mock.patch.object(os, "getcwd", return_value=str(nested)):
+				self.assertEqual(self.tool.workspace_root(), str(self.repo))
+
+class TestSessionKey(CoordTestCase):
+	"""Two windows are two sessions, and one window keeps one identity across a
+	`/new`."""
+
+	def test_the_key_is_the_client_pid(self):
+		self.tool.session_key = self.session_key
+		self.tool.session_client_pid = lambda: 100
+		with mock.patch.dict(os.environ, {}, clear=False):
+			os.environ.pop("OPENCODE_AGENT_ID", None)
+			self.assertEqual(self.tool.session_key(), "pid-100")
+
+	def test_the_named_agent_id_wins_over_everything(self):
+		self.tool.session_key = self.session_key
+		self.tool.session_client_pid = lambda: 100
+		with mock.patch.dict(os.environ, {"OPENCODE_AGENT_ID": "XLib/secretary-9"}):
+			self.assertEqual(self.tool.session_key(), "XLib/secretary-9")
+
+	def test_the_session_id_is_the_key_when_no_client_can_be_found(self):
+		self.tool.session_key = self.session_key
+		self.tool.session_client_pid = lambda: None
+		with mock.patch.dict(os.environ, {"OPENCODE_SESSION_ID": "ses_aaa"}):
+			self.assertEqual(self.tool.session_key(), "ses-ses_aaa")
+
+	def test_the_service_pid_is_the_last_resort_not_the_first(self):
+		self.tool.session_key = self.session_key
+		self.tool.session_client_pid = lambda: None
+		self.tool.opencode_service_pid = lambda: 200
+		with mock.patch.dict(os.environ, {}, clear=False):
+			os.environ.pop("OPENCODE_SESSION_ID", None)
+			os.environ.pop("OPENCODE_AGENT_ID", None)
+			self.assertEqual(self.tool.session_key(), "pid-200")
+
+class TestLeftoverIdentity(CoordTestCase):
+	"""The service's pid used to be the session key, so every session attached
+	to the service shared one identity, one notes file and one set of claims.
+	The key is the client's pid now, so the identity moves with the session
+	that was using it rather than being stranded."""
+
+	def setUp(self):
+		super().setUp()
+		self.tool.recycle_dead_slots = lambda: None
+		self.tool.migrate_ids = lambda: None
+		self.tool.session_key = lambda: "pid-100"
+		self.tool.service_keyed_ids = lambda ids: {"pid-200": "xonok/secretary-1"}
+
+	def test_the_leftover_identity_and_its_claims_move_to_the_new_key(self):
+		self.write_json("ids.json", {"pid-200": "xonok/secretary-1"})
+		self.write_json("claims.json", {"xonok/secretary-1": ["/tmp/a.py"]})
+		self.write_json("rule-cursor.json", {"xonok/secretary-1": {"/tmp/AGENTS.md": "abc"}})
+		agent = self.tool.my_id()
+		self.assertEqual(agent, "ws/secretary-1")
+		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-1"})
+		self.assertEqual(self.read_json("claims.json"), {"ws/secretary-1": ["/tmp/a.py"]})
+		self.assertEqual(self.read_json("rule-cursor.json"), {"ws/secretary-1": {"/tmp/AGENTS.md": "abc"}})
+
+	def test_a_leftover_of_another_role_is_not_carried_over(self):
+		self.tool.service_keyed_ids = lambda ids: {"pid-200": "xonok/programmer-1"}
+		self.write_json("ids.json", {"pid-200": "xonok/programmer-1"})
+		self.write_json("claims.json", {"xonok/programmer-1": ["/tmp/a.py"]})
+		agent = self.tool.my_id()
+		self.assertNotEqual(agent, "ws/programmer-1")
+		self.assertEqual(self.read_json("claims.json"), {"xonok/programmer-1": ["/tmp/a.py"]})
+
+	def test_a_leftover_left_after_the_transition_is_absorbed_not_kept(self):
+		# The session already has an id, and the leftover is still there. The
+		# leftover is taken over once, so it goes and its claims merge in.
+		self.write_json("ids.json", {"pid-200": "xonok/secretary-1", "pid-100": "ws/secretary-1"})
+		self.write_json("claims.json", {"xonok/secretary-1": ["/tmp/a.py"], "ws/secretary-1": ["/tmp/b.py"]})
+		agent = self.tool.my_id()
+		self.assertEqual(agent, "ws/secretary-1")
+		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-1"})
+		self.assertEqual(self.read_json("claims.json"), {"ws/secretary-1": ["/tmp/b.py", "/tmp/a.py"]})
 
 class TestNearestGit(CoordTestCase):
 	"""A worktree's `.git` is a file, and a lookup that recognises only a

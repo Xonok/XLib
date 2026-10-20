@@ -200,35 +200,61 @@ def proc_argv(pid):
 	except OSError:
 		return []
 
+def proc_cwd(pid):
+	"""The working directory of a process, or None if it cannot be read."""
+	try:
+		return os.path.realpath(os.readlink("/proc/%s/cwd" % pid))
+	except OSError:
+		return None
+
+def proc_starttime(pid):
+	"""The start time of a process, in clock ticks since boot."""
+	try:
+		with open("/proc/%s/stat" % pid) as f:
+			parts = f.read().split()
+		return int(parts[21])
+	except (OSError, IndexError, ValueError):
+		return 0
+
+def is_service(argv):
+	"""True for the opencode background service.
+
+	One service runs for the whole machine and every session's tool shell is its
+	child, so the service is not evidence about the session that is asking: it is
+	the same process for every session, and it works out of the home directory.
+	"""
+	return argv[1:2] == ["serve"]
+
 def pick_opencode_pid(entries):
 	"""Choose the opencode client among ancestor processes, nearest first.
 
-	`entries` is a list of (pid, comm, argv). Under opencode 2 one service runs for
-	the whole machine and every session's tool shell is its child, while the client
-	that carries the session is its parent. The service is the wrong process to ask:
-	it is the same one for every session on the machine, it works out of the home
-	directory, and it gives every session one identity. So the walk steps over it
-	and settles on the client, and takes the service only when there is no client
-	to be had.
+	`entries` is a list of (pid, comm, argv). The service is skipped rather
+	than used as a fallback: it is the same process for every session on the
+	machine, it works out of the home directory, and it gives every session one
+	identity. So the walk settles on the client, and the service is not an
+	answer.
 	"""
-	service = None
 	for pid, comm, argv in entries:
 		if comm != "opencode":
 			continue
-		if argv[1:2] == ["serve"]:
-			if service is None:
-				service = pid
+		if is_service(argv):
 			continue
 		return pid
-	return service
+	return None
 
-def opencode_pid():
-	"""The pid of the opencode client that owns this session, or None."""
+def opencode_ancestors():
+	"""The opencode processes in this process's ancestry, nearest first.
+
+	Each entry is (pid, comm, argv).
+	"""
 	entries = []
 	pid = os.getpid()
 	while True:
-		with open("/proc/%s/stat" % pid) as f:
-			parts = f.read().split()
+		try:
+			with open("/proc/%s/stat" % pid) as f:
+				parts = f.read().split()
+		except OSError:
+			break
 		comm = parts[1].strip("()")
 		ppid = int(parts[3])
 		if comm == "opencode":
@@ -236,40 +262,128 @@ def opencode_pid():
 		if pid in (1, ppid):
 			break
 		pid = ppid
-	return pick_opencode_pid(entries)
+	return entries
+
+def opencode_pid():
+	"""The pid of the opencode client in this process's ancestry, or None."""
+	return pick_opencode_pid(opencode_ancestors())
+
+def opencode_service_pid():
+	"""The pid of the opencode background service in this process's ancestry."""
+	for pid, comm, argv in opencode_ancestors():
+		if comm == "opencode" and is_service(argv):
+			return pid
+	return None
+
+def opencode_clients():
+	"""The opencode clients on the machine: (pid, argv, cwd) for each.
+
+	The service is left out. Under opencode 2 the tool shell descends from the
+	service rather than from the client, so the client is not an ancestor and has
+	to be found by what it says about itself: it names the session it serves, and
+	it works in the directory the session works in.
+	"""
+	clients = []
+	for name in os.listdir("/proc"):
+		if not name.isdigit():
+			continue
+		pid = int(name)
+		try:
+			with open("/proc/%s/comm" % pid) as f:
+				comm = f.read().strip()
+		except OSError:
+			continue
+		if comm != "opencode":
+			continue
+		argv = proc_argv(pid)
+		if is_service(argv):
+			continue
+		clients.append((pid, argv, proc_cwd(pid)))
+	return clients
+
+def pick_session_client(clients, session_id, cwd, known):
+	"""Choose the opencode client that owns this session.
+
+	`clients` is a list of (pid, argv, cwd). `session_id` is the id the session
+	knows itself by, `cwd` the directory this process runs in, and `known` the
+	session keys this tool already holds an identity for.
+
+	Three ways to name the owner, in order of how well they say it:
+	  - the session id in the client's own arguments, which is exact;
+	  - the only client working in the directory this session runs in;
+	  - among several clients in that directory, the one this tool already
+	    knows, so a `/new` in the same window keeps the same identity.
+	"""
+	clients = [c for c in clients if not is_service(c[1])]
+	if session_id:
+		for pid, argv, client_cwd in clients:
+			if session_id in argv:
+				return pid
+	same = [c for c in clients if c[2] == cwd]
+	if len(same) == 1:
+		return same[0][0]
+	if same:
+		known_same = [c for c in same if "pid-%d" % c[0] in known]
+		if len(known_same) == 1:
+			return known_same[0][0]
+		return max(same, key=lambda c: proc_starttime(c[0]))[0]
+	return None
+
+def session_client_pid():
+	"""The pid of the opencode client that owns this session, or None.
+
+	The client is found by what it says about itself: the session id in its own
+	arguments, or the directory it works in. The service is never an answer.
+	"""
+	pid = opencode_pid()
+	if pid:
+		return pid
+	clients = opencode_clients()
+	if not clients:
+		return None
+	known = set(load(IDS, {}).keys())
+	cwd = os.path.realpath(os.getcwd())
+	return pick_session_client(clients, os.environ.get("OPENCODE_SESSION_ID"), cwd, known)
 
 def session_key():
 	"""The key that stands for this session in `ids.json`.
 
 	Unless `OPENCODE_AGENT_ID` names one, it is the client's pid: two windows are
 	two sessions, and one window keeps one identity across a `/new`, because the
-	instance is the window and the notes file belongs to it.
+	instance is the window and the notes file belongs to it. The session id is
+	the second answer and the service's pid the last: the service is one process
+	for the whole machine, so a key taken from it is shared by every session
+	attached to it.
 	"""
 	name = os.environ.get("OPENCODE_AGENT_ID")
 	if name:
 		return name
-	pid = opencode_pid()
-	return "pid-%s" % (pid or os.getpid())
+	pid = session_client_pid()
+	if pid:
+		return "pid-%s" % pid
+	session_id = os.environ.get("OPENCODE_SESSION_ID")
+	if session_id:
+		return "ses-%s" % session_id
+	service = opencode_service_pid()
+	return "pid-%s" % (service or os.getpid())
 
 def workspace_root():
-	"""Workspace folder of this session: nearest ancestor of the opencode
-	process's cwd that has a .agents dir, else this process's cwd ancestry,
-	else ROOT.
+	"""Workspace folder of this session.
 
-	The opencode process is the client, which is the process that carries the
-	session's directory. Under opencode 1 the client *was* that process; under
-	opencode 2 the shared service sits between the client and the shell, and it
-	works out of the home directory, so asking it put every session in the same
-	place and found no rules there.
+	The session's directory is the directory the opencode client that owns the
+	session works in, and the tool shell runs in it as well. The service is not
+	asked: one service runs for the whole machine and works out of the home
+	directory, so a session attached to it would resolve every workspace to the
+	home directory and find no rules there.
 	"""
-	start = ROOT
-	pid = opencode_pid()
-	if pid:
-		try:
-			start = os.path.realpath(os.readlink("/proc/%s/cwd" % pid))
-		except OSError:
-			pass
-	for base in [start, os.getcwd()]:
+	bases = []
+	client = session_client_pid()
+	if client:
+		cwd = proc_cwd(client)
+		if cwd:
+			bases.append(cwd)
+	bases.append(os.path.realpath(os.getcwd()))
+	for base in bases:
 		while True:
 			if os.path.isdir(os.path.join(base, ".agents")):
 				return base
@@ -373,6 +487,69 @@ def migrate_ids():
 	if changed_cu:
 		save(RULE_CURSOR, cursors)
 
+def service_keyed_ids(ids):
+	"""The ids.json entries whose key names a live opencode service.
+
+	One service runs for the whole machine, so an identity keyed by it was never
+	a session's own: every session attached to the service was given that one
+	id, that one notes file, that one rule cursor and that one set of claims.
+	The key is the client's pid now, so these are leftovers of the sharing
+	rather than the identity of anything.
+	"""
+	leftovers = {}
+	for key, value in ids.items():
+		if not key.startswith("pid-"):
+			continue
+		try:
+			pid = int(key.split("-")[1])
+		except ValueError:
+			continue
+		if is_service(proc_argv(pid)):
+			leftovers[key] = value
+	return leftovers
+
+def absorb_leftover(ids, key, role):
+	"""Take over a machine-wide leftover identity, and its claims, once.
+
+	The service's pid used to be the session key, so every session attached to
+	the service shared one identity, one notes file, one rule cursor and one set
+	of claims. The key is the client's pid now, so the identity moves with the
+	session that was using it and the claims and the cursor come with it, rather
+	than being stranded where the guard would refuse the rightful owner.
+
+	The id is re-tagged to the workspace the session is really in: the old tag
+	was the home directory's name, which was never a workspace. Where this
+	session already has an id, the leftover's claims merge into it and the
+	leftover goes: a leftover is taken over once, so two sessions cannot end up
+	sharing one identity.
+	"""
+	candidates = {}
+	for old_key, old_id in service_keyed_ids(ids).items():
+		suffix = old_id.split("/", 1)[1] if "/" in old_id else old_id
+		if suffix.startswith(role + "-"):
+			candidates[old_key] = (old_id, suffix)
+	if len(candidates) != 1:
+		return None
+	old_key, (old_id, suffix) = next(iter(candidates.items()))
+	new_id = ids.get(key) or "%s/%s" % (ws_tag(), suffix)
+	ids[key] = new_id
+	del ids[old_key]
+	save(IDS, ids)
+	claims = load(CLAIMS, {})
+	if old_id in claims:
+		merged = list(claims.get(new_id, []))
+		for path in claims[old_id]:
+			if path not in merged:
+				merged.append(path)
+		claims[new_id] = merged
+		claims.pop(old_id, None)
+		save(CLAIMS, claims)
+	cursors = load(RULE_CURSOR, {})
+	if old_id in cursors:
+		cursors[new_id] = cursors.pop(old_id)
+		save(RULE_CURSOR, cursors)
+	return new_id
+
 def my_id():
 	key = session_key()
 	if not key.startswith("pid-"):
@@ -381,6 +558,9 @@ def my_id():
 		recycle_dead_slots()
 		migrate_ids()
 		ids = load(IDS, {})
+		absorbed = absorb_leftover(ids, key, agent_role())
+		if absorbed:
+			return qualify(absorbed)
 		if key in ids:
 			return qualify(ids[key])
 		tag = ws_tag()
