@@ -35,6 +35,20 @@ files). The Traveller acceptance test has been run — the bundle was produced a
 does not run — **though the artefact is no longer on disk, so a repeat run is
 needed to see it again**.
 
+**Three more merges on 2026-10-20, on the human's authorisation** ("you can
+commit the changes that are on master and whatever else makes sense"):
+**PR #50** (`K93Z39B`, the `news` repair, merged as `f12ebd5`),
+**PR #51** (`TAQ74SC`, the state-file drift sweep, merged as `671b150`), and
+**PR #52** (four commits — the xtest standardisation, the absolute-path check
+on Python files, and the category vocabulary — merged as `df34b07`).
+**One command now runs the repository's tests: `python3 tools/run_tests.py`,
+934 tests across 14 suites.** The 6 failures are the known
+`ContentNegotiationTest` — xhttp gzips regardless of `Accept-Encoding`, epiq
+`BFNRBG7` — and they fail the same way under plain unittest. **The category
+vocabulary is thirteen values, all lowercase with no dash or space**, and XLib
+work is scoped to `xlib` with the part of XLib it is about as the second
+level.
+
 **`agent-coord.py` had two defects that made the coordination tool report
 something untrue. One is fixed and on master; the other was not, and its
 repair is PR #50.** The `news` command — the only channel that carries a rule
@@ -262,6 +276,9 @@ the human's call.
 | **pybundle acceptance** | secretary | **Traveller bundles; it does not run. Run 2026-10-18** — **the artefact is no longer on disk: `Space-Traveller/server-bundled.py` does not exist (checked 2026-10-20), so the run has to be repeated to see the bundle again.** 142 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **329 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib for the first time. **Two defects, both filed and both outside anything XLib's own corpus contains**, so no amount of testing against XLib would have found them: `86CDJV2` (D32 rule 3 handles a removed import mid-file and misses one at the **end** — 3 double-blank findings) and **`JD9DWVN`, which stops it running** (`from . import io,…` in a package `__init__.py` reached again through the package attribute gives `server__Misc____init__io`, which nothing defines — **141 such names**, `NameError` on first call). `JD9DWVN` carries a ruling request: warn / alias / leave as D17's exclusion. **The structural machinery is sound** — prefixing, aliasing, scope tracking, the whole D20 mechanism all produced a structurally valid 400 KB bundle | `Space-Traveller/server-bundled.py`, epiq `86CDJV2`, `JD9DWVN` |
 | **xlint: html rules** | secretary | **IMPLEMENTED AND MERGED 2026-10-19 — PR #42, on master as `5c1865e`.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + Mallesne's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md`. **The human merged it on their own instruction so they could run it over Traveller** — `xlint` over Space-Traveller's `html/` folder gives 783 findings (774 depth, 7 trailing whitespace, 2 double blank), and Mallesne's one html file is clean | epiq `YFJZRYC`, taskview `#139` |
 | **xlint: the worktree blind spot** | secretary | **FIXED 2026-10-19 — PR #44, merged as `36b20c5`, two tickets: `XP56NNC` (the linter) and `2X3PZT3` (the hooks).** The linter excluded every file in a `.work/` worktree and said `clean`; the hook that runs it never ran in a worktree at all, so the style gate and the ticket-ref check were both open there. Both fixed, both measured; the gate's output at the repository root is unchanged. | epiq `XP56NNC`, `2X3PZT3`, taskview `#144` |
+| **xtest: the repository's runner** | secretary | **MERGED 2026-10-20 — PR #52, four commits, merged as `df34b07` on the human's authorisation.** **One command runs the repository's tests: `python3 tools/run_tests.py` — 934 tests, 14 suites.** The 6 failures are the known `ContentNegotiationTest` (epi `BFNRBG7`). **Five suites were inert** — `tools/test/test_epiq_pending.py`, `dev/xconf`, `dev/xschema` and xtest's own two — each exiting 0 having run nothing, and 67 tests that no command could run. **xtest grew to carry the runner rather than the suites being rewritten**: it now runs `unittest.TestCase` classes through unittest's own machinery, so the 852 unittest tests run under it and keep their `addCleanup`, `subTest` and skip decorators. A file runs that file alone; a module's fixtures wrap that module's tests; `import xtest` works from any directory; every assertion takes a message. **Two stale tests found and fixed**: `xlib_dev`'s library list had not been updated since `xhttp` joined `dev/` on 2026-10-10, and `dev/xschema`'s suite imported the *released* xtest rather than the development one. **Not released** — `dev/xtest/VERSIONS.md` still reads 1_0_0, and a release is the human's call | epiq `A7DGZYZ`, taskview `#155` |
+| **xlint: the absolute-path check on Python files** | secretary | **MERGED 2026-10-20 — PR #52, merged as `df34b07`.** The check existed and ran in the Markdown branch only, so `tools/tool_schema_cache.py:14` carried this machine's path and the linter said nothing — the finding `STATUS.md` left open on 2026-10-20, when the drift sweep found the ticket closed and the check not covering the file the finding was about. **Two decisions:** **`~/` is not flagged** (the rule is about *one machine's* layout, and `~/` is the portable form — flagging it would have meant rewriting twenty-odd correct lines), and **a docstring is not a string literal** (a docstring names a location; a string literal is a value, and one that looks like a path is usually a fixture). Five tests, one of them end-to-end over every tracked `.py` file | epiq `7HP67R2` |
+| **the category vocabulary** | secretary | **RULED and APPLIED 2026-10-20 — PR #52, merged as `df34b07`.** Thirteen categories, down from eighteen, all lowercase with no dash or space. `XLib` → `xlib`, with `pybundle` and `xhttp` folded into it and their part as the second level — the tag; `Agents` and `agents` → `agents`; and `dev` and `testcat` left the vocabulary (one cancelled scratch task each). **XLib work that is not about any particular library or tool there gets one word, `xlib`**, rather than a new word per task — that is what stops the vocabulary expanding again. 130 appended rows in the store (append-only, last-row-wins); four panels filter on those names and all four are updated | epiq `SNXBR23` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -378,7 +395,8 @@ Also standing, from the abandoned single-pass attempt:
 	rule changes still do not arrive for a session of this shape, and the
 	`git checkout` ban is one of them.** PR #50 finds the client by what it says
 	about itself — the session id in its own arguments, and the directory it
-	works in — and the service is never a candidate.
+	works in — and the service is never a candidate. **MERGED 2026-10-20 as `f12ebd5`, on the
+	human's authorisation.**
 	**The stale identity is handled rather than left to rot:** the service's pid
 	was the session key, so every session attached to the service was given one
 	identity, one notes file, one rule cursor and one set of claims. With the

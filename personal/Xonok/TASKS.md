@@ -138,9 +138,10 @@ needed when there is no due date.
 	list, on the measured grounds that it never touches the working tree and only
 	resets the index. A guard matching `git reset` as a prefix would be wrong:
 	it would block the safe `--soft` and path forms too.
-- [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
-	cursor** (by 2026-10-20, high) — **REOPENED 2026-10-20: the PR #47 repair
-	did not hold.** Board: epiq `K93Z39B` (reopened, In progress). **The fix is
+- [x] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
+	cursor** (done 2026-10-20, high) — **REOPENED and FIXED on the same day: the
+	PR #47 repair did not hold, and PR #50 is the repair. MERGED as `f12ebd5`.**
+	Board: epiq `K93Z39B` (reopened, In progress). Board: epiq `K93Z39B` (reopened, In progress). **The fix is
 	in PR #50, waiting for the human's merge.**
 	**What PR #47 fixed, and what it did not.** The claims-wipe is genuinely
 	fixed: `migrate_ids()` no longer drops the claims of every agent on the
@@ -173,14 +174,29 @@ needed when there is no due date.
 	session is really in — the old tag was the home directory's name, which was
 	never a workspace. **36 tests in `tools/test/test_agent_coord.py`; 11
 	mutations of the repair, each killed by the test that names it.**
-- [ ] **#150 — Drift sweep: `STATUS.md` and `TASKS.md` against the task store
-	and the board** (by 2026-10-21, medium) — the scheduling paragraph in
+- [x] **#150 — Drift sweep: `STATUS.md` and `TASKS.md` against the task store
+	and the board** (done 2026-10-20, medium) — **MERGED as `671b150` (PR #51).**
+	Board: epiq `TAQ74SC` (Done). The scheduling paragraph in
 	`STATUS.md` is wrong on both counts: it says 4 high-importance tasks have no
 	due date (#52, #61, #63, #75 — all four have one now) and that 10 tasks are
 	past due, where the store says **17**. It also points at "this workspace's
 	two" tasks, and `TASKS.md` has **28** open. The 16 tasks that genuinely have
 	no due date are a different set (#104–#110, #122, #123, #127, #133, #137,
 	#138, #140, #141, #143) and are not mentioned.
+- [ ] **#155 — xtest: release 1_1_0, and migrate the unittest suites to
+	xtest's own idiom** (by 2026-10-27, medium) — the xtest work of 2026-10-20
+	(PR #52) is merged but **not released**: `dev/xtest/VERSIONS.md` still reads
+	1_0_0, and a release is the human's call. The additions are additive —
+	`TestCase`, `unittest.TestCase` support, assertion messages, running a
+	single file, `main` — so the next release is 1_1_0. **The 852 unittest tests
+	run under xtest but are still written in unittest's idiom**; migrating them
+	is optional and a separate piece of work.
+- [ ] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
+	(by 2026-10-22, low) — the Agents panel's comment and category list were
+	updated to the house style on 2026-10-20 but **not committed**: the epiq
+	board was unreachable, so no Agents-board ticket could be filed, and that
+	repository's commit-msg hook refuses a commit without one. The file is live
+	in the working tree, so the panel is right; only the commit is missing.
 - [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-24, medium)
 	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
 	wide tool *always orders by due date* — changing the order is simply a
