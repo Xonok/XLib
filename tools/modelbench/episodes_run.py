@@ -76,9 +76,13 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 			"n_turns":raw.get("n_turns"),"usage":raw.get("usage")},
 		# The confounds of the harness path travel with the result, so a report cannot
 		# quote a harness grade beside a direct grade without the difference showing.
+		# The provider's own explanation of a failed session, and the process's stderr.
+		# Without these a refused run says only "not-measurable", and a reader cannot
+		# tell a quota exhaustion from a model that would not answer.
 		"provenance":{"transport":raw.get("transport","four-tool"),
 			"timed_out":raw.get("timed_out"),"turn_budget":raw.get("turn_budget"),
-			"over_budget":raw.get("over_budget")},
+			"over_budget":raw.get("over_budget"),
+			"provider_error":raw.get("provider_error",""),"stderr":raw.get("stderr","")},
 		**result}
 
 def main():

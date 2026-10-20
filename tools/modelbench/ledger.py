@@ -99,6 +99,10 @@ def _row(root,src,line,rec,baselines):
 		"model":_short_name(model_id),"model_id":model_id,
 		"episode":rec.get("episode"),"repeat":rec.get("repeat"),
 		"transport":(rec.get("provenance") or {}).get("transport") or rec.get("transport"),
+		# What the provider said, when it said anything. A refused run says only
+		# "not-measurable" without it, and a reader cannot tell a quota exhaustion from
+		# a model that would not answer.
+		"provider_error":(rec.get("provenance") or {}).get("provider_error",""),
 		"grade":rec.get("grade"),"gates":rec.get("gates"),
 		"failed_gates":rec.get("failed_gates"),
 		"bench_version":rec.get("bench_version"),"grade_version":rec.get("grade_version"),

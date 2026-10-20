@@ -167,6 +167,33 @@ def harness_cmd(model,workdir,prompt):
 	cmd.append(prompt)
 	return cmd
 
+def provider_error(events):
+	"""What the provider said, if it said anything.
+
+	opencode reports a provider-side failure as an event in the stream, not on stderr:
+	`{"type":"error","error":{"type":"provider.quota","message":"Rate limit exceeded..."}}`.
+	**The harness mapping ignored those events**, so a session that the provider refused
+	produced a record saying only `not-measurable` with an empty stderr — the reader
+	could not tell a quota exhaustion from a model that refused to answer, from a
+	transport that died. The explanation was in the stream the whole time.
+
+	Measured 2026-10-20: the console's own free tier ran out mid-wave and four models'
+	six runs each came back `not-measurable` with no reason at all.
+	"""
+	for ev in events or []:
+		if ev.get("type") != "error":
+			continue
+		err = ev.get("error") or {}
+		kind = err.get("type") or "error"
+		message = err.get("message") or ""
+		body = err.get("response") or {}
+		if not message and isinstance(body,dict):
+			message = str(body.get("body") or "")[:200]
+		text = f"{kind}: {message}".strip(": ")
+		if text:
+			return text[:400]
+	return ""
+
 def harness_stream(model,prompt,workdir,timeout):
 	"""Run one whole `opencode run` session and return its raw event list.
 
@@ -190,9 +217,11 @@ def harness_stream(model,prompt,workdir,timeout):
 		# shows what the model did before it stopped converging, and a killed run must
 		# read as "did not finish" so it fails G4 the same way a turn-capped run does.
 		events = _parse_events(e.stdout or "")
-		return events,{"returncode":None,"timed_out":True,"stderr":(e.stderr or "")[:400]}
+		return events,{"returncode":None,"timed_out":True,"stderr":(e.stderr or "")[:400],
+			"provider_error":provider_error(events)}
 	events = _parse_events(proc.stdout)
-	return events,{"returncode":proc.returncode,"timed_out":False,"stderr":proc.stderr[:400]}
+	return events,{"returncode":proc.returncode,"timed_out":False,"stderr":proc.stderr[:400],
+		"provider_error":provider_error(events)}
 
 def _parse_events(stdout):
 	events = []
