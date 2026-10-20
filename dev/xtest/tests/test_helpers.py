@@ -1,3 +1,6 @@
+import os,sys
+# xtest, one folder up from this one.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import xtest
 
 def test_equal_pass():
@@ -59,3 +62,7 @@ def test_contains():
 
 def test_kind():
 	xtest.kind(3, int)
+
+if __name__ == "__main__":
+	import sys
+	sys.exit(xtest.run(__file__))

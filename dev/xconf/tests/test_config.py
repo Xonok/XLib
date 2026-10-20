@@ -1,3 +1,11 @@
+import os,sys
+# `dev/` on the path, so `import xconf` works wherever the suite is run from.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_LIB = os.path.dirname(_HERE)
+_DEV = os.path.dirname(_LIB)
+for _entry in (_LIB, os.path.join(_DEV, "xtest")):
+	if _entry not in sys.path:
+		sys.path.insert(0, _entry)
 import xconf,json,os,tempfile,xtest
 
 def test_merge_overrides_and_preserves():
@@ -71,3 +79,7 @@ def test_save_diff_only():
 		with open(os.path.join(tmp, "w.json")) as f:
 			written = json.load(f)
 		xtest.equal(written, {"a": 7})
+
+if __name__ == "__main__":
+	import sys
+	sys.exit(xtest.run(__file__))
