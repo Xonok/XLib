@@ -8,7 +8,10 @@ if _ROOT not in sys.path:
 import xlib_dev
 from dev.xtest.xtest import contains,equal,not_equal,raises,same,true
 
-_LIBRARY_NAMES = ["xconf", "xcsv", "xprod", "xschema", "xtest"]
+# Every library with a dev folder to stand in for. `xhttp` joined the list on
+# 2026-10-10, when the library moved into `dev/`, and this constant was not
+# updated — the test caught it, which is what it is for.
+_LIBRARY_NAMES = ["xconf", "xcsv", "xhttp", "xprod", "xschema", "xtest"]
 _xcsv = getattr(xlib_dev, "xcsv")
 
 def _released(name):
