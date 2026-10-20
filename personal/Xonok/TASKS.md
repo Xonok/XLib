@@ -513,7 +513,7 @@ needed when there is no due date.
 	enters it. **The other half of the ticket**: `main()` built the rules from
 	`args.paths[0]` alone, so a run over two repositories was governed by the first
 	one's chain — each path is now governed by its own, and the deepest watched
-	path wins for a file under two of them. **PR #68, commit `2cdb36b` — open and
+	path wins for a file under two of them. **PR #68, commit `62f672b` — open and
 	not merged**, for the human's review: it changes what a tool does. **13 new
 	tests, all 13 failing against the old code**, and mutation-checked.
 
