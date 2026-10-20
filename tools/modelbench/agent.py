@@ -396,9 +396,9 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 			continue
 		if kind != "step_finish":
 			continue
-		totals = (part.get("tokens") or {}).get("total")
-		if isinstance(totals,int):
-			tokens = totals
+		total = transport.token_total(part)
+		if isinstance(total,int):
+			tokens = total
 		# Several tool calls inside one step is batching, and batching is measured, not
 		# punished — same rule as the four-tool path.
 		if step_actions > 1:
