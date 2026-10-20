@@ -272,6 +272,10 @@ HARNESS_MAPPING = (
 	"transport.token_total",
 	"transport.route_of",
 	"transport.cli_flags",
+	# What the provider said when it refused a session. It is part of the mapping
+	# because it decides whether a run is a hole with a reason or a hole without one,
+	# and a change to it moves what a record says about itself.
+	"transport.provider_error",
 	# The constants the mapping reads. A tool name mapped to the wrong action, or a
 	# session allowed to run for a different length, is as much a change of
 	# measurement as an edit to a function body.
@@ -646,4 +650,4 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 		"transport":"harness","timed_out":info["timed_out"],
 		"returncode":info["returncode"],"turn_budget":max_turns,
 		"over_budget":len(turns) > max_turns,
-		"stderr":info["stderr"]}
+		"stderr":info["stderr"],"provider_error":info.get("provider_error","")}
