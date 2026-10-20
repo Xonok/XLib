@@ -17,10 +17,10 @@ _CLEAR_SCREEN = "\033[2J\033[H"
 _POLL_SECONDS = 1.0
 _FALLBACK_SIZE = (80, 24)
 # The lines the display spends before it shows a model: the Skynet header, two
-# section headers, two table headers, two separators and a blank.
-_OVERHEAD = 8
+# section titles, two separators and the blank between the sections.
+_OVERHEAD = 6
 # The lines the two sections need before they can say anything at all: the
-# header, a section header and a note for each of them, and the blank between.
+# header, a title and a note for each of them, and the blank between.
 _MINIMUM_HEIGHT = 6
 
 def load_stats(limit_seconds):
@@ -133,24 +133,25 @@ def overflow_note(more):
 	"""The line that says how much a capped table left out."""
 	return f"… +{more} more"
 
-def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None):
+def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None, title=None):
 	models = used_models(by_model)
-	if not models:
-		return "no agents active"
 	shown = models if max_models is None else models[:max_models]
 	more = len(models) - len(shown)
-	if not shown:
-		# No room for a row at all: the note is the whole table, and the
-		# header and the separator it does not print are the lines it saves.
-		return overflow_note(more)
+	label = title if title else "Model"
 	if col_w is None:
-		col_w = max(len(m) for m in shown)
+		col_w = max([len(m) for m in shown] + [len(label)])
 	ref_w = 12
-	hdr = f"{'Model':<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}"
+	hdr = f"{label:<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}"
 	sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * ref_w}"
 	if show_extra:
 		hdr += f"  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}"
 		sep += f"  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}"
+	if not models:
+		return f"{hdr}\nno agents active" if title else "no agents active"
+	if not shown:
+		# No room for a row at all: the note is the whole table, and the
+		# separator it does not print is the line it saves.
+		return f"{hdr}\n{overflow_note(more)}" if title else overflow_note(more)
 	lines = [hdr, sep]
 	for model in shown:
 		s = by_model[model]
@@ -178,7 +179,7 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 def section_allowances(height):
 	"""The lines each section may use for its rows and its overflow note.
 
-	Eight lines are spoken for before the first row, so what is left is split
+	Six lines are spoken for before the first row, so what is left is split
 	evenly between the two sections, and an odd line goes to Today — the view
 	that comes first, and the one about now.
 	"""
@@ -237,16 +238,18 @@ def render(rows, now, height=None):
 	if not all_stats:
 		return f"=== {NAME} ===\n\nno agents active in window"
 	all_models = set(all_stats.keys()) | set(today_stats.keys())
-	col_w = max(len(m) for m in all_models)
+	today_title = "=== Models (Today) ==="
+	window_title = "=== Models (Window) ==="
+	col_w = max([len(m) for m in all_models] + [len(today_title), len(window_title)])
 	today_allowance, window_allowance = section_allowances(height)
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
-	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap)
-	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap)
+	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title)
+	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title)
 	return (
 		f"=== {NAME} ===\n"
-		f"=== Models (Today) ===\n{today_text}"
-		f"\n\n=== Models (Window) ===\n{window_text}"
+		f"{today_text}"
+		f"\n\n{window_text}"
 	)
 
 def db_stamp():
