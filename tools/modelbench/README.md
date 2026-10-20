@@ -191,6 +191,41 @@ model's final files through `trace['root']`, so a record that stored its turns b
 final on-disk state still cannot be reproduced. The tool keeps the state by default; if you
 disable that, the next scoring change costs a re-measurement.
 
+## Measuring a corpus of model-written explanations
+
+The episodes above ask a model to **change code**, and the checker decides pass or fail.
+A second kind of task asks a model to **explain code**, and no deterministic checker can
+say whether the explanation was detailed enough — the judgement belongs to a person.
+`review_explanations.py` puts countable numbers beside that judgement:
+
+```sh
+python3 $XLIB/tools/modelbench/review_explanations.py \
+	--answers <dir-of-one-document-per-model> --repo <the-repo-they-describe> \
+	--out measurements.json \
+	--general-word overview --deep-word "deep dive" --glossary-word glossary
+```
+
+For each document it reports size, the share of the answer under the deep dive, the
+structure inside that deep dive, whether the file paths the answer cites actually exist,
+and whether the answer has a passage defining the codebase's own terms. Every path is an
+argument: the documents, the repository, and the words that mark the prompt's own parts.
+`--repo` is repeatable for a sibling checkout the code imports from, and `--runtime-path`
+declares a path the code writes at runtime — absent from a checkout because it is
+gitignored, but real, and a checker that called it false would report every answer as
+dishonest.
+
+**It does not grade.** Readability, correctness and whether an explanation is any good are
+judgements, and a script that pretended to make them would be a second opinion wearing a
+measurement's clothes. The path check is a fact; the rest is structure, which is
+countable. A human reads the answers and decides what they are worth.
+
+**Two traps, both of which produce a wrong number rather than an error.** A checker that
+recognises only markdown headings reports a section that uses a bare uppercase label as
+missing — and the shortest answer, the one most likely under scrutiny, is the one that
+uses that form. And a checker that treats a numbered list item as a heading splits the
+document at an arbitrary point. Both are caught by looking at the document the number
+said was wrong, never by the number agreeing with itself.
+
 ## The error catalogue
 
 The accumulating catalogue of error classes and harness defects is **not part of this tool**.
