@@ -28,11 +28,14 @@ try:
 	_libc.inotify_init.argtypes = []
 	_libc.inotify_add_watch.restype = ctypes.c_int
 	_libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+	_libc.inotify_rm_watch.restype = ctypes.c_int
+	_libc.inotify_rm_watch.argtypes = [ctypes.c_int, ctypes.c_int]
 except AttributeError:
 	_libc = None
 
 _BUILTIN_EXCLUDED = {"__pycache__", ".git", "node_modules", "xlib_legacy"}
 _IGNORE_FILE = ".xlintignore"
+_POLL_SECONDS = 0.2
 
 class _Exclusions:
 	"""What xlint skips, from its own defaults plus a per-repo `.xlintignore`.
@@ -142,29 +145,39 @@ def _is_checkout_root(path):
 	"""
 	return (path / ".git").exists()
 
-def find_exclusion_roots(start):
-	"""Directories from `start` upward whose `.xlintignore` governs it, nearest last.
+def find_exclusion_chain(start):
+	"""Every directory from `start` upward whose ignore file could govern it, nearest first.
 
-	Walks up so a run from a subdirectory sees the same exclusions a run from the repo
-	root does, and so a nested repository's file overrides rather than disappears.
+	The chain is the whole walk, not only the directories that hold an ignore
+	file today: a file can appear in one of them, and a rule set built from the
+	files that happen to exist cannot see it.
 
-	The walk stops at the checkout that owns `start`, because an ignore file belongs to
-	the repository it sits in. A worktree is a separate checkout of that same
-	repository rather than a subdirectory of it, and it holds its own copy of the
-	ignore file. The rule the outer repository keeps for the worktrees it contains
-	(`.work/`) says nothing about what is inside one of them, and applying it there
-	excluded every file the worktree held: a run that checked nothing, reported clean.
+	The walk stops at the checkout that owns `start`, because an ignore file
+	belongs to the repository it sits in. A worktree is a separate checkout of
+	that same repository rather than a subdirectory of it, and it holds its own
+	copy of the ignore file. The rule the outer repository keeps for the
+	worktrees it contains (`.work/`) says nothing about what is inside one of
+	them, and applying it there excluded every file the worktree held: a run
+	that checked nothing, reported clean.
 	"""
-	roots = []
+	chain = []
 	current = start.resolve()
 	if current.is_file():
 		current = current.parent
 	while True:
-		if (current / _IGNORE_FILE).is_file():
-			roots.append(current)
+		chain.append(current)
 		if _is_checkout_root(current) or current.parent == current:
-			return roots
+			return chain
 		current = current.parent
+
+def find_exclusion_roots(start):
+	"""Directories from `start` upward whose `.xlintignore` governs it, nearest first.
+
+	Walks up so a run from a subdirectory sees the same exclusions a run from the repo
+	root does, and so a nested repository's file overrides rather than disappears.
+	"""
+	return [directory for directory in find_exclusion_chain(start)
+		if (directory / _IGNORE_FILE).is_file()]
 
 def exclusion_reason(path, exclusions=None):
 	"""Why `path` is excluded, or None when it is not.
@@ -201,26 +214,183 @@ _HTML_SUFFIXES = (".html",)
 _ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES
 
 def lint_files(paths, exclusions=None):
+	"""The files in scope, each path judged by the rules that govern it.
+
+	Without a rule set each path is judged by the chain of directories above it,
+	so a run over two repositories honours the ignore file of each rather than
+	only the first one's.
+	"""
 	found = []
 	for entry in paths:
+		rules = exclusions if exclusions is not None else _Exclusions(find_exclusion_roots(entry))
 		if entry.is_file() and entry.suffix in _ALL_SUFFIXES:
-			if exclusions is None:
-				exclusions = _Exclusions(find_exclusion_roots(entry))
-			if not is_ignored(entry, exclusions):
+			if not is_ignored(entry, rules):
 				found.append(entry)
 		elif entry.is_dir():
-			if exclusions is None:
-				exclusions = _Exclusions(find_exclusion_roots(entry))
 			for path in sorted(entry.rglob("*")):
-				if not is_ignored(path, exclusions) and path.suffix in _ALL_SUFFIXES:
+				if not is_ignored(path, rules) and path.suffix in _ALL_SUFFIXES:
 					found.append(path)
 	return found
 
 def stamp(path):
+	"""The state of a path: its mtime and size, or None when there is no path.
+
+	Size as well as mtime, because a filesystem whose timestamps are coarse
+	can record two changes to a file within the same tick, and a watcher that
+	misses one of them reports a file it never read.
+	"""
 	try:
-		return path.stat().st_mtime_ns
+		info = path.stat()
 	except OSError:
 		return None
+	return (info.st_mtime_ns, info.st_size)
+
+class _IgnoreRules:
+	"""The ignore rules in force for each watched path, and a way to notice a change.
+
+	`--watch` reads `.xlintignore` once, at startup, and keeps the result for
+	the life of the process, so a rule edited while the watch runs changes
+	nothing until the tool is restarted — and restarting is the workaround,
+	which costs the thing watch mode exists for.
+
+	Each watched path is governed by the rules of its own chain, up to the
+	checkout that owns it, so a run over two repositories honours the ignore
+	file of each rather than only the first one's.
+
+	The stamp covers every directory the chains visit, not only the ones holding
+	a file today: a file that appears is as much a change as one that is
+	edited, and a file that vanishes stops governing the run.
+	"""
+
+	def __init__(self, paths):
+		self.paths = [Path(path) for path in paths]
+		self.chains = [find_exclusion_chain(path) for path in self.paths]
+		self.exclusions = [_Exclusions(self._roots(chain)) for chain in self.chains]
+		self.resolved = [path.resolve() for path in self.paths]
+		self.stamp = self._stamp()
+
+	@staticmethod
+	def _roots(chain):
+		"""The directories of a chain that hold an ignore file."""
+		return [directory for directory in chain
+			if (directory / _IGNORE_FILE).is_file()]
+
+	def _stamp(self):
+		"""The state of every ignore file the chains can reach."""
+		return tuple((str(directory), stamp(directory / _IGNORE_FILE))
+			for chain in self.chains for directory in chain)
+
+	def changed(self):
+		"""True when an ignore file was edited, added or removed."""
+		return self._stamp() != self.stamp
+
+	def reload(self):
+		"""Read the ignore files again.
+
+		The stamp is taken before the files are read, so an ignore file edited
+		while they are being read is noticed on the next pass rather than
+		missed: the stamp still describes the older file, and the older file is
+		not what is on disk any more.
+		"""
+		before = self._stamp()
+		self.exclusions = [_Exclusions(self._roots(chain)) for chain in self.chains]
+		self.stamp = before
+
+	def refresh(self):
+		"""Re-read the ignore files when they changed, and say whether they did.
+
+		Both watchers call this on every pass. It is the only thing that notices
+		a rule edited while the watch runs, and the only thing that lets a file
+		the new rules exclude leave the report.
+		"""
+		if not self.changed():
+			return False
+		self.reload()
+		return True
+
+	def for_path(self, path):
+		"""The rules that govern `path`; the built-in exclusions alone if none do.
+
+		A path that no watched path holds is not linted, and the empty rule set
+		says so: it excludes nothing of its own, so only the built-in exclusions
+		apply.
+		"""
+		index = self.governing(path)
+		if index is None:
+			return _Exclusions()
+		return self.exclusions[index]
+
+	def governing(self, path):
+		"""The index of the watched path whose rules govern `path`, or None.
+
+		The deepest watched path holding it wins, the way the nearest ignore
+		file wins: a file under two watched paths is judged by the rules of the
+		one that holds it more closely.
+		"""
+		target = Path(path).resolve()
+		best = None
+		for index, root in enumerate(self.resolved):
+			if root.is_file():
+				if root != target:
+					continue
+			elif root != target and root not in target.parents:
+				continue
+			if best is None or len(root.parts) > len(self.resolved[best].parts):
+				best = index
+		return best
+
+	def in_scope(self, path):
+		"""True when the rules let this path be linted."""
+		index = self.governing(path)
+		if index is None:
+			return False
+		return not is_ignored(path, self.exclusions[index])
+
+	def files(self):
+		"""The files in scope, each judged by the rules of the path that holds it.
+
+		The walk itself carries no rules of its own, and the rules are applied
+		afterwards by `in_scope`: a file under two watched paths is judged by
+		the deeper one, so a rule that excludes it from the outer watch must
+		not exclude it from the inner one.
+		"""
+		found = []
+		seen = set()
+		for path in self.paths:
+			for file in lint_files([path], _Exclusions()):
+				key = file.resolve()
+				if key in seen:
+					continue
+				seen.add(key)
+				if self.in_scope(file):
+					found.append(file)
+		return found
+
+	def skipped(self):
+		"""The watched paths the rules exclude, each with the rule that excluded it."""
+		skipped = []
+		for path, exclusions in zip(self.paths, self.exclusions):
+			skipped.extend(excluded_paths([path], exclusions))
+		return skipped
+
+	def watch_dirs(self):
+		"""The directories a watch over these paths must cover.
+
+		A directory the rules exclude holds nothing that is linted, so a change
+		in it is not a change in the report. The rules that decide this are the
+		ones governing the directory, not the ones of the watched path it
+		happens to sit under: a nested checkout keeps its own rules.
+		"""
+		wanted = set()
+		for path in self.paths:
+			if path.is_file():
+				wanted.add(path.parent)
+				continue
+			wanted.add(path)
+			for child in path.rglob("*"):
+				if child.is_dir() and self.in_scope(child):
+					wanted.add(child)
+		return wanted
 
 def check_double_blank(lines):
 	report = []
@@ -1087,23 +1257,44 @@ def check_file(path, args):
 	return problems
 
 class _InotifyWatcher:
-	def __init__(self, paths, exclusions):
-		self.exclusions = exclusions
+	"""The inotify backend: a watch on every directory the rules allow.
+
+	The watch set is built from the rules in force, so a rule that changes
+	which directories are in scope changes what is watched — in both
+	directions, because a directory the rules now exclude has to stop being
+	watched as surely as one they now include has to start.
+	"""
+
+	def __init__(self, rules):
+		self.rules = rules
+		self.fd = None
 		self.wd_to_dir = {}
+		self.rebuild()
+
+	def rebuild(self):
+		"""Watch the directories the rules allow now, and nothing else.
+
+		The whole set is registered afresh on a new descriptor: a watch the
+		kernel has already dropped may have been handed to another directory,
+		and releasing it by name would release the wrong one. A new descriptor
+		starts from nothing, and the old one goes away with its watches.
+		"""
+		self._close()
 		self.fd = _libc.inotify_init()
 		if self.fd == -1:
 			raise OSError(ctypes.get_errno(), "inotify_init failed")
-		for root in paths:
-			self.watch_tree(root)
+		self.wd_to_dir = {}
+		for path in self.rules.watch_dirs():
+			self.add_dir(path)
 
-	def watch_tree(self, root):
-		if root.is_file():
-			self.add_dir(root.parent)
-			return
-		self.add_dir(root)
-		for path in root.rglob("*"):
-			if path.is_dir() and not is_ignored(path, self.exclusions):
-				self.add_dir(path)
+	def _close(self):
+		if self.fd is not None:
+			os.close(self.fd)
+			self.fd = None
+
+	def watched_dirs(self):
+		"""The directories under a watch right now."""
+		return set(self.wd_to_dir.values())
 
 	def add_dir(self, path):
 		wd = _libc.inotify_add_watch(self.fd, os.fsencode(path), _WATCH_MASK)
@@ -1111,24 +1302,33 @@ class _InotifyWatcher:
 			self.wd_to_dir[wd] = path
 
 	def forget(self, path):
+		"""Stop tracking a directory the kernel has already dropped."""
 		for wd, watched in list(self.wd_to_dir.items()):
 			if watched == path:
 				del self.wd_to_dir[wd]
 
 	def collect(self):
-		select.select([self.fd], [], [], None)
-		raw = os.read(self.fd, 65536)
+		"""The changes since the last call, as (action, path) pairs."""
 		events = []
-		offset = 0
-		while offset < len(raw):
-			wd, mask, cookie, namelen = _EVENT_HEADER.unpack_from(raw, offset)
-			offset += _EVENT_HEADER.size
-			path = self.wd_to_dir.get(wd)
-			if path is not None and namelen:
-				encoded = raw[offset:offset + namelen].split(b"\0", 1)[0]
-				path = path / os.fsdecode(encoded)
-			offset += (namelen + 3) & ~3
-			events.extend(self._classify(wd, mask, path))
+		ready, _, _ = select.select([self.fd], [], [], _POLL_SECONDS)
+		if ready:
+			raw = os.read(self.fd, 65536)
+			offset = 0
+			while offset < len(raw):
+				wd, mask, cookie, namelen = _EVENT_HEADER.unpack_from(raw, offset)
+				offset += _EVENT_HEADER.size
+				path = self.wd_to_dir.get(wd)
+				if path is not None and namelen:
+					encoded = raw[offset:offset + namelen].split(b"\0", 1)[0]
+					path = path / os.fsdecode(encoded)
+				offset += (namelen + 3) & ~3
+				events.extend(self._classify(wd, mask, path))
+		if self.rules.refresh():
+			# The rules moved, so the directories in scope moved with them: the
+			# watch is built again over the new scope, and the report is built
+			# again from it.
+			self.rebuild()
+			return [("rules", None)]
 		return events
 
 	def _classify(self, wd, mask, path):
@@ -1145,24 +1345,42 @@ class _InotifyWatcher:
 				self.forget(path)
 				return [("delete_dir", path)]
 			if mask & (_IN_CREATE | _IN_MOVED_TO):
+				exclusions = self.rules.for_path(path)
+				if is_ignored(path, exclusions):
+					return []
 				self.add_dir(path)
-				return [("modify", inner) for inner in lint_files([path], self.exclusions)]
+				return [("modify", inner) for inner in lint_files([path], exclusions)]
 			return []
 		if path.suffix not in _ALL_SUFFIXES:
 			return []
 		if mask & (_IN_DELETE | _IN_MOVED_FROM):
 			return [("delete_file", path)]
+		if not self.rules.in_scope(path):
+			# The rules exclude this file now, so it is no part of the report.
+			# A file ignored a moment ago must not come back because it was
+			# touched afterwards.
+			return []
 		return [("modify", path)]
 
 class _PollWatcher:
-	def __init__(self, paths, exclusions):
-		self.exclusions = exclusions
-		self.paths = paths
-		self.stamps = {path: stamp(path) for path in lint_files(paths, self.exclusions)}
+	"""The polling backend: a stamp on every file in scope, compared each pass.
+
+	Used where inotify is not available, and it is the one backend that has to
+	walk the tree every poll — so the rules are re-read here too, and the two
+	backends notice the same change at the same moment.
+	"""
+
+	def __init__(self, rules):
+		self.rules = rules
+		self.stamps = {path: stamp(path) for path in rules.files()}
 
 	def collect(self):
-		time.sleep(0.2)
-		current = {path: stamp(path) for path in lint_files(self.paths, self.exclusions)}
+		"""The changes since the last call, as (action, path) pairs."""
+		time.sleep(_POLL_SECONDS)
+		if self.rules.refresh():
+			self.stamps = {path: stamp(path) for path in self.rules.files()}
+			return [("rules", None)]
+		current = {path: stamp(path) for path in self.rules.files()}
 		events = []
 		for path, value in current.items():
 			if value != self.stamps.get(path):
@@ -1173,13 +1391,13 @@ class _PollWatcher:
 		self.stamps = current
 		return events
 
-def make_watcher(paths, exclusions):
+def make_watcher(rules):
 	if _libc is not None:
 		try:
-			return _InotifyWatcher(paths, exclusions)
+			return _InotifyWatcher(rules)
 		except OSError:
 			pass
-	return _PollWatcher(paths, exclusions)
+	return _PollWatcher(rules)
 
 def draw(snapshot, skipped=()):
 	print(_CLEAR_SCREEN, end="")
@@ -1196,17 +1414,35 @@ def draw(snapshot, skipped=()):
 	else:
 		print("clean", flush=True)
 
-def watch(paths, args, exclusions, skipped=()):
-	snapshot = {path: check_file(path, args) for path in lint_files(paths, exclusions)}
-	watcher = make_watcher(paths, exclusions)
+def watch(rules, args):
+	"""Watch the paths, and redraw the report as they change.
+
+	The rules are part of what is watched: a rule edited while the watch runs
+	moves the scope, and a scope that moved is read again from the top. That is
+	the only way a newly ignored file can leave the report and a newly
+	un-ignored one can enter it — and the reload prints nothing of its own, so
+	what the screen shows is the report and nothing else.
+	"""
+	snapshot = {path: check_file(path, args) for path in rules.files()}
+	skipped = rules.skipped()
+	watcher = make_watcher(rules)
 	draw(snapshot, skipped)
 	while True:
 		changed = {}
+		reloaded = False
 		for action, path in watcher.collect():
+			if action == "rules":
+				reloaded = True
+				break
 			if action == "modify":
 				changed[path] = "modify"
 			else:
 				changed.setdefault(path, action)
+		if reloaded:
+			snapshot = {path: check_file(path, args) for path in rules.files()}
+			skipped = rules.skipped()
+			draw(snapshot, skipped)
+			continue
 		dirty = False
 		for path, action in changed.items():
 			if action == "delete_file":
@@ -1253,18 +1489,18 @@ def main():
 		if not entry.exists():
 			parser.error(f"not found: {entry}")
 
-	exclusions = _Exclusions(find_exclusion_roots(args.paths[0]))
-	skipped = excluded_paths(args.paths, exclusions)
+	rules = _IgnoreRules(args.paths)
+	skipped = rules.skipped()
 
 	if args.watch:
 		try:
-			watch(args.paths, args, exclusions, skipped)
+			watch(rules, args)
 		except KeyboardInterrupt:
 			pass
 		return 0
 
 	problems = []
-	for path in lint_files(args.paths, exclusions):
+	for path in rules.files():
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked")
