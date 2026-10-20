@@ -199,24 +199,27 @@ needed when there is no due date.
 	its runner has a `--core` flag, an `edge` tag convention and a `preflight()`
 	that the migration has to keep or reinvent.
 - [x] **#158 — skynet: always stay within the window bounds, and say what was
-	cut** (done 2026-10-20, high) — board: epiq `VTJVHMY` (Done). **PR #58,
-	commit `a46cf2f` — it waits for the human's review, and the merge is the
-	agent's action once that review is given.** The shape the human fixed is
-	what was built: the caps come from the space available (the terminal's own
-	height, which in a tmux pane is the pane), the two sections split what is
-	left of the room evenly, **the odd line goes to Today**, an overflow note
-	costs a row of its own, and a capped table ends with `… +N more`.
+	cut** (done 2026-10-20, high) — board: epiq `VTJVHMY` (Done). **MERGED
+	2026-10-20 — PR #58, on master as `57d4e37`, on the human's authorisation**
+	(*"you can merge the changes, so I can test them myself"*). The shape the
+	human fixed is what was built: the caps come from the space available (the
+	terminal's own height, which in a tmux pane is the pane), the two sections
+	split what is left of the room evenly, **the odd line goes to Today**, an
+	overflow note costs a row of its own, and a capped table ends with
+	`… +N more`.
 	- **Measured**: the display fits every pane height from 1 to 49 lines,
 		checked through a pty at each height. At 30 lines it is exactly 30:
-		nine of structure, eleven for Today, ten for Window.
+		eight of structure, eleven for Today, eleven for Window.
 	- **The suite is 25 tests**, 18 of them new, in xtest's idiom. `xlint` is
 		clean, and the repository's runner is unchanged (the same six known
 		`ContentNegotiationTest` failures, epi `BFNRBG7`).
-	- **Two decisions the ticket does not cover**, both flagged on the PR: the
-		blank line after the `Skynet` header was added, because the ticket's own
-		count of the nine lines includes it; and a pane shorter than seven lines
-		gets the counts on one line (`Skynet: 19 models today, 53 models in
-		window`) rather than a display that runs past the edge.
+	- **The human's ruling on the two open decisions, 2026-10-20**: the blank
+		line after the `Skynet` header is **not** wanted — *"the current version
+		of skynet doesn't have that empty line, so it's not necessary"* — so the
+		overhead is **eight** lines, not nine, and the floor is **six**; and the
+		one-line summary for a pane too short for the two sections *"makes
+		sense"*, so a pane under six lines gets `Skynet: 19 models today, 53
+		models in window` rather than a display that runs past the edge.
 	- **One thing the requirement forced**: the watch loop watches the
 		terminal's size as well as the database's, so a resized pane redraws.
 - [x] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
