@@ -15,7 +15,7 @@ No file is written and no process is started, which is what keeps these fast eno
 to run on every edit.
 """
 
-import argparse,contextlib,io,tempfile,unittest
+import argparse,contextlib,io,subprocess,tempfile,unittest
 from pathlib import Path
 from tools.xlint import _html,xlint
 
@@ -441,13 +441,6 @@ class TestExcludedPaths(unittest.TestCase):
 			xlint.draw({})
 		self.assertIn("clean", out.getvalue())
 
-def test_lint_files_directory_walk_skips_ignored(self):
-		# Walking a directory skips ignored subtrees entirely. The fixtures directory
-		# is ignored, but other files in the same parent are not.
-		excl = xlint._Exclusions(xlint.find_exclusion_roots(Path(".")))
-		found = xlint.lint_files([Path("tools/pybundle/test/fixtures")], excl)
-		self.assertEqual(found, [])
-
 class TestDoubleSpace(unittest.TestCase):
 	"""A mid-line double space is a typo — whether Python or Markdown.
 
@@ -639,6 +632,43 @@ class TestHtmlFiles(unittest.TestCase):
 			(Path(folder) / "sample.html").write_text("<div></div>\n", encoding="utf-8")
 			found = xlint.lint_files([Path(folder)])
 			self.assertEqual([path.name for path in found], ["sample.html"])
+
+class TestAbsolutePaths(unittest.TestCase):
+	"""The rule is that a tracked file must not carry one machine's layout.
+
+	`check_absolute_paths` ran in the Markdown branch only, so a tracked `.py`
+	file could name this machine's path and the linter would say nothing — which
+	is how `tools/tool_schema_cache.py:14` carried one for months.
+	"""
+
+	def test_a_machine_path_is_reported(self):
+		problems = xlint.check_absolute_paths(['x = "/home/someone/x"'], set(), "a.py")
+		self.assertEqual(len(problems), 1)
+
+	def test_a_storage_path_is_reported(self):
+		problems = xlint.check_absolute_paths(['x = "/storage/GitHub/Fun/XLib/a.py"'], set(), "a.py")
+		self.assertEqual(len(problems), 1)
+
+	def test_a_home_relative_path_is_not_reported(self):
+		# `~/` is the portable form: correct on every machine, where
+		# `/home/someone/...` is correct on one.
+		lines = ['x = os.path.expanduser("~/.local/share/taskview")']
+		self.assertEqual(xlint.check_absolute_paths(lines, set(), "a.py"), [])
+
+	def test_no_tracked_python_file_carries_a_machine_path(self):
+		# The end-to-end version, over the repository's own files. The check
+		# only runs on tracked files, so a temporary file cannot stand in for
+		# one — and the defect it exists for was a tracked file.
+		root = Path(__file__).resolve().parents[3]
+		names = subprocess.run(["git", "ls-files", "*.py"], cwd=str(root),
+			capture_output=True, text=True).stdout.split()
+		offenders = []
+		for name in names:
+			lines = (root / name).read_text(encoding="utf-8").splitlines()
+			exempt = xlint._python_string_lines(lines) - xlint._python_docstring_lines(lines)
+			if xlint.check_absolute_paths(lines, exempt, name):
+				offenders.append(name)
+		self.assertEqual(offenders, [], f"tracked .py files naming a machine path: {offenders}")
 
 if __name__ == "__main__":
 	unittest.main()

@@ -454,6 +454,34 @@ def _python_string_lines(lines):
 		return set()
 	return string_lines
 
+def _python_docstring_lines(lines):
+	"""The line numbers of the docstrings in a Python file.
+
+	A docstring is prose about the code, and a string literal is a value. The
+	absolute-path check needs the difference: a docstring that says where this
+	tool lives names a location, and a string literal that looks like a path is
+	usually a fixture.
+	"""
+	source = "".join(line + "\n" for line in lines)
+	try:
+		tree = ast.parse(source)
+	except (SyntaxError, ValueError):
+		return set()
+	docstrings = set()
+	for node in ast.walk(tree):
+		if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+			continue
+		if not node.body:
+			continue
+		first = node.body[0]
+		if not isinstance(first, ast.Expr):
+			continue
+		if not isinstance(first.value, ast.Constant) or not isinstance(first.value.value, str):
+			continue
+		for ln in range(first.value.lineno, (first.value.end_lineno or first.value.lineno) + 1):
+			docstrings.add(ln)
+	return docstrings
+
 def _markdown_exempt_spans(lines):
 	"""Line spans inside fenced code, frontmatter, or inline code spans."""
 	exempt = {}
@@ -721,13 +749,19 @@ def _is_tracked_file(path):
 	except (subprocess.SubprocessError, OSError):
 		return False
 
-_ABSOLUTE_PATH_RE = re.compile(r"(?:^|[\s\(\"\'])((?:/storage/|/home/[^/]+/|/root/|~/)[^\s\)\]\}\"'>]+)")
+_ABSOLUTE_PATH_RE = re.compile(r"(?:^|[\s\(\"\'])((?:/storage/|/home/[^/]+/|/root/)[^\s\)\]\}\"'>]+)")
 
 def check_absolute_paths(lines, exempt_lines, path):
 	"""Report absolute system paths in tracked Markdown files.
 
-	Flags tokens starting with `/storage/`, `/home/<user>/`, `/root/`, or `~/`
-	that are not in exempt lines (frontmatter, fenced code, block quotes).
+	Flags tokens starting with `/storage/`, `/home/<user>/` or `/root/` that
+	are not in exempt lines. **`~/` is not flagged**: the rule is that a
+	tracked file must not carry *one machine's* layout, and `~/` is the
+	portable form — `os.path.expanduser("~/.local/share/taskview")` is correct
+	on every machine, while `/home/someone/...` is correct on one. Flagging
+	`~/` would have meant rewriting correct code to point at a machine-info
+	file, which is a rule that makes the code worse.
+
 	Known exempt paths (AGENTS.md, plans/, personal/*/HISTORY.md) are skipped
 	entirely at the file level.
 	"""
@@ -992,6 +1026,11 @@ def check_file(path, args):
 			problems.extend((line, msg) for line, msg in check_imports(text_lines))
 		if not args.no_double_space:
 			problems.extend((line, msg) for line, msg in check_double_space(text_lines, True))
+		if not args.no_absolute_paths and _is_tracked_file(path):
+			# A path in a string literal is a value; a path in a docstring is a
+			# statement about where this file is. The check wants the second.
+			exempt = _python_string_lines(text_lines) - _python_docstring_lines(text_lines)
+			problems.extend((line, msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
 	elif path.suffix == ".md":
 		if not args.no_double_blank:
 			# The target of `check_trailing_blank`'s deferral. Without it a Markdown file
