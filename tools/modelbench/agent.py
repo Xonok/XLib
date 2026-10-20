@@ -341,12 +341,28 @@ def _relativise(path,root):
 	return path if rel.startswith("..") else rel
 
 def _exit_of(part):
-	meta = ((part.get("state") or {}).get("metadata") or {})
-	if isinstance(meta.get("exit"),int):
-		return str(meta["exit"])
-	if (part.get("state") or {}).get("status") == "error":
+	"""The command's exit code, wherever this opencode version keeps it.
+
+	opencode 1: `state.metadata.exit`. opencode 2: `state.metadata.metadata.exit`, one
+	level deeper. The mapping read the old path, so **every harness run recorded
+	`exit=None`** — and G2 ("verifies unprompted") counts a verification only when the
+	exit code is "0", so on the harness path G2 could not pass whatever the model did.
+	Big Pickle ran the project's own checker after its last write, the checker answered
+	that all cases passed, and the gate recorded zero verification runs.
+
+	And an else for the case nobody foresaw: a shell event with no exit code anywhere
+	is not "the model ran nothing that passed" — it is a shape this tool does not know,
+	and it raises. A hole in a run is legible; a missing exit code quietly read as a
+	failed verification is not.
+	"""
+	state = part.get("state") or {}
+	meta = state.get("metadata") or {}
+	for holder in (meta.get("metadata") or {},meta):
+		if isinstance(holder.get("exit"),int):
+			return str(holder["exit"])
+	if state.get("status") == "error":
 		return "1"
-	return None
+	raise transport.UnseenShape(f"no exit code in an opencode shell event: {json.dumps(part)[:300]}")
 
 def _harness_turn(part,turn,root,protocol="opencode"):
 	state = part.get("state") or {}
@@ -359,6 +375,23 @@ def _harness_turn(part,turn,root,protocol="opencode"):
 		"result_head":str(state.get("output") or "")[:400],
 		"reply":"","tokens":None,"n_actions":1,"batched":False,
 		"tool":part.get("tool"),"protocol":protocol}
+
+def _finished(final_text,info,stopped):
+	"""Did the session run to completion and say something?
+
+	opencode 1 ended a run with a `step_finish` whose reason was "stop". opencode 2 emits
+	`step_finish` only for steps that made tool calls (reason "tool-calls"), and the
+	final text step carries none — so `stopped` is always False, and G4 ("terminates"),
+	which requires `finished`, could never pass either. The equivalent signal is that the
+	session ran to completion — it exited 0 and the clock did not kill it — and the model
+	said something: a session that produced no text never spoke.
+
+	Together with the moved exit code this capped every harness model at `supervision`,
+	whatever it did: a model that ran the project's own checker after its last write was
+	recorded as having verified nothing, and a model that stopped was recorded as never
+	having stopped.
+	"""
+	return bool(final_text) and not info["timed_out"] and (stopped or info["returncode"] == 0)
 
 def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,timeout=transport.HARNESS_TIMEOUT):
 	"""One episode attempt for a harness-transport model: one `opencode run` session in the
@@ -410,7 +443,7 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 	final_text = "".join(texts).strip()
 	# A clean stop with a final message is the model reporting; a clock kill or a crash is
 	# not, and must not be laundered into "finished".
-	finished = stopped and bool(final_text) and not info["timed_out"]
+	finished = _finished(final_text,info,stopped)
 	if finished:
 		turns.append({"turn":len(turns)+1,"action":"finish","path":"","cmd":"","parsed":True,
 			"exit":None,"result_head":"episode ended","reply":final_text[:1500],"tokens":None,
