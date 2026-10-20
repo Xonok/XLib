@@ -138,47 +138,61 @@ needed when there is no due date.
 	list, on the measured grounds that it never touches the working tree and only
 	resets the index. A guard matching `git reset` as a prefix would be wrong:
 	it would block the safe `--soft` and path forms too.
-- [x] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
-	cursor** (done 2026-10-19, high) — **FIXED and on master: PR #47, commit
-	`36554c9`.** Board: epiq `K93Z39B` (Done).
-	**Four breaks, all measured against the live tree, not inferred.** The
-	ticket named three; the fourth was found while checking the first.
-	**(1) The workspace resolved to `$HOME`** — `workspace_root()` asks the
-	opencode process for its directory, and under opencode 2 that process is the
-	shared background service, whose cwd is the home directory — and it is the
-	*same* process for every session on the machine, because every session's
-	shell descends from it. The client is the process that carries the
-	session's directory, so the walk now steps over the service and settles on
-	the client. **Measured: `/home/xonok` → `/storage/GitHub/Fun/XLib`.**
-	**(2) `news` wiped the claims** — `cmd_news` → `my_id()` → `migrate_ids()`
-	deleted every claim whose owner was not a key in `ids.json`; a claim is
-	owned by an *agent id* and `ids.json` is keyed by *session key*, so the two
-	key spaces never meet and every claim matched. The migration now drops the
-	claims of the old slot-based ids it actually removes, and nothing else.
-	**Measured: 0 owners after a `news` run → intact.**
-	**(3) `rule_files()` globbed `style/*.md`** while XLib's rules live at
-	`doc/style/*.md` — the folder `AGENTS.md` itself points at. **Measured: 0
-	rule files found → 41.**
-	**(4) The session key was the service's pid**, so every session on the
-	machine shared one identity, one notes file and one rule cursor. It is the
-	*client's* pid now: two windows are two sessions, and one window keeps one
-	identity across a `/new` — which is the continuity the human asked for when
-	they said "I'll use /new" and expected the state to survive. The agent id
-	becomes the real workspace name (`XLib/secretary-1`, not
-	`xonok/secretary-1` — the home directory's name was never a workspace).
-	**A fifth thing, about the answer rather than the lookup:** a run that finds
-	no rule files at all now prints `nothing checked`, which is not the same
-	answer as `no new guideline changes` — the first is a broken lookup, the
-	second is the answer, and an agent reading the second stops looking.
-	**13 tests in `tools/test/test_agent_coord.py`**, stdlib `unittest`, no
-	network, against a temporary state folder and never the live `.agents`; each
-	fix mutation-checked, and two mutants killed by the wrong test and one
-	that survived were fixed rather than accepted.
-	**Left for the human: nothing.** The stale `pid-15395` entry in
-	`ids.json` is left alone on purpose — a live session is still using that
-	id, and moving its claims would pull the rug from under it; it is reaped
-	when that pid dies. **Verified on the live state after the merge:** `news`
-	reports the 41 rule files, and the machine's claims are still there.
+- [ ] **#142 — `agent-coord.py news` destroys every agent's claims and the rule
+	cursor** (by 2026-10-20, high) — **REOPENED 2026-10-20: the PR #47 repair
+	did not hold.** Board: epiq `K93Z39B` (reopened, In progress). **The fix is
+	in PR #50, waiting for the human's merge.**
+	**What PR #47 fixed, and what it did not.** The claims-wipe is genuinely
+	fixed: `migrate_ids()` no longer drops the claims of every agent on the
+	machine, and `rule_files()` finds the 41 rule files in `doc/style/`. **The
+	workspace resolution is not.** The repair settled on the opencode client by
+	walking this process's ancestry, and it assumed the client is an ancestor of
+	the tool shell — under opencode 2 it is not. The shell descends from the
+	shared service and the client is a separate process, so the walk finds the
+	service, whose cwd is the home directory, and the session resolves to
+	`/home/xonok`. **Measured live, in the session that found it: `news` printed
+	`no rule files found in /home/xonok — nothing checked`, 0 rule files, and
+	`workspace` printed `/home/xonok`.** The verification recorded on the ticket
+	was taken in a session whose ancestry happened to hold a client; the topology
+	this machine actually runs — one service, four clients, no client in any tool
+	shell's ancestry — was not covered. **So the `git checkout` ban, which this
+	ticket's `news` was carrying, still cannot reach a session shaped like this
+	one.**
+	**The fix: the client is found by what it says about itself.** It names the
+	session it serves in its own arguments, and it works in the directory the
+	session works in. The service is never a candidate — one service runs for
+	the whole machine, so it is not evidence about the session asking. The
+	session key follows, so two windows are two sessions again: the client's
+	pid, not the service's.
+	**One thing the transition needed that the ticket did not ask for:** the
+	service's pid was the session key, so every session attached to the service
+	shared one identity, one notes file, one rule cursor and one set of claims.
+	With the key changed, that identity is a leftover, and its claims are
+	stranded where the guard refuses the rightful owner. It is now taken over
+	once, with its claims and its cursor, and re-tagged to the workspace the
+	session is really in — the old tag was the home directory's name, which was
+	never a workspace. **36 tests in `tools/test/test_agent_coord.py`; 11
+	mutations of the repair, each killed by the test that names it.**
+- [ ] **#150 — Drift sweep: `STATUS.md` and `TASKS.md` against the task store
+	and the board** (by 2026-10-21, medium) — the scheduling paragraph in
+	`STATUS.md` is wrong on both counts: it says 4 high-importance tasks have no
+	due date (#52, #61, #63, #75 — all four have one now) and that 10 tasks are
+	past due, where the store says **17**. It also points at "this workspace's
+	two" tasks, and `TASKS.md` has **28** open. The 16 tasks that genuinely have
+	no due date are a different set (#104–#110, #122, #123, #127, #133, #137,
+	#138, #140, #141, #143) and are not mentioned.
+- [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-24, medium)
+	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
+	wide tool *always orders by due date* — changing the order is simply a
+	result of changing a due date, so a separate priority mechanism is not
+	needed and the priority sweep of all 77 open tasks is not wanted. **The
+	interaction the human sketched:** click a task, then set a new due date
+	directly (`2026/10/27`) or write a relative time to bump it (`+7d`).
+	**The spec is the deliverable, not the tool**, and it must go through the
+	normal process — AI-written and labelled, or human-written. It reuses
+	taskview's selection layer (`read_csv`, `select_tasks`, `compute_metrics`)
+	rather than reimplementing it, and it reads the same CSV, which stays the
+	single authority.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
