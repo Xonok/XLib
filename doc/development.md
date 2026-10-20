@@ -166,8 +166,29 @@ every test file can be run on its own.
 
 **A test's style is not a reason for it not to run.** The suites are written in
 two styles — plain functions and `unittest.TestCase` classes — and xtest runs
-both. New tests are written in xtest's own idiom: a plain function, or a
-method of an `xtest.TestCase` when there is setup to do.
+both.
+
+### The xtest decision
+
+**Standardising on xtest means eventually using only xtest.** The suites that
+are still in unittest's idiom are a migration, not a second standard. Two
+rules carry that, and they are the rules to quote when the question comes up:
+
+- **Rewrite to xtest if it gets in the way.** A suite written in unittest's
+	idiom is not a reason to keep it there: when a test needs something xtest
+	cannot do, **xtest grows**. That is what happened once already — xtest
+	learned to run `unittest.TestCase` classes rather than the suites being
+	rewritten first, and the runner grew for it. The end state is one testing
+	solution, not two.
+- **Always write new tests with xtest.** Never start a new `unittest` suite in
+	this repository. A plain function, or a method of an `xtest.TestCase` when
+	there is setup to do.
+
+The human's ruling, 2026-10-20: *"Standardize on xtest means eventually using
+only xtest. Avoiding a full rewrite is reasonable, but the decision should be
+tagged as 'rewrite to xtest if it gets in the way' and 'always write new tests
+with xtest'. This way the dogfooding works and won't turn into two parallel
+systems."*
 
 Example of the gap discipline in practice: `test-design-2d-space-game.md` in the
 Agents workspace (`plans/done/`).

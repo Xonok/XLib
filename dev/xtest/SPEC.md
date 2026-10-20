@@ -118,6 +118,14 @@ directory. **Everything above marked 2026-10-20 is not in a release yet** —
 single file, and the `main` entry point. They are additive, so the next
 release is a minor one, and **a release is the human's call**.
 
+**The standardisation decision, 2026-10-20** (human): standardising on xtest
+means eventually using only xtest, so the suites still in unittest's idiom are
+a migration and not a second standard. Two rules carry it: **rewrite to xtest
+if it gets in the way** — when a test needs something xtest cannot do, xtest
+grows — and **always write new tests with xtest**. This release is the first
+step: it taught the runner to carry the unittest suites rather than the suites
+being rewritten first.
+
 Parametrization, async and parallel runs are still out: they would be a
 separate library or a major version.
 
