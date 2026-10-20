@@ -25,6 +25,10 @@ the whole point is to measure one prompt's answers against *that* prompt:
     --deep-word       a word that marks the deep-dive part            (repeatable)
     --glossary-word   a word that marks a passage defining terms      (repeatable)
 
+    --vocabulary      a JSON file holding those three word lists, so that a corpus can
+                      carry its own vocabulary instead of a reader having to copy a long
+                      command line out of a README and get it subtly wrong
+
 **Paths are arguments**, never hard-coded: the documents live wherever the caller put
 them, the repository is wherever it is, and a sibling checkout is named explicitly.
 
@@ -51,6 +55,30 @@ NUMBERED_LABEL_RE = re.compile(r"(?im)^\d\.\s+(?P<title>[A-Z][^\n]{2,70})$")
 STRUCTURE_RE = re.compile(r"(?im)^\s*(#{2,6}\s|step\s+\d|\d+\.\s|\||[-*+]\s)")
 # A bullet that defines a term: a bolded or quoted term, then prose.
 TERM_BULLET_RE = re.compile(r"(?im)^\s*[*+-]\s+(?:\*\*[^*]{2,40}\*\*|`[^`]{2,40}`)\s*:?\s+\S")
+
+def read_vocabulary(path: str) -> dict:
+	"""The prompt's own vocabulary, as a JSON file.
+
+	`{"general": [...], "deep": [...], "glossary": [...]}` — the three lists, each a list
+	of lowercase words. A missing list is an empty list.
+
+	Why a file: the words are DATA about one prompt, and a corpus that keeps them in a
+	README's command line will drift from its own measurements the first time the
+	command is edited and the output is not. A corpus that carries the vocabulary beside
+	the answers cannot drift that way, and the reproduction becomes one short command.
+	"""
+	with open(path, encoding="utf-8") as fh:
+		data = json.load(fh)
+	if not isinstance(data, dict):
+		raise ValueError(f"{path}: the vocabulary must be a JSON object with the three "
+			"word lists, not a list")
+	out = {}
+	for key in ("general","deep","glossary"):
+		words = data.get(key) or []
+		if not isinstance(words, list):
+			raise ValueError(f"{path}: {key!r} must be a list of words")
+		out[key] = [str(w).lower() for w in words]
+	return out
 
 def read_text(path: str) -> str:
 	with open(path, encoding="utf-8", errors="replace") as fh:
@@ -207,14 +235,21 @@ def main() -> None:
 		help="a word marking a passage that defines terms; repeatable")
 	p.add_argument("--exclude",action="append",default=[],
 		help="a document name to leave out; repeatable")
+	p.add_argument("--vocabulary",
+		help="a JSON file with the general/deep/glossary word lists; the words given on "
+			"the command line are added to these, not substituted for them")
 	args = p.parse_args()
 	names = sorted(n for n in os.listdir(args.answers)
 		if n.endswith(".md") and n not in set(args.exclude))
 	known = set(args.known_path)
 	runtime = set(args.runtime_path)
-	words_cfg = {"general": [w.lower() for w in args.general_word],
-		"deep": [w.lower() for w in args.deep_word],
-		"glossary": [w.lower() for w in args.glossary_word]}
+	words_cfg = {"general": [], "deep": [], "glossary": []}
+	if args.vocabulary:
+		from_file = read_vocabulary(args.vocabulary)
+		for key in words_cfg:
+			words_cfg[key].extend(from_file[key])
+	for key,flag in (("general","general_word"),("deep","deep_word"),("glossary","glossary_word")):
+		words_cfg[key].extend(w.lower() for w in getattr(args,flag))
 	rows = []
 	for name in names:
 		rows.append(measure(os.path.join(args.answers, name), args.repo, known, runtime, words_cfg))

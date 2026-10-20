@@ -214,6 +214,13 @@ declares a path the code writes at runtime — absent from a checkout because it
 gitignored, but real, and a checker that called it false would report every answer as
 dishonest.
 
+**The words can also come from a file** — `--vocabulary vocabulary.json`, holding
+`{"general": [...], "deep": [...], "glossary": [...]}`. The words are data about one
+prompt, and a corpus that keeps them in a README's command line drifts from its own
+measurements the first time the command is edited and the output is not re-checked. A
+corpus that carries the vocabulary beside its answers cannot drift that way. Words given
+on the command line are **added** to the file's, not substituted for them.
+
 **It does not grade.** Readability, correctness and whether an explanation is any good are
 judgements, and a script that pretended to make them would be a second opinion wearing a
 measurement's clothes. The path check is a fact; the rest is structure, which is
