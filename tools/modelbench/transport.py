@@ -26,6 +26,16 @@ RETRY_STATUS = {429,500,502,503,504}
 class TransportError(Exception):
 	pass
 
+class UnseenShape(Exception):
+	"""An event or a field arrived in a shape this tool does not know.
+
+	The human's pattern, stated 2026-10-20: make a branch for each known case and add an
+	else for "something weird happened that I didn't foresee", so that a change outside
+	our control becomes a first-class error that is clearly separate from the ordinary
+	functioning of the code. Here that means a hole in a run rather than a number that
+	looks like a measurement and is not.
+	"""
+
 # The console's own gateway is reached in opencode's namespace. The registry's
 # `provider` is a backend, and the two are not the same thing.
 CONSOLE_NAMESPACE = "opencode"
