@@ -221,14 +221,19 @@ def bench_version(transport_name=None):
 	For a harness run the MAPPING is folded in as well: the code that turns opencode's
 	event stream into the trace the gates read. It is as much a part of the measurement
 	as the prompt is, and leaving it out is what let two waves of harness damage pass
-	without anything being supposed to notice. See HARNESS_MAPPING below.
+	without anything being supposed to notice.
+
+	**Each transport folds in its own mapping**, and the two fingerprints are
+	independent: a change to the harness mapping does not move the direct path's
+	fingerprint, so a direct row is not invalidated by a change to a path it does not
+	use. See HARNESS_MAPPING and DIRECT_MAPPING below.
 	"""
 	h = hashlib.sha256()
 	h.update(PROTOCOL.encode())
 	h.update(str(MAX_TURNS).encode())
 	if transport_name == "harness":
 		h.update(HARNESS_PROTOCOL.encode())
-		h.update(mapping_source().encode())
+	h.update(mapping_source(transport_name=transport_name).encode())
 	root = os.path.join(os.path.dirname(os.path.abspath(__file__)),"episodes")
 	for ep in sorted(os.listdir(root)):
 		d = os.path.join(root,ep)
@@ -245,16 +250,26 @@ def bench_version(transport_name=None):
 # --- the mapping ------------------------------------------------------------------
 #
 # The MAPPING is the code that turns a model's output into the trace the gates read.
-# On the harness path that is opencode's event stream, and it belongs in the
-# fingerprint as much as the prompt does: a change to it moves every grade, and before
-# this hash existed it moved them SILENTLY. The opencode-2 upgrade broke the mapping in
-# four ways (E19-E22) and again in two (E26, E27), and every harness row measured under
-# the broken mapping had to be thrown out — with nothing supposed to have noticed,
-# because the thing that had changed was not in the fingerprint.
+# It belongs in the fingerprint as much as the prompt does: a change to it moves every
+# grade, and before this hash existed it moved them SILENTLY. The opencode-2 upgrade broke
+# the harness mapping in four ways (E19-E22) and again in two (E26, E27), and every
+# harness row measured under the broken mapping had to be thrown out — with nothing
+# supposed to have noticed, because the thing that had changed was not in the fingerprint.
 #
-# The direct path's fingerprint is deliberately untouched. Its corpus has been measured
-# over weeks, and invalidating it over a change to a path it does not use would be the
-# same mistake pointed the other way.
+# **There is one mapping per transport, and the two fingerprints are independent.** A
+# change to the harness mapping must not move the direct path's fingerprint, or every
+# direct row would be invalidated by a change to a path it does not use — the same
+# mistake pointed the other way. The human's rule (2026-10-20): the standard approach is
+# not to invalidate findings, so the new rules apply from here on and what is already
+# measured stays readable.
+#
+# The two mappings are not the same shape, because the two paths are not:
+#   - the harness path's input is opencode's EVENT STREAM, which is the instrument's own
+#     reading of what the model did — so the whole harness transport is inside it;
+#   - the direct path's input is the model's REPLY TEXT, which is the model's own words —
+#     so the mapping starts at the text and the transport is only in it where the
+#     transport decides what those words are (the reply extraction) or whether the call
+#     was a hole with a reason.
 HARNESS_MAPPING = (
 	"agent.run_episode_harness",
 	"agent._harness_prompt",
@@ -287,6 +302,72 @@ HARNESS_MAPPING = (
 	"transport.CONSOLE_NAMESPACE",
 	"transport.HARNESS_TIMEOUT",
 )
+
+DIRECT_MAPPING = (
+	# The loop, and what it shows the model: the prompt it builds and the file listing
+	# in it.
+	"agent.run_episode",
+	"agent._walk",
+	# The reply turned into actions.
+	"agent.parse_actions",
+	"agent._parse_tool_calls",
+	"agent._parse_text_protocol",
+	# An action turned into an effect.
+	"agent.execute",
+	"agent._safe_join",
+	# The call. `call_chat` holds the retry loop and the empty-answer branch, so it
+	# decides whether a refusal is a hole with a reason and which reply arrives; and
+	# `_http_call` is where the reply's text is extracted, which is measurement: a
+	# change to it changes what the model is read as having said.
+	"transport.call_chat",
+	"transport._http_call",
+	"transport._post",
+	"transport._openrouter_key",
+	"transport.provider_error",
+	# The constants the mapping reads.
+	"agent.PROTOCOL",
+	"agent.MAX_TURNS",
+	"agent.READ_LIMIT",
+	"agent.RUN_TIMEOUT",
+	"transport.HTTP_TIMEOUT",
+	"transport.RETRY_STATUS",
+	"transport.AUTH_PATH",
+	# `call_chat` names the harness timeout in its source, even though the direct path
+	# never waits that long. It is listed so the constants check stays honest, and the
+	# cost is one over-invalidation: a change to the harness's timeout also moves the
+	# direct fingerprint. Over-invalidating is the safe direction.
+	"transport.HARNESS_TIMEOUT",
+)
+
+# The two paths share `transport.call_chat`, which branches on the transport, so the
+# direct path's call graph reaches the harness's functions through it. Those belong to
+# the other path, and the call-graph check stops where the other path's code starts.
+#
+# `transport._harness_call` is the one function in neither fingerprint, and that is
+# deliberate. It turns an event stream into a reply, and **no live path reaches it**: the
+# harness path reads the events itself, and the direct path never asks for a harness
+# session. Hashing it would move the *harness* fingerprint for a function that measures
+# nothing — and the console cohort is being re-measured under the current harness
+# fingerprint right now, so moving it would split that cohort across two instruments,
+# which is the defect the plan names. If it ever becomes reachable, the harness's own
+# call-graph check says so and it goes into HARNESS_MAPPING.
+OTHER_TRANSPORT = ("transport._harness_call",)
+
+def mapping_for(transport_name):
+	"""The mapping of a transport: the functions and constants that make up its own
+	measurement.
+
+	An unknown transport is an error rather than a shrug: a run under a transport with
+	no mapping could not be fingerprinted, and a fingerprint that quietly measured it
+	with the wrong one is worse than none. The registry already refuses a transport it
+	does not know, so this is the second place the same case is caught.
+	"""
+	if transport_name == "harness":
+		return HARNESS_MAPPING
+	if transport_name in ("http",None,""):
+		return DIRECT_MAPPING
+	raise transport.TransportError(f"unknown transport {transport_name!r}: there is no "
+		"mapping for it, so a run under it could not be fingerprinted")
 
 def _mapping_object(name):
 	"""The thing a mapping entry names: a function or a constant in this module or in
@@ -326,8 +407,8 @@ def _canonical(value):
 		return "[" + ",".join(repr(v) for v in value) + "]"
 	return repr(value)
 
-def mapping_source(names=None):
-	"""The harness mapping as one blob of text, to be hashed.
+def mapping_source(names=None,transport_name=None):
+	"""A mapping as one blob of text, to be hashed.
 
 	A function contributes its source and its default arguments — a default is a
 	constant too, and it is part of what the model is measured under. A constant
@@ -335,8 +416,10 @@ def mapping_source(names=None):
 	written down as MISSING rather than skipped, so a stale entry shows up in the
 	fingerprint instead of silently removing itself from it.
 	"""
+	if names is None:
+		names = mapping_for(transport_name)
 	parts = []
-	for name in (names or HARNESS_MAPPING):
+	for name in names:
 		obj = _mapping_object(name)
 		if obj is None:
 			parts.append(f"{name}: MISSING")
@@ -354,7 +437,7 @@ def mapping_source(names=None):
 	return "\n".join(parts)
 
 def mapping_version(transport_name=None):
-	"""The fingerprint of the MAPPING alone, for a harness run.
+	"""The fingerprint of the MAPPING alone, for a transport.
 
 	bench_version says which measurement a row was taken under; this says which part of
 	it was the mapping, so a reader can tell that a change to the mapping moved the
@@ -363,14 +446,15 @@ def mapping_version(transport_name=None):
 	mapping marker that was dropped on the way to disk, and not one of its 55 graded
 	harness rows had it.
 
-	The direct path has no mapping hash yet, and None says so rather than implying a
-	coverage that is not there: `agent.run_episode` builds the trace and `trace.analyse`
-	reads it, and what counts as the measurement on that path is a decision that has not
-	been taken. Folding it in would invalidate a corpus measured over weeks.
+	Both transports have one now. The direct path's was added on 2026-10-20 on the
+	human's ruling that the standard approach is not to invalidate findings: the new
+	rules apply from here on, and what is already measured stays readable. A row
+	measured before this carries no mapping hash, which is a fact about the row rather
+	than a verdict on it — the corpus's own per-model pages already say to treat those
+	figures as a result on the previous measurement.
 	"""
-	if transport_name != "harness":
-		return None
-	return "map-" + hashlib.sha256(mapping_source().encode()).hexdigest()[:12]
+	names = mapping_for(transport_name)
+	return "map-" + hashlib.sha256(mapping_source(names).encode()).hexdigest()[:12]
 
 def _safe_join(root,path):
 	"""Contain every file operation to the episode directory. The model under test is

@@ -187,13 +187,14 @@ reports the disagreements, and it deliberately does not write its verdict into t
 because a verdict about the grader is not a property of the run.
 
 **Each row says what it was measured under.** `bench_version` is the measurement side
-hashed from its own content — the prompt, the episodes, and for a harness run the
-*mapping*, the code that turns opencode's event stream into the trace the gates read.
-`grade_version` is the evaluation side. `mapping_version` is the mapping's own hash
-alone, so a reader can tell that the mapping moved the grades and not the prompt. A
-change to the measurement side invalidates earlier results; a change to the evaluation
-side does not, because the stored turns are still a measurement. `METHOD.md` has the
-rules.
+hashed from its own content — the prompt, the episodes, and the *mapping*, the code that
+turns a model's output into the trace the gates read. `grade_version` is the evaluation
+side. `mapping_version` is the mapping's own hash alone, so a reader can tell that the
+mapping moved the grades and not the prompt. **Each transport has its own mapping, and
+the two fingerprints are independent** — a change to the harness path does not invalidate
+a direct row. A change to the measurement side invalidates earlier results; a change to
+the evaluation side does not, because the stored turns are still a measurement. `METHOD.md`
+has the rules.
 
 **Two things make a record re-gradeable, and both are easy to lose.** `analyse()` reads the
 model's final files through `trace['root']`, so a record that stored its turns but not its

@@ -58,9 +58,8 @@ you make it:
 
 ### The mapping is part of the measurement
 
-The **mapping** is the code that turns a model's output into the trace the gates read — on
-the harness path, the translation of opencode's event stream into turns. It is as much a
-part of the measurement as the prompt is, so for a harness run **its source is folded into
+The **mapping** is the code that turns a model's output into the trace the gates read. It
+is as much a part of the measurement as the prompt is, so **its source is folded into
 `bench_version`**.
 
 It was not, and that is what let the opencode-2 upgrade break the harness path twice
@@ -68,15 +67,25 @@ It was not, and that is what let the opencode-2 upgrade break the harness path t
 measured under the broken mapping had to be thrown out and re-measured, because the thing
 that had changed was not in the fingerprint.
 
+**There is one mapping per transport, and the two fingerprints are independent.** A change
+to the harness mapping does not move the direct path's fingerprint — otherwise every
+finding the direct corpus carries would be invalidated by a change to a path it does not
+use, which is the same mistake pointed the other way. The two mappings are not the same
+shape, because the two paths are not: the harness path's input is opencode's *event
+stream*, which is the instrument's own reading of what the model did, so the whole harness
+transport is inside it; the direct path's input is the model's *reply text*, which is the
+model's own words, so the mapping starts at the text.
+
 A row also carries `mapping_version` — the mapping's own hash, alone — so a reader can
-tell that the mapping moved the grades and not the prompt. The direct path has no mapping
-hash yet: what counts as the measurement there is a decision that has not been taken, and
-`None` says so rather than implying a coverage that is not there.
+tell that the mapping moved the grades and not the prompt. A row measured before the
+mapping was hashed carries none, and that is a fact about the row rather than a verdict on
+it: the corpus's own per-model pages already say to treat those figures as a result on the
+previous measurement.
 
 The list of what the mapping is has to be kept honest, or the hole reopens with a lid on
-it: a function added to the harness path and left out of the list would move the grades
-without moving the fingerprint again. A test walks the call graph from the harness runner
-and says what is missing.
+it: a function added to a path and left out of the list would move the grades without
+moving the fingerprint again. A test walks the call graph from each path's runner and
+says what is missing.
 
 ## Store the raw data, or it was not a measurement
 
