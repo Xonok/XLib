@@ -20,42 +20,57 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `806253e` (2026-10-19), **snapshot taken 2026-10-19**, **in
-sync with `origin/master`** — **PR #47 is merged and pushed, and it carries the
-two coordination fixes: `K93Z39B` (the `news` command) and `8FVW49J` (the
-`check-clean` guard)**. PR #44 is merged and pushed too, and it carries two
+Basis: `master` at `fb82f12` (2026-10-19), **snapshot taken 2026-10-20**, **in
+sync with `origin/master`** — **PR #50 is open and waiting for the human: it
+carries the second half of the `news` repair, which the PR #47 repair did not
+actually fix.** PR #47 is merged and pushed, and it carries the two
+coordination fixes: `K93Z39B` (the `news` command) and `8FVW49J` (the
+`check-clean` guard). PR #44 is merged and pushed too, and it carries two
 fixes of its own: `XP56NNC` (the linter inside a worktree) and `2X3PZT3` (the
 gate that never ran there). PR #42 (`YFJZRYC`, the html lint implementation) is
 merged and pushed, so xlint lints `.html` on master and the human can run it
 over Traveller. PR #36 (`YFJZRYC`, the html lint *rules*) went in before it, and
 so did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state
-files). Fourteen board tickets are closed, and the Traveller acceptance test has
-been run: the bundle exists at `Space-Traveller/server-bundled.py` and does not
-run.
+files). The Traveller acceptance test has been run — the bundle was produced and
+does not run — **though the artefact is no longer on disk, so a repeat run is
+needed to see it again**.
 
 **`agent-coord.py` had two defects that made the coordination tool report
-something untrue, and both are fixed and on master.** The `news` command — the
-only channel that carries a rule change out to the agents that have not read
-the file — reported "no new guideline changes" for every workspace and **took
-the claims of every agent on the machine with it** when it ran. Four breaks, all
-measured against the live tree: the workspace resolved to `$HOME` (under
-opencode 2 the process that carries a session's directory is the *client*, and
-the tool was asking the shared background service instead, which is the same
-process for every session on the machine); the migration dropped every claim
-whose owner was not a key in `ids.json`, and a claim is owned by an agent id
-while `ids.json` is keyed by session key, so the two key spaces never met; the
-rule files were globbed at `style/*.md` while XLib keeps them at
-`doc/style/*.md`; and the session key was the service's pid, so every session
-shared one identity, one notes file and one rule cursor. **Measured before and
-after, against a copy of the live `.agents`: workspace `/home/xonok` →
-`/storage/GitHub/Fun/XLib`; rule files 0 → 41; claims after a `news` run wiped
-→ intact.** A run that finds no rule files at all now says `nothing checked`,
-which is not the same answer as "no new guideline changes". The second defect
-is `check-clean` reporting **clean** for a dirty file inside a worktree — the
-guard that stops two agents editing one file, failing open. **21 new tests,
-each fix mutation-checked, and the suite is green on master.** **Verified on
-the live state after the merge:** `news` reports the 41 rule files and the
-machine's claims are still there.
+something untrue. One is fixed and on master; the other was not, and its
+repair is PR #50.** The `news` command — the only channel that carries a rule
+change out to the agents that have not read the file — reported "no new
+guideline changes" for every workspace and **took the claims of every agent on
+the machine with it** when it ran. Four breaks, all measured against the live
+tree: the workspace resolved to `$HOME`; the migration dropped every claim whose
+owner was not a key in `ids.json`, and a claim is owned by an agent id while
+`ids.json` is keyed by session key, so the two key spaces never met; the rule
+files were globbed at `style/*.md` while XLib keeps them at `doc/style/*.md`;
+and the session key was the service's pid, so every session shared one
+identity, one notes file and one rule cursor. **The claims-wipe is genuinely
+fixed**, and the rule files are found. **The workspace resolution is not**, and
+the reason is worth stating because the fix was verified and still did not
+hold: the repair settled on the opencode *client* by walking this process's
+ancestry, and it assumed the client is an ancestor of the tool shell. Under
+opencode 2 it is not — the shell descends from the shared service, and the
+client is a separate process — so the walk finds the service, whose cwd is the
+home directory, and the session resolves to `/home/xonok` again. **Measured
+live on 2026-10-20, in a session shaped like this one: `news` printed `no rule
+files found in /home/xonok — nothing checked`, 0 rule files.** The
+verification recorded on the ticket was taken in a session whose ancestry
+happened to hold a client; the topology this machine actually runs — one
+service, four clients, no client in any tool shell's ancestry — was not
+covered. **So the `git checkout` ban, which `news` was carrying, still cannot
+reach a session shaped like this one.** PR #50 finds the client by what it says
+about itself: it names the session it serves in its own arguments, and it works
+in the directory the session works in. The service is never a candidate, and
+the session key follows it, so two windows are two sessions again. The second
+defect, `check-clean` reporting **clean** for a dirty file inside a worktree —
+the guard that stops two agents editing one file, failing open — **is** fixed
+and on master. **36 tests in `tools/test/test_agent_coord.py`; 11 mutations of
+the repair, each killed by the test that names it.** **Verified on the live
+state with PR #50's code: `news` finds the 41 rule files, the workspace
+resolves to `/storage/GitHub/Fun/XLib`, and the machine's claims are still
+there.**
 
 **Task updates 2026-10-19:** #117 (xhttp release survival) marked done — the released
 `xhttp_1_0_0.py` survives Space-Traveller use. #111 (Discord access design) marked done;
@@ -194,9 +209,12 @@ the bundler at module scope and **the bundler was deleted** in `5e87ae8`, so
 the script now fails at *import* rather than at bundle time. Read Blocked before
 trusting a release. **195 epiq
 events were stranded on 2026-10-01, 13 of them issue creations**; the drain ran
-on 2026-10-02 and `tools/epiq-pending.py` reports **1 event still stranded**
-(a bare `create.contributor` carrying no ticket content), confirmed 2026-10-08.
-**The merge queue is empty again.** PR #33 (`ZRTSZMB`, the `ctx` opencode-2.0 fix)
+on 2026-10-02 and `tools/epiq-pending.py` reported **1 event still stranded**
+(a bare `create.contributor` carrying no ticket content), confirmed 2026-10-08 —
+**and reports 0 stranded events now, re-measured 2026-10-20.**
+**One pull request is open: PR #50**, the `news` command's workspace resolution
+(`K93Z39B`), which waits for the human because it changes a live machine's
+coordination state. PR #33 (`ZRTSZMB`, the `ctx` opencode-2.0 fix)
 was merged on 2026-10-18 as a rebase merge with the branch deleted, `dc078ce`, and
 with it the seven Done-lane tickets whose commits are on master are closed: `ZRTSZMB`,
 `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`. Before that, four
@@ -237,54 +255,11 @@ the human's call.
 
 | Item | Who | Done | Where |
 |------|-----|------|-------|
-| **pybundle rewrite** | human (intent) / AI (spec) | **IMPLEMENTED 2026-10-17, out of lane on the human's override. 806 lines, five modules, 186 of 188 tests pass, xlint clean.** Uncommitted. See the Snapshot for the two test defects and the three un-ruled consequences. **Implementation landed; `release.py` did not, and neither did the review.** Pass 3's 188 tests were committed as `de4f70b`; the two failures are both in `test_bundler_structure.py` and both are unsatisfiable as written. Pass 1's 65 tests were superseded on 2026-10-15 by **138 tests in five files** — that is pass 2, committed as `247eaba`, since superseded again by pass 3's 188 — re-derived against `SPEC.md` after the pass-1 decisions (`03c0e75`) and after the human answered F13–F17. **Every decision they prompted has been ruled** — `S1G5037` and `F7KHKM8` both had their `human-input-needed` tags removed after the rulings. **`#127`'s spec half is done** (`5e4784a` + the spec commit below): a new
-	*Decisions — 2026-10-15, after test pass 2* section, **268 insertions / 0
-	deletions**, with the first 730 lines verified byte-identical so the
-	append-only discipline of `03c0e75` holds. **D20** alias (reverses D9 and
-	F13) · **D21** INDENT/DEDENT · **D22** `text`/`indent` plus the argv,
-	empty-line and `pass` clauses · **D23** D14's fourth diagnostic, fully
-	specified · **D24** collisions · **D25** the count is six. It opens by
-	saying **read D20 first — it reverses D9 two hundred lines up**, because an
-	implementer working top to bottom builds the withdrawn mechanism otherwise.
-	**What remains is the reviewer's re-derivation**, and the spec now names the
-	seven cases it must pin.
-	**The re-derivation is done — pass 3, 2026-10-15, and it is uncommitted.** 176
-	tests in five files, described in `doc/reviews/pybundle-tests-pass1-3.md`; a
-	conformance audit on 2026-10-17 found **three tests that cannot pass against a
-	conforming bundler** and all three are fixed: `test_out_dash_writes_the_bundle_to_stdout`
-	asserted `helper__count` in a tree whose `setUp` had stopped importing `helper`
-	(**committed in `247eaba`, so two review passes missed it**), and the two D23
-	anchor tests gave the root no indentation at all, which made them contradict
-	their own sibling `test_a_root_without_indentation_reports_nothing_when_the_files_agree`
-	— no implementation satisfies both. A fourth, `test_a_comment_line_carries_no_indentation_of_its_own`,
-	asserted the opposite of its own name and is renamed. **188 tests now, in six
-	files**: the three coverage gaps are closed (R6.1's `tokenize` half, which no
-	test asserted; `imports`'s entry count, which D8 and D16 fix but nothing pinned;
-	and R5's "raises the same errors either way"), and the new `test_bundler_imports.py`
-	is the file for the one function D12 names that no file tested directly.
-	**All four still cannot run — there is no implementation.**
-	**One ruling recorded: D26** — a mixed statement's non-local half is aliased too
-	(`import helper, os` → `import os as sub__client__os`), which supersedes D8's
-	`becomes import os`. Three tests already asserted it; no test changed.
-	**The three blocking flaws are ruled and written in, 2026-10-17 — D27, D28,
-	D29**, all appended, nothing above them edited. **F25**: a use of a
-	name-imported name *is* rewritten, to the importing file's own prefixed name —
-	the bullet saying "nothing rewrites the use" would have produced a bundle raising
-	`NameError` that still passes a text-level test, and it contradicted D20's own
-	verified table. **F26**: a plain local module import emits **no rebind** — its
-	name is an alias for the callee's prefixed globals, because there is no module
-	object to bind (D17) and aliasing would make python re-import the file. **F29**:
-	the indentation report carries **the file's path, the first offending line's
-	number, and that line's text**, the path written the way the start comments write
-	it. F27, F28, F30, F31 and F21 remain open and none of them blocks.
-	**188 tests now, in six files** — the two new ones pin the report's path and
-	number, which F29's ruling made testable. **All committed as `de4f70b`**; the pass-3
-	spec edits beyond these four decisions are still not written in, so the spec does
-	not yet carry all of its own tests. | epiq `6MFX0Z1`, `YEBP3QB`, `S1G5037`, `F7KHKM8`, `R9H4PVD`, `EZAVYNM` |
-| **xhttp** | human | **Released `1_0_0` 2026-10-18** (`xlib/xhttp_1_0_0.py`, epi `2X0B2XW`, 22 308 bytes) and **`1_0_1` 2026-10-19** (`xlib/xhttp_1_0_1.py`, epi `VC9QWYY`, 22 966 bytes) — the first entry in this repo citing its release ticket, as the convention asks. Verified before it was committed: xlint-clean, **223 tests green against it** through a shim package, and the live-socket smoke test returning the same responses as the source. **Running in Space-Traveller's game server and behaving, per the human** — which answers the "validate against real code" condition by use rather than by a campaign; the released artefact survives that use (`#117` done 2026-10-18). **The nineteen `err_*` lines are the reason the released file can be told apart from python**, and the reasoning behind them is now in `dev/xhttp/SPEC.md`. **The refresh flakiness is closed — the human's report, 2026-10-19: the flakiness is fixed, and both servers are now on `xhttp_1_0_1`.** That is the second version, and it is the fixed one: it carries the crucial fixes — multiple requests per connection, and the signalling when a connection is about to be closed. Both verified in the artifact itself (`xlib/xhttp_1_0_1.py`: `_server__serve_forever(...,max_requests=120)` and the `connection: close` header). **An earlier note here said `1_0_2` and read the missing `1_0_2` as a release that had not been made; both halves of that were wrong** — there is no `1_0_2` because the second version is `1_0_1` (the human's correction, 2026-10-19). **What 1_0_1 does not carry** is the `HTTPDoubleDotForbidden` → 400 branch and the removal of the redundant second `client.close()` in the 505 branch, both on master as `dd58524` (`AC9YJYQ`). The first of those is the only pending xhttp defect that would produce a *sometimes-failing page* — in 1_0_1 that exception falls through to the blanket handler, which prints a traceback and answers **500** — and it is reachable because 1_0_1 moved the `..` guard behind percent-decoding, so the guard now reads the decoded path. **So the next release wants `dd58524`; the release is the human's call.** **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 239 tests, 6 failures, 1 skipped** as of 2026-10-19 — the 6 are `ContentNegotiationTest` (`dev/xhttp/test/test_response.py:282`): xhttp gzips regardless of `Accept-Encoding`, which `VERSIONS.md` 1_0_1 records as ruled an issue and not yet fixed. **They had no ticket until 2026-10-19** — `AC9YJYQ` claimed they "are filed separately" and they were not, checked by listing every open ticket rather than by searching a keyword. Now `BFNRBG7`, taskview `#143`. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Validated against real code in Space-Traveller** — the game server has been running on xhttp and the released artefact survives that use (`#117` done). **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
+| **pybundle rewrite** | human (intent) / AI (spec) | **IMPLEMENTED and committed 2026-10-17; re-measured 2026-10-20: 203 tests in six files, all green, working tree clean.** The five modules are in the tree and tracked. **What remains is four things, none of them the implementation:** the two defects the Traveller run found (`86CDJV2`, `JD9DWVN` — the latter carries a ruling request: warn / alias / leave as D17's exclusion); the shim option (`#133`, the human's own words, future work); the Traveller acceptance test itself (`#137`, waiting on the human's go); and the housekeeping `DRAFT.md` asks for — **`SPEC_new.md` is still in `tools/pybundle/` beside `SPEC.md` and `SPEC_old.md` with nothing marking which is current.** The spec carries its own decisions: D20 (alias, reversing D9 and F13), D21 (INDENT/DEDENT), D22, D23, D24, D25, and the 2026-10-17 set D27–D34. **The line here that said "there is no bundler in the tree" was right for four days and wrong for the rest — corrected 2026-10-20.** | epiq `6MFX0Z1`, `86CDJV2`, `JD9DWVN`, `AYB2896` |
+| **xhttp** | human | **Released `1_0_0` 2026-10-18** (`xlib/xhttp_1_0_0.py`, epi `2X0B2XW`, 22 308 bytes) and **`1_0_1` 2026-10-19** (`xlib/xhttp_1_0_1.py`, epi `VC9QWYY`, 22 966 bytes) — the first entry in this repo citing its release ticket, as the convention asks. Verified before it was committed: xlint-clean, **223 tests green against it** through a shim package (the suite has since grown to **239**; the 6 that fail are `ContentNegotiationTest` — xhttp gzips regardless of `Accept-Encoding`, the known defect behind `#143` and `BFNRBG7`), and the live-socket smoke test returning the same responses as the source. **Running in Space-Traveller's game server and behaving, per the human** — which answers the "validate against real code" condition by use rather than by a campaign; the released artefact survives that use (`#117` done 2026-10-18). **The nineteen `err_*` lines are the reason the released file can be told apart from python**, and the reasoning behind them is now in `dev/xhttp/SPEC.md`. **The refresh flakiness is closed — the human's report, 2026-10-19: the flakiness is fixed, and both servers are now on `xhttp_1_0_1`.** That is the second version, and it is the fixed one: it carries the crucial fixes — multiple requests per connection, and the signalling when a connection is about to be closed. Both verified in the artifact itself (`xlib/xhttp_1_0_1.py`: `_server__serve_forever(...,max_requests=120)` and the `connection: close` header). **An earlier note here said `1_0_2` and read the missing `1_0_2` as a release that had not been made; both halves of that were wrong** — there is no `1_0_2` because the second version is `1_0_1` (the human's correction, 2026-10-19). **What 1_0_1 does not carry** is the `HTTPDoubleDotForbidden` → 400 branch and the removal of the redundant second `client.close()` in the 505 branch, both on master as `dd58524` (`AC9YJYQ`). The first of those is the only pending xhttp defect that would produce a *sometimes-failing page* — in 1_0_1 that exception falls through to the blanket handler, which prints a traceback and answers **500** — and it is reachable because 1_0_1 moved the `..` guard behind percent-decoding, so the guard now reads the decoded path. **So the next release wants `dd58524`; the release is the human's call.** **Moved in from Space-Traveller 2026-10-10**; `xlib_dev` load fixed (#116). **Suite: 239 tests, 6 failures, 1 skipped** as of 2026-10-19 — the 6 are `ContentNegotiationTest` (`dev/xhttp/test/test_response.py:282`): xhttp gzips regardless of `Accept-Encoding`, which `VERSIONS.md` 1_0_1 records as ruled an issue and not yet fixed. **They had no ticket until 2026-10-19** — `AC9YJYQ` claimed they "are filed separately" and they were not, checked by listing every open ticket rather than by searching a keyword. Now `BFNRBG7`, taskview `#143`. The two failures this row carried since 2026-10-12 were **not a defect in `websocket.send`**: `_/websocket.py:62-65` validates correctly, and both tests had `pass` inside their `assertRaises` with the comment *"Correct implementation would raise here"* — they had never been written. `7Z7DE78` argued the opposite at length and was wrong; the tests now call `send`, and the suite is green against **both the source and the bundle**. Earlier in the row's life: was 19 errors until the file-serving tests were corrected from tuple config to the dict shape `_/response.py` actually reads. Root is now clean: docs, `xhttp.py`, `_/`, `test/`, and `compare/` for the temporary RFC comparison material (`ba84849`, #124), plus `REVIEW.md` and `TODO.md` (`0a0dcd8`, #118). `95d700b` relocated the 60s-timeout fix into `handshake()`; it does not regress it and closes none of `Z70VRAC`'s five faults. **Validated against real code in Space-Traveller** — the game server has been running on xhttp and the released artefact survives that use (`#117` done). **The root file now reflects the error classes (2026-10-17, uncommitted)** — nineteen `err_X = err.X` lines at `xhttp.py:62-80`, added so a caller of a *bundle* can still name them (see *Blocked* (a)). Bundled, they come out as `err_HTTPError = _err__HTTPError`; the suite still runs 223 with the same 2 failures. | `dev/xhttp/`, `dev/xhttp/SPEC.md` |
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
-| **epiq boards** | secretary | XLib **43 tickets — 37 in Todo, 3 in progress, 3 in Done**, verified 2026-10-19. **The In progress lane was empty on 2026-10-18 and is not now**: `NAHEGJE` (marduk), `AC9YJYQ` (xhttp collect) and `YFJZRYC` (the html lint implementation — taken and assigned 2026-10-19). The Done lane holds `MY4ZS5D`, `DW94JXN` and `PHF9QZQ`. **Fourteen tickets closed on this board without being merged**, in one session: seven whose commits are on master (`ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`), four pybundle tickets closed as ruled-and-landed or verified (`F7KHKM8`, `S1G5037`, `EZAVYNM`, `YEBP3QB`), **`R9H4PVD` closed as superseded rather than executed** — its repair would now reintroduce the error it was written to prevent — and two filed from the Traveller run (`86CDJV2`, `JD9DWVN`). **Every one was verified against the tree, not against the ticket's own account of itself**; that check is what separated the fourteen from four that only looked closable. An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
-| **pybundle acceptance** | secretary | **Traveller bundles; it does not run. Run 2026-10-18**, output at `Space-Traveller/server-bundled.py` (400 908 B, untracked). 142 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **329 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib for the first time. **Two defects, both filed and both outside anything XLib's own corpus contains**, so no amount of testing against XLib would have found them: `86CDJV2` (D32 rule 3 handles a removed import mid-file and misses one at the **end** — 3 double-blank findings) and **`JD9DWVN`, which stops it running** (`from . import io,…` in a package `__init__.py` reached again through the package attribute gives `server__Misc____init__io`, which nothing defines — **141 such names**, `NameError` on first call). `JD9DWVN` carries a ruling request: warn / alias / leave as D17's exclusion. **The structural machinery is sound** — prefixing, aliasing, scope tracking, the whole D20 mechanism all produced a structurally valid 400 KB bundle | `Space-Traveller/server-bundled.py`, epiq `86CDJV2`, `JD9DWVN` |
+| **epiq boards** | secretary | XLib **50 tickets — 41 in Todo, 3 in progress, 6 in Done**, verified 2026-10-20. **The In progress lane was empty on 2026-10-18 and is not now**: `NAHEGJE` (marduk), `AC9YJYQ` (xhttp collect) and **`K93Z39B`** (the `news` command — **reopened 2026-10-20, because PR #47's repair did not hold in the topology this machine actually runs; PR #50 is the fix**). The Done lane holds `XP56NNC`, `YFJZRYC`, `MY4ZS5D`, `DW94JXN`, `PHF9QZQ` and `2X3PZT3`. **Fourteen tickets closed on this board without being merged**, in one session: seven whose commits are on master (`ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`), four pybundle tickets closed as ruled-and-landed or verified (`F7KHKM8`, `S1G5037`, `EZAVYNM`, `YEBP3QB`), **`R9H4PVD` closed as superseded rather than executed** — its repair would now reintroduce the error it was written to prevent — and two filed from the Traveller run (`86CDJV2`, `JD9DWVN`). **Every one was verified against the tree, not against the ticket's own account of itself**; that check is what separated the fourteen from four that only looked closable. An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
+| **pybundle acceptance** | secretary | **Traveller bundles; it does not run. Run 2026-10-18** — **the artefact is no longer on disk: `Space-Traveller/server-bundled.py` does not exist (checked 2026-10-20), so the run has to be repeated to see the bundle again.** 142 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **329 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib for the first time. **Two defects, both filed and both outside anything XLib's own corpus contains**, so no amount of testing against XLib would have found them: `86CDJV2` (D32 rule 3 handles a removed import mid-file and misses one at the **end** — 3 double-blank findings) and **`JD9DWVN`, which stops it running** (`from . import io,…` in a package `__init__.py` reached again through the package attribute gives `server__Misc____init__io`, which nothing defines — **141 such names**, `NameError` on first call). `JD9DWVN` carries a ruling request: warn / alias / leave as D17's exclusion. **The structural machinery is sound** — prefixing, aliasing, scope tracking, the whole D20 mechanism all produced a structurally valid 400 KB bundle | `Space-Traveller/server-bundled.py`, epiq `86CDJV2`, `JD9DWVN` |
 | **xlint: html rules** | secretary | **IMPLEMENTED AND MERGED 2026-10-19 — PR #42, on master as `5c1865e`.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + Mallesne's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md`. **The human merged it on their own instruction so they could run it over Traveller** — `xlint` over Space-Traveller's `html/` folder gives 783 findings (774 depth, 7 trailing whitespace, 2 double blank), and Mallesne's one html file is clean | epiq `YFJZRYC`, taskview `#139` |
 | **xlint: the worktree blind spot** | secretary | **FIXED 2026-10-19 — PR #44, merged as `36b20c5`, two tickets: `XP56NNC` (the linter) and `2X3PZT3` (the hooks).** The linter excluded every file in a `.work/` worktree and said `clean`; the hook that runs it never ran in a worktree at all, so the style gate and the ticket-ref check were both open there. Both fixed, both measured; the gate's output at the repository root is unchanged. | epiq `XP56NNC`, `2X3PZT3`, taskview `#144` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
@@ -298,7 +273,7 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**The queue is empty.** PR #33 (`ZRTSZMB`) was merged on 2026-10-18 — rebase, branch
+**One pull request is open: PR #50** (`K93Z39B`, the `news` command's workspace resolution) — one commit on `fix/K93Z39B-agent-coord-news`, 36 tests and 11 mutations killed, and it waits for the human because it changes a live machine's coordination state. The queue was empty before it. PR #33 (`ZRTSZMB`) was merged on 2026-10-18 — rebase, branch
 deleted, `dc078ce` — and with it the seven Done-lane tickets whose commits are on
 master are closed: `ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`,
 `VC9QWYY`. Each got a `Solution:` comment first; the four that only had a
@@ -330,13 +305,19 @@ committed the git way first and read as zero commits; epiq's own skill never
 states the separator. A rebase merge preserves it; a merge commit would bury
 it under a refless subject.
 
-### pybundle — the folder is documents only, and three of them disagree
+### pybundle — three specifications, and nothing marking which is current
 
-**There is no bundler in the tree.** The five-phase implementation
-(`bundler.py` + `bundler_impl.py`) and its seven fixtures were deleted on
-2026-10-14 (`5e87ae8`, epiq `055TS78` closed by deletion). `tools/pybundle/`
-now holds four documents and no code, and a reader arriving there sees **three
-specifications with nothing marking which is current**:
+**The bundler is in the tree** (re-measured 2026-10-20): six modules,
+`bundler.py`, `bundler_cli.py`, `bundler_imports.py`, `bundler_names.py`,
+`bundler_source.py` and the entry file, all tracked, with **203 tests in six
+files under `tools/pybundle/test/` — all green**, and a clean working tree.
+**What was deleted on 2026-10-14 (`5e87ae8`, epiq `055TS78`) was the *old*
+five-phase implementation** (`bundler.py` + `bundler_impl.py`) and its seven
+fixtures; the rewrite landed on 2026-10-17 and replaced it. A line here said
+"there is no bundler in the tree" and was right for four days and wrong for the
+rest. **What is still true is the part about the documents**: a reader arriving
+at `tools/pybundle/` sees **three specifications with nothing marking which is
+current**:
 
 - **`SPEC.md`** — the one the rewrite follows. Written by an AI, carries
 	`<!-- spec-origin: ai -->`, derived from `DRAFT.md` with each decision
@@ -358,12 +339,13 @@ Also standing, from the abandoned single-pass attempt:
 - The four `doc/reviews/pybundle-*.md` reviews approved files which were never
 	in the tree (`pybundle.py`, `BUG_FIX_SPEC.md`, `VERSIONS.md`, three fixtures).
 	They are the record of a real attempt, not a verdict on anything.
-- `tools/pybundle/_/` is an empty directory left behind, and
-	`tools/pybundle/test/` no longer is — it held the 65 tests committed in
-	`608621e` and now holds **138 in five files, of which two files are untracked
-	and three more are modified**; nothing from the pass-2 derivation is
-	committed. Git does not track empty directories, so `_/` exists on disk and
-	not in the repository.
+- `tools/pybundle/_/` is an empty directory left behind. Git does not track
+	empty directories, so `_/` exists on disk and not in the repository.
+	**The test folder is no longer in that state** (corrected 2026-10-20): it
+	held the 65 tests of `608621e`, then 138 in five files, and now holds
+	**203 in six files, all tracked and all committed** — pass 3 re-derived
+	against the alias ruling, plus the shim and structure work. The line that
+	said "two files untracked and three more modified" described 2026-10-15.
 
 ## Blocked / needs attention
 
@@ -382,17 +364,33 @@ Also standing, from the abandoned single-pass attempt:
 	them, and because the near-miss is the clearest possible demonstration of why
 	`checkout` is the banned one.
 - **`agent-coord.py news` destroyed every agent's claims, and the rule changes
-	it exists to announce never arrived. FIXED and on master: PR #47, commits
-	`36554c9` and `806253e`. #142, and `8FVW49J` for the guard beside it.**
-	The four breaks and what they measure are in the Snapshot above. What is
-	left of it here is the two things the fix does not do on its own. **The
-	stale identity lingers:** `ids.json` still holds `pid-15395` →
-	`xonok/secretary-1`, the shared service's pid, and the claims under it are
-	left alone deliberately — a live session is still using that id, and moving
-	its claims under the new one would pull the rug from under it. It is reaped
-	when that pid dies. **`$HOME/.agents/` still exists**, and a session whose
-	window was opened in the home directory resolves there, which is correct for
-	that window and not something to delete from outside the repo. → `tools/agent-coord.py`,
+	it exists to announce never arrived. The claims-wipe is FIXED and on master:
+	PR #47, commits `36554c9` and `806253e`. The workspace resolution is NOT:
+	PR #50 is open, waiting for the human. #142 (reopened), and `8FVW49J` for
+	the guard beside it.**
+	The four breaks and what they measure are in the Snapshot above. **What PR
+	#47 did not fix is the first break.** The repair settled on the opencode
+	client by walking this process's ancestry and assumed the client is an
+	ancestor of the tool shell; under opencode 2 it is not, so the walk finds
+	the shared service, whose cwd is the home directory, and the session
+	resolves to `/home/xonok` again — measured live on 2026-10-20, with `news`
+	printing `no rule files found in /home/xonok — nothing checked`. **So the
+	rule changes still do not arrive for a session of this shape, and the
+	`git checkout` ban is one of them.** PR #50 finds the client by what it says
+	about itself — the session id in its own arguments, and the directory it
+	works in — and the service is never a candidate.
+	**The stale identity is handled rather than left to rot:** the service's pid
+	was the session key, so every session attached to the service was given one
+	identity, one notes file, one rule cursor and one set of claims. With the
+	key changed, that identity is a leftover whose claims are stranded where the
+	guard refuses the rightful owner. **It is now taken over once, with its
+	claims and its cursor, and re-tagged to the workspace the session is really
+	in** — the old tag was the home directory's name, which was never a
+	workspace. Measured on the live state: `ids.json` holds one entry,
+	`pid-1252` → `XLib/secretary-1`, and the claims are under it.
+	**`$HOME/.agents/` still exists**, and a session whose window was opened in
+	the home directory resolves there, which is correct for that window and not
+	something to delete from outside the repo. → `tools/agent-coord.py`,
 	taskview `#142` and `#145`
 
 - **Three bundler tickets are now closed, and one of them was closed for a reason
@@ -460,25 +458,24 @@ Also standing, from the abandoned single-pass attempt:
 	has exactly one adding commit, so the ref is findable via
 	`git log --diff-filter=A`, and the check should validate against **git rather
 	than the board**, since the board is not durable.
-- **`tools/release/release.py` cannot release anything — two independent breaks,
-	one now fixed and one deeper.** The dev-folder path bug is **fixed and
-	committed** (`c657694`, epiq `1ZY2Q5Q`): it resolved `ROOT / <library>`
-	while the folders moved under `dev/` in `da1d163` (2026-09-17). **But the
-	script still cannot release anything**, because it imports the bundler at
-	module scope (`release.py:8`) and the bundler was deleted in `5e87ae8` — so
-	it now fails at **import**, before reaching `bundler.bundle(...)` at line 74.
-	Nothing releasable before either; what changed is that this break is no
-	longer a one-tab fix and now waits on `6MFX0Z1`. **The documentation half of
-	that ticket is now done** (`d908568`): `release.py:58` says
-	`dev/<library>/<library>.py` and the README marks its bundler citation
-	unavailable rather than leaving a reader to run it. Still unaddressed: the
-	non-atomic write, `release()`'s return type and the tagging question. **And
-	the consequence worth stating plainly** — the README's "never run this to
-	check something" warning exists because a stray `release.py <library>`
-	leaves a real file in `xlib/`, and its answer, inspect the bundler
-	directly, no longer works. **There is currently no way to look at a bundle
-	without writing one.** All six releases in `xlib/` predate the move and
-	nothing tests the path.
+- **`tools/release/release.py` — both breaks it had are closed (corrected
+	2026-10-20).** The dev-folder path bug was **fixed and committed**
+	(`c657694`, epiq `1ZY2Q5Q`): it resolved `ROOT / <library>` while the
+	folders moved under `dev/` in `da1d163` (2026-09-17). **The second break —
+	"the script cannot release anything, because it imports the bundler at
+	module scope (`release.py:8`) and the bundler was deleted in `5e87ae8`" — is
+	also closed, because the bundler is back.** The rewrite landed 2026-10-17
+	and `tools/pybundle/bundler.py` is in the tree again. **Measured
+	2026-10-20: `release.py` imports cleanly, and `bundled(entry)` is there**
+	(`release.py:51`) — the bridge the human ruled ("spec as written, bridge
+	separately"), which is `main` over a `StringIO`, because `bundle(entry) ->
+	str` is not among the spec's seven functions. All five libraries in `dev/`
+	bundle, and every bundle is xlint-clean. Still unaddressed: the non-atomic
+	write, `release()`'s return type and the tagging question. **The
+	consequence that was stated here — "there is currently no way to look at a
+	bundle without writing one" — no longer holds**, and the README's "never run
+	this to check something" warning no longer has a dead answer. All six
+	releases in `xlib/` predate the move and nothing tests the path.
 - **The release gate landed 2026-10-18**: `release.py` runs this repository's
 	own xlint over the bundle and **refuses before writing**, so nothing released
 	here carries a finding. **The gate is the repository's, not the bundler's** —
@@ -497,11 +494,13 @@ Also standing, from the abandoned single-pass attempt:
 	gate refuses it. **Verified against the real library**: re-releasing xhttp
 	through the gated path produces a file byte-identical to the committed
 	`xhttp_1_0_0.py`, so the gate does not perturb the artefact.
-- **The pybundle rewrite has code: the bundler is implemented and 186 of its 188
-	tests pass.** Implementation is programmer work and the secretary does not do
-	it; the human was told and overrode that, so the work happened here and the
-	record says so. What that leaves behind is three things the human has not
-	ruled on, and they are worth more than the green tests:
+- **The pybundle rewrite has code: the bundler is implemented, and 203 of its 203
+	tests pass** (re-measured 2026-10-20; the line said 186 of 188, which was
+	true on 2026-10-17 and not after the shim and structure work). Implementation
+	is programmer work and the secretary does not do it; the human was told and
+	overrode that, so the work happened here and the record says so. What that
+	leaves behind is three things the human has not ruled on, and they are worth
+	more than the green tests:
 	**(a) RULED 2026-10-17 and IMPLEMENTED the same day: a relative import in the
 	root is allowed, and `RELATIVE_IMPORT_IN_ROOT` is retired** (`SPEC.md` D30,
 	taskview `#130` closed, `#132` done, epiq `NJ529TQ`).
@@ -580,7 +579,11 @@ Also standing, from the abandoned single-pass attempt:
 	**(c) F21 was tolerated, not settled.** `imports` takes a modpath spelled with
 	dots from the loop and with slashes from one test, and normalises both.
 - **The pybundle rewrite is at the spec-edit stage: the tests are re-derived, and
-	the spec has not caught up with what they proved.** The human wrote `DRAFT.md`
+	the spec has not caught up with what they proved.** (Headline corrected
+	2026-10-20: **the spec has caught up.** The decisions the tests asked for are
+	written in as D20–D25 and the 2026-10-17 set D27–D34, and the tests have been
+	re-derived against them — 203 in six files, all green, committed. What is
+	below is the record of how it got there.) The human wrote `DRAFT.md`
 	as intent; `SPEC.md` is derived from it and written by an AI on the condition
 	that every decision traces back to a draft section (`24e1856`, `d9528b0`). The
 	first test pass found **12 spec flaws** (`doc/reviews/pybundle-tests-pass1.md`,
@@ -590,7 +593,8 @@ Also standing, from the abandoned single-pass attempt:
 	nothing above the new section moved. The tests were then **re-derived on
 	2026-10-15** against those decisions — 138 in five files, superseding the 65 —
 	which is what pass 2's review (`doc/reviews/pybundle-tests-pass1-2.md`) records.
-	**Two things follow from that and neither is done.** First, five of the pass-1
+	**Two things follow from that; both are done now** (corrected 2026-10-20).
+	First, five of the pass-1
 	flaws are closed and **three are not**, all needing the human: the three
 	name-import shapes with no stated answer (`F7KHKM8`), and mixed tab/space
 	indentation (`S1G5037`). **Both halves of the indentation question were ruled
@@ -692,21 +696,44 @@ tripped on. One false-positive class remains unruled and costs nothing either
 - **`dev/xprod/` has no SPEC.md and no VERSIONS.md** — the only dev library
 	missing both. Manual work for the human, parked on purpose; recorded as epiq
 	`DCF9EHW` so the gap stays visible and does not become a quiet exception.
-- **taskview #96 is ruled and blocked.** The human settled four things on
-	2026-10-08: a separate `description` column on `tasks.csv`; exactly 2 tasks in
-	full detail with the remaining pane space going to the condensed list; and
-	the 2 always being the most urgent by due date (overdue first), regardless of
-	day. Blocked on `AQQNPAN` — the CSV header declares 5 columns against 8-field
-	rows, so a 9-column writer would land on a file whose header lies — and on
-	the human's ruling that every other open taskview ticket lands first. Board:
-	epiq `XNTVCEE` (Todo). The `description` field also collides with `E5MH4S2`'s
-	open `priority`-column question; both grow the same file.
+- **taskview #96 is ruled and blocked, and the blocker was re-routed by the
+	human on 2026-10-20.** The human settled four things on 2026-10-08: a
+	separate `description` column on `tasks.csv`; exactly 2 tasks in full detail
+	with the remaining pane space going to the condensed list; and the 2 always
+	being the most urgent by due date (overdue first), regardless of day.
+	**The human's answer to the header problem, 2026-10-20: it is a symptom.**
+	`AQQNPAN` says the CSV header declares 5 columns while the rows carry 9, so
+	a 9-column writer lands on a file whose header lies — and the human's answer
+	is that **taskview should use `xcsv`, and `xcsv` needs to support reschema
+	if it does not already. Once taskview uses xcsv, several solutions become
+	simple and future schema changes become easier.** So `AQQNPAN` is no longer
+	"fix the header": it is "make the schema change in a tool that can change
+	schemas", which is a bigger and better-shaped piece of work. #96 is also
+	still blocked on the human's ruling that every other open taskview ticket
+	lands first. Board: epiq `XNTVCEE` (Todo). **And the `priority`-column
+	question is answered by the same route** — the human's framing for the wide
+	view is that **it always orders by due date**, so changing the order is
+	simply a result of changing a due date, and a separate priority column is
+	not wanted; the interaction is *editing* the due date (click a task, set
+	`2026/10/27` directly, or bump it with `+7d`). That is `E5MH4S2`, the spec
+	for the wide all-tasks view, and it is the next piece of this work.
 - **`dev/xconf/`, `dev/xcsv/`, `dev/xschema/`, `dev/xtest/` use `tests/`.** The
 	ruling is `test/`, recorded in `doc/development.md`; the rename is epiq
 	`2VD2XZC`.
-- **`tools/tool_schema_cache.py:14`** names this machine's absolute path in a
-	tracked file, which AGENTS.md forbids. The linter check that would catch this
-	is epiq `7HP67R2` (Todo).
+- **`tools/tool_schema_cache.py:14` still names this machine's absolute path in
+	a tracked file, which `AGENTS.md` forbids, and nothing catches it.** The
+	linter check exists — `check_absolute_paths`
+	(`tools/xlint/xlint.py:726`), and the ticket that asked for it
+	(`7HP67R2`) is **closed** — but it runs in the **`.md` branch only**
+	(`xlint.py:1008`). The `.py` branch has no absolute-path check, so the
+	offending line, a path inside a module docstring, passes. **Re-measured
+	2026-10-20: the file still carries `/storage/GitHub/Fun/XLib/tools/
+	tool_schema_cache.py`, and `xlint .` over the whole repository is clean.**
+	So the check landed for the case it was written for and the finding it came
+	from is still open: either the check should cover `.py` as well, or the
+	docstring should name the tool relative to the repository. The rule in
+	`doc/paths-in-tracked-files.md` says "tracked files", which is every file,
+	not only the Markdown ones.
 - **The `Q397WZG` / `9J30DNW` duplicate is resolved by relocation, not by a
 	merge.** Both asked which worker the coding route should name, in two
 	different lanes; both are closed and refiled on the Agents board as
@@ -727,8 +754,9 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	orphans were `CMGDFZF`, `VTJVHMY` and `QN1N82Y`, all three resolved
 	2026-10-02. `epiq_sync` returns success with every flag false, so it reads as
 	done and does nothing. The drain ran on 2026-10-02;
-	`tools/epiq-pending.py` reports **1 event still stranded** as of 2026-10-08
-	(a bare `create.contributor` carrying no ticket content).
+	`tools/epiq-pending.py` reported **1 event still stranded** as of 2026-10-08
+	(a bare `create.contributor` carrying no ticket content). **Re-measured
+	2026-10-20: 0 stranded events.**
 	`AZHG0FK` assumed the loss window was a worktree prune — a missing creation
 	with committed events referencing it is more severe than that. Draining
 	another actor needs a session running as that actor, which `epiq_actor_assume`
@@ -736,15 +764,21 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	per-actor and has no fix: each actor writes to
 	`.epiq/events/<actorId>~pending*.jsonl`, which `.gitignore` deliberately never
 	commits, and `epiq_sync` only ever drains the calling actor's own log.
-- **Two worktree hazards, both reproduced 2026-10-08.** `check-clean` answers
-	`clean` for a dirty file in a worktree — a worktree's `.git` is a *file*, so
-	`nearest_git` walks past it to the parent repo and reads the wrong status
-	(`8FVW49J`). And `.agents/` is gitignored, so a fresh worktree has no
-	`claims.json` and claims resolve to the main checkout only. **Corrected
-	2026-10-08**: an earlier line here said `check-clean` *refuses* worktree paths
-	with "paths span multiple repos". It does not; that error needs two different
-	repos in one call, and `.opencode/agent/` never triggers it because `abspath`
-	does not follow the symlink.
+- **One worktree hazard left, of the two reproduced 2026-10-08** (corrected
+	2026-10-20). **`check-clean` answering `clean` for a dirty file in a worktree
+	is FIXED and on master** — PR #47, `806253e` (`8FVW49J`): a worktree's `.git`
+	is a *file*, so `nearest_git` walked past it to the parent repo and read the
+	wrong status. The walk now stops at the checkout that owns the path, a
+	worktree's `.git` counts whether it is a file or a directory, and a file
+	behind a symlink is compared under the tracked name as well. **What is left
+	here is the second half:** `.agents/` is gitignored, so a fresh worktree has
+	no `claims.json` and claims resolve to the main checkout only — which is why
+	the claims in this file's own state live in the root checkout while the code
+	is worked on in `.work/`. **Corrected 2026-10-08**: an earlier line here said
+	`check-clean` *refuses* worktree paths with "paths span multiple repos". It
+	does not; that error needs two different repos in one call, and
+	`.opencode/agent/` never triggers it because `abspath` does not follow the
+	symlink.
 - **The agent-file zero-stats problem is ruled against, not just fixed.**
 	`.opencode/agent/` is a symlink into the Agents repo, so an agent-file ticket
 	filed on this board reads as zero commits however it is committed; 16 were
@@ -760,10 +794,14 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	where Python sees no comment at all. Found 2026-10-09 while re-measuring the
 	alignment ruling, and it is the cause of two wrong figures I reported earlier
 	this session: the masking handled single-line strings but not docstrings, so
-	those 10 lines were counted as aligned code comments. `doc/style/python.md` has
-	no sentence on docstrings — formatting, length, or what belongs in one rather
-	than in the SPEC. Same shape as `DDRBHD5`/`BX56XRY`/`13QYCT8`/`KJKEQ01`: a
-	convention in wide use with no text behind it. epiq `HRGFRWX` (Todo).
+	those 10 lines were counted as aligned code comments. **CLOSED, and the rule
+	is written down** (epi `HRGFRWX`, closed): **`doc/style/python.md` now has a
+	`## Docstrings` section**, and it says what was missing — module docstrings
+	are prose, function docstrings follow the same principle, **no alignment
+	columns in docstrings**, and docstrings are not exempt from the alignment
+	rule (spaces are never used for alignment, in a docstring either). Same shape
+	as `DDRBHD5`/`BX56XRY`/`13QYCT8`/`KJKEQ01`: a convention in wide use with no
+	text behind it — and all four of those are closed too.
 - **Houserule ruled 2026-10-09, second half: alignment counts only at very high
 	comment density, and a comment belongs on the line before what it explains.**
 	Aligned same-line comments count only where **comment density is very high**;
@@ -783,115 +821,107 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	signature becomes ordinary tab indentation, not columns — `func(` alone,
 	arguments one tab deeper, `)` at the `func(`'s own indent — because
 	**renaming a parameter breaks a space alignment and cannot break an
-	indent**; that fragility is the stated reason. **Not yet written down**:
-	`AGENTS.md`'s `## Houserules` (`:137-139`, one entry) and
-	`doc/style/python.md` are both untouched, and the `0P2TVAM` precedent put that
-	houserule in both files. Measured scope: **369 lines in 47 tracked files** —
-	134 `.py` space-aligned comments, 135 Markdown alignment prose/tables,
-	100 other (epi `BSFQYPF`; reformat `F8XBH1F`). Two questions the ruling does
-	not answer: **comment columns** (the biggest category, and the fragility
-	argument applies to them as much as to signatures) and **Markdown tables**,
-	where tabs do not render as padding so "use tabs" has no working answer.
-	Three xlint tickets now hang off this ruling: `BSFQYPF`, `13QYCT8` (whose
-	`code  +#` exemption the ruling deletes — outside data a double space is a
-	typo by construction), and `1YPFZYH`.
-- **xlint's `check_def_one_line` is wrong in 74 of 74 cases.** It reports
-	"function definition split across lines" for **74** `def`s across tracked
-	`.py` and **none** are spills — every one is a single-line `def` carrying a
-	trailing comment, because the closing pattern is anchored `\s*$` (`:130-140`).
-	A 100% false-positive rate, and all 74 sit in `tools/taskview/test/`, which
-	`AK633QC` shows is invisible to a plain `xlint .`. It also **bans the exact
-	tab-indented signature shape the new houserule permits**, so the ruling and
-	the check cannot both stand and the check cannot be the survivor. The
-	trailing-comment fix is one line and converts 74 findings to 0 — worth
-	landing before any redesign. **Split 2026-10-09**: the human ruled the 74
-	lines are bad taste but not spills, so the one-line false-positive fix stays
-	here and the new rule is `HRCQSV4` — where **`class` lines turn out never to
-	have been checked at all** (`_DEF_PREFIX_RE` matches `def` only), so the 0
-	count is a coverage gap rather than a clean baseline. epiq `1YPFZYH` + `HRCQSV4`
-	(Todo).
-- **xlint runs `check_trailing_whitespace` on `.py` and not on `.md`.**
-	`check_file` (`:198-222`) branches by suffix: five checks for `.py`, two for
-	`.md`. So Markdown hard breaks — two trailing spaces, a documented CommonMark
-	feature — are permitted by omission rather than by decision, and **58 tracked
-	`.md` lines carry trailing whitespace, 56 of them exactly two-or-more spaces**.
-	Corrected 2026-10-09: I first wrote that this contradicted the double-space
-	check; it does not, because the check is simply absent on `.md`. epiq
-	`KJKEQ01` (Todo).
-- **xlint has no mid-line double-space check, and the rule as stated would
-	fight the repo's own comment alignment.** Not implemented — no check, no
-	`--no-` flag. The human's condition is that it **must not fire inside data**
-	(inline strings and the like), and that condition is most of the ticket: a
-	prototype goes **116 → 586** findings repo-wide, of which **134 are the
-	`ClassName    # comment` column layout** used across `dev/xcsv`, `xlib/` and
-	`dev/xschema` — house style, not sloppiness. 120 more are SPEC.md alignment
-	prose, 94 are string literals, 7 Markdown tables, 5 inline code spans. So
-	exempting "data" is a **ruling, not a detail**, and the rule is unwritten:
-	`doc/style/*.md` has no double-space sentence at all, and on the narrow
-	sentence-period reading (`[.!?:]  +[A-Za-z]`) the repo is already clean at
-	zero hits. Two implementation findings worth keeping: exempt by
-	**replacement, never deletion** (deleting `` `<REF> ` `` from
-	`...is \`<REF> \` — ref...` leaves two spaces and the line explodes: 1879 vs
-	586 findings), and `_fence_exempt` (`:81-120`) is already built for the `.md`
-	branch but feeds only `check_space_indent_exempt`. epiq `13QYCT8` (Todo).
-- **xlint has no check for a single trailing blank line, and its two
-	file-ending checks do not compose into the rule either states.**
-	`check_final_newline` (`tools/xlint/xlint.py:142-145`) requires the file to
-	end in a newline and `check_double_blank` (`:50-55`) rejects two consecutive
-	blanks — so `import os\n\n` passes both, being a real last line, one blank,
-	and a present terminator. Two blanks at the end *is* caught, which is the tell
-	that `\n\n` is an oversight and not a policy. **Four tracked files carry it**,
-	none currently flagged: `tools/taskview/taskview.py:765`,
-	`tools/taskview/taskupdate.py:298`, `tools/bbprs/README.md:193`,
-	`doc/reviews/pybundle-review.md:336` — the tool's own two entry points
-	included. A prototype adds 4 findings repo-wide (116 → 120) and loses none.
-	Same root as `DDRBHD5`: each check was written against its own symptom rather
-	than against the rule, so neither composes. Also unenumerable — neither
-	`missing final newline` nor this has a sentence in `doc/style/python.md`.
-	epiq `BX56XRY` (Todo).
-- **xlint's merged-imports rule is unsatisfiable for aliased imports.** The
-	human ruled on 2026-10-09: **aliased imports get their own line, and should
-	generally be avoided where avoidable — but xlint must handle them
-	correctly.** The code change is now unambiguous (detect ` as ` explicitly,
-	give aliased imports a branch, `prev_plain = False` so they do not
-	propagate), and a prototype is inert on tracked code: 116 findings before and
-	after, byte-identical. The ruling's second half is still open — whether
-	"avoided when possible" is prose or a new check; mechanically it means "the
-	alias never appears", which would fire on `import numpy as np` everywhere.
-	`check_imports` (`tools/xlint/xlint.py:190`) decides plain-vs-dotted by
-	testing the module text for a dot, and `import x as y` has no dot — so an
-	aliased plain import is classified plain, flagged, and propagated as a
-	mergeable predecessor. `import json` / `import math as m` /
-	`import collections` produces two findings and **no rewrite that clears
-	them**; the merged form `import json,math as m,collections` is legal Python
-	(`ast.parse` accepts it, binds `json`/`m`/`collections`) but still reads as
-	plain under the classifier. The two aliased forms are treated oppositely for
-	no reason but the dot: `import a.b as c` escapes the rule, `import math as m`
-	does not. `doc/style/python.md:20-23` covers plain and dotted and says nothing
-	about aliases, which is how the linter filled the gap on its own.
-	**Corrected 2026-10-09**: an earlier entry here said two shipped fixtures
-	already violate it, making this non-latent. Wrong — both fixture findings are
-	unrelated (`stdlib/main.py:3` is a plain/plain pair with the alias *after* it;
-	`alias/main.py:3` is the `from`-import same-module check), so the
-	unsatisfiable input has **zero occurrences in tracked code**. `tools/xlint/`
-	has no test file at all, which is how it went unnoticed. epiq `DDRBHD5`
-	(Todo).
-- **xlint does not lint tests, and the house rule for test folder names is
-	inverted relative to it.** `is_ignored` (`tools/xlint/xlint.py:28`) excludes any
-	path part named `test` — the repo's own convention, so `xlint .` skips every
-	test file and reports 0 while violations sit in `tools/taskview/test/` and
-	`dev/xprod/test/`. **The 109 / 103 / 5 / 1 breakdown recorded here is stale
-	as of 2026-10-14**: `tools/pybundle/test/` and its fixtures were deleted in
-	`5e87ae8`, so that term is out of the sum and the total needs re-measuring
-	before anyone quotes it. `tests/` — the name
-	the rules call wrong — is *not* excluded, so `2VD2XZC`'s rename would move
-	four linted libraries out of coverage. Needs a decision: narrow the
-	exclusion to foreign test data, or write down that tests are exempt.
-	`AK633QC`; `XCKN0AT`'s pre-commit hook inherits it verbatim.
-- **Task scheduling**: 4 high-importance tasks have no due date at all (#52, #61,
-	#63, #75), and everything due today has by now gone overdue — 10 open tasks
-	are past due, and that number moves hourly. The store is the record; see
-	`TASKS.md` for this workspace's two.
+	indent**; that fragility is the stated reason. **Where the rule stands,
+	re-measured 2026-10-20: it IS written into `doc/style/python.md` (`:108-109`
+	— "spaces are never used for alignment anywhere in this repo") and is NOT
+	into `AGENTS.md`'s `## Houserules`,** which the `0P2TVAM` precedent says it
+	should be — so the "not yet written down" line was half stale. Measured
+	scope when this was written: **369 lines in 47 tracked files** — 134 `.py`
+	space-aligned comments, 135 Markdown alignment prose/tables, 100 other (epi
+	`BSFQYPF`; reformat `F8XBH1F`). **The `.py` half has since been reworked**:
+	`HRCQSV4` (the separate `def`/`class`-comment rule) and the mid-line
+	double-space check are both closed and implemented, and **the repository is
+	clean under them** (epi `13QYCT8`, `1YPFZYH`, both closed). **The Markdown
+	half is not mechanized**, and the two questions the ruling does not answer
+	are still the two that matter: **comment columns** (the biggest category,
+	and the fragility argument applies to them as much as to signatures) and
+	**Markdown tables**, where tabs do not render as padding so "use tabs" has no
+	working answer. Board: epiq `BSFQYPF` (Todo) and `F8XBH1F` (Todo).
+- **xlint's `check_def_one_line` was wrong in 74 of 74 cases — FIXED, and
+	closed** (epi `1YPFZYH`, closed; the check was rewritten). The finding was
+	right and the fix was to the *check*, not to the 74 lines: the old closing
+	pattern was anchored `\s*$`, so every single-line `def` carrying a trailing
+	comment was reported as a split signature. The check now distinguishes three
+	states — closed on the line (clean whatever follows the colon, a trailing
+	comment included), spanning lines in the permitted shape (clean), and a spill
+	— and deciding the middle case needs `ast`, because whether the parameter
+	list closes on its line is not a question a regex can answer without being
+	fooled by a comment or a string. **Re-measured 2026-10-20: `xlint .` over
+	the whole repository is clean, and `tools/taskview/test/` — where all 74
+	once sat — is clean too.** The separate rule for a comment on a `def` or
+	`class` line is the next bullet, and it landed as well.
+- **xlint ran `check_trailing_whitespace` on `.py` and not on `.md` — FIXED, and
+	closed** (epi `KJKEQ01`, closed). The `.md` branch now runs it, with the
+	Markdown hard break — two trailing spaces, a documented CommonMark feature —
+	exempted, which is the decision the finding asked for. **The finding's own
+	correction is kept because it is the kind of thing that gets repeated: the
+	rule was not *contradicted* by the absence of the check, it was merely
+	absent, and "not implemented" is a different statement from "implemented
+	backwards".** The 58 tracked `.md` lines that carried trailing whitespace are
+	gone.
+- **xlint had no mid-line double-space check — FIXED, and closed** (epi
+	`13QYCT8`, closed). The finding was that the rule as stated would fight the
+	repo's own house style: a prototype went 116 → 586 findings repo-wide, of
+	which **134 were the `ClassName    # comment` column layout** used across
+	`dev/xcsv`, `xlib/` and `dev/xschema`, and 120 more were SPEC.md alignment
+	prose. **Exempting "data" was a ruling, not a detail**, and the ruling
+	landed with the implementation: the check is `--no-double-space`-able, it
+	takes an `is_py` argument, and the exemptions are by **replacement, never
+	deletion** — deleting `` `<REF> ` `` from `...is \`<REF> \` — ref...`
+	leaves two spaces and the line explodes (1879 vs 586 findings). **Re-measured
+	2026-10-20: `xlint .` over the whole repository is clean under it.** The
+	house style it was fighting with is the subject of the next bullet, and it
+	is still open.
+- **xlint had no check for a single trailing blank line — FIXED, and closed**
+	(epi `BX56XRY`, closed). The finding was that the two file-ending checks did
+	not compose into the rule either states: `check_final_newline` requires the
+	file to end in a newline and `check_double_blank` rejects two consecutive
+	blanks, so `import os\n\n` passed both — a real last line, one blank, and a
+	present terminator. **The two blanks at the end *was* caught, which is the
+	tell that `\n\n` was an oversight and not a policy.** `check_trailing_blank`
+	now covers it, and it is the target the `.md` branch's double-blank check
+	deferres to. **The four tracked files that hit it — the tool's own two entry
+	points, `taskview.py` and `taskupdate.py`, among them — are fixed.** The
+	deeper point in the finding stands as the reason it was worth a ticket: each
+	check was written against its own symptom rather than against the rule, so
+	neither composed.
+- **xlint's merged-imports rule was unsatisfiable for aliased imports — FIXED,
+	and closed** (epi `DDRBHD5`, closed). The human's ruling of 2026-10-09 was
+	that **aliased imports get their own line, and should generally be avoided
+	where avoidable — but xlint must handle them correctly**, and the code
+	change was unambiguous: detect ` as ` explicitly, give aliased imports a
+	branch, and do not propagate them as a mergeable predecessor. The finding
+	recorded the trap precisely: `check_imports` decided plain-versus-dotted by
+	testing the module text for a dot, and `import x as y` has no dot, so an
+	aliased plain import was classified plain, flagged, **and propagated as a
+	mergeable predecessor** — `import json` / `import math as m` /
+	`import collections` produced two findings and **no rewrite that clears
+	them**. The two aliased forms were treated oppositely for no reason but the
+	dot: `import a.b as c` escaped the rule and `import math as m` did not.
+	**Re-measured 2026-10-20: `xlint .` over the whole repository is clean.**
+- **xlint does not lint tests — CORRECTED 2026-10-20: it does.** The exclusion
+	this bullet describes is **gone**, and the ticket that carried it (`AK633QC`)
+	is closed: `is_ignored` no longer excludes any path part named `test`, and
+	`_BUILTIN_EXCLUDED` (`tools/xlint/xlint.py:34`) holds only `__pycache__`,
+	`.git`, `node_modules` and `xlib_legacy`. **The claim had propagated here
+	from an older reading and was never re-measured** — the same failure the
+	html work found elsewhere, where a fixed record was quoted as a live one.
+	The 109 / 103 / 5 / 1 breakdown went with it. **What is left of the original
+	finding is the other half**, and it still stands: **`tests/` — the name the
+	house rules call wrong — is not excluded either**, so `2VD2XZC`'s rename
+	moves four libraries *into* coverage rather than out of it, and the question
+	the ticket asked — narrow the exclusion to foreign test data, or write down
+	that tests are exempt — is moot in the other direction. `XCKN0AT`'s
+	pre-commit hook inherits whatever `is_ignored` does, so it inherits the fix
+	too.
+- **Task scheduling** (re-measured 2026-10-20): the counts this line carried
+	are stale in both directions. **The 4 high-importance tasks with no due date
+	have all been given one** — #52 → 2026-10-30, #61 → 2026-10-21, #63 →
+	2026-11-06, #75 → 2026-10-23. **17 open tasks are past due**, not 10, and
+	that number moves hourly. **16 open tasks have no due date at all**, and they
+	are a different set: #104–#110, #122, #123, #127, #133, #137, #138, #140,
+	#141, #143. The store is the record; `TASKS.md` holds this workspace's
+	**28** open items, not two.
 
 ## Settled — not to be reopened without cause
 
@@ -959,14 +989,14 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	because it is a design decision with reasoning that does not belong only in
 	a conversation. Does Traveller tag releases? Without a boundary the patch
 	notes cannot be sliced.
-3. **The last stranded epiq event needs a session, or it needs epiq changed.**
+3. **The stranded-event mechanism has no fix, but nothing is stranded now.**
 	The mechanism is understood — per-actor logs, and `epiq_actor_assume` refuses a
 	name its server was not launched with — so this is no longer a mystery but a
 	decision: one session per stranded actor, which means the human launching it,
-	or a change to epiq itself. **1 event remains stranded**, a bare
-	`create.contributor` for an actor that registered and stopped, carrying no
-	ticket content (`tools/epiq-pending.py`, 2026-10-08). Low stakes as a number;
-	it stays open because the *mechanism* has no fix, and the next agent to exit
+	or a change to epiq itself. **Re-measured 2026-10-20:
+	`tools/epiq-pending.py` reports 0 stranded events**, where it reported 1
+	(a bare `create.contributor` carrying no ticket content) on 2026-10-08. It
+	stays open because the *mechanism* has no fix, and the next agent to exit
 	without syncing restarts the count.
 4. **Should `release.py` tag or commit a release?** It currently does neither,
 	there are zero tags in the repo, and the README's scope section may mean that
@@ -980,13 +1010,13 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	run) and will happen again while state-file rewrites are a per-ticket
 	deliverable. Worth deciding whether a STATUS.md rewrite is a ticket of its own
 	or a final step of the merge, since the second stops two agents racing for it.
-5. **Should `doc/style/prose.md` bind dispatched workers too?** The rule file
+6. **Should `doc/style/prose.md` bind dispatched workers too?** The rule file
 	is reachable through `AGENTS.md`, which every agent reads, but a subagent
 	runs from its own prompt in `.opencode/agent/` and does not necessarily get
 	`AGENTS.md` in context. If the prose rules are meant to apply to worker
 	output too, that needs a mechanism; today they bind the agents that read the
 	repo rules. `KDX7KWJ` closed without deciding it.
-6. **`xlib_dev` shipped to master** (taskview #112 done, epiq `ASTXNPG` Done,
+7. **`xlib_dev` shipped to master** (taskview #112 done, epiq `ASTXNPG` Done,
 	commit `b0214a4`, 2026-10-10). `from xlib_dev import xcsv` runs real code
 	against `dev/xcsv/xcsv.py` instead of the newest file in `xlib/`, resolved
 	through an `__getattr__` mirror of `xlib/__init__.py` so adding a library
@@ -998,8 +1028,10 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	framing, which had been wrong: **dev → dev dependency is fine and wanted**,
 	only the dev → release boundary is policed. The other agent's in-flight
 	xlint work was kept off the branch and restored to master's working tree
-	uncommitted. **master is one commit ahead of origin and unpushed.**
-7. **Correction: there is no broken namespace-package import in `dev/`.** I told
+	uncommitted. **(Corrected 2026-10-20: master was one commit ahead of origin
+	and unpushed at the time; it is now in step with `origin/master` at
+	`fb82f12`.)**
+8. **Correction: there is no broken namespace-package import in `dev/`.** I told
 	the human on 2026-10-10 that `import dev.<lib>` was unreliably importable on
 	py3.14 and built an mtime/`FileFinder` theory on top of it. All of it was my
 	own typo — I wrote `dev.xlsx.xlsx` (`dev` + `xlsx`) instead of
@@ -1012,7 +1044,7 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	detail attached. A "not reproducible, here is my theory" report should have
 	came first, and the cheapest check — printing the string you were importing —
 	should have come before the theory, not after.
-8. **A dotted non-local import leaks one unprefixed name — RULED 2026-10-17:
+9. **A dotted non-local import leaks one unprefixed name — RULED 2026-10-17:
 	accept it and write it down** (`SPEC.md` D31). D20 keeps `import a.b` verbatim
 	because python binds the *parent*, which the statement does not spell, so
 	aliasing would hand the file the leaf: `email.utils.parseaddr` would keep
