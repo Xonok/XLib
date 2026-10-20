@@ -50,7 +50,8 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 		# reserved for when the benchmark is wrong, so a result has to be able to say what it
 		# was measured on. Two versions because the two sides are allowed to move at
 		# different rates: bench_* changes invalidate, grade_* changes are re-derivable.
-		"bench_version":agent.bench_version(),"grade_version":trace.grade_version(),
+		"bench_version":agent.bench_version(model.get("transport")),
+		"grade_version":trace.grade_version(),
 		# The raw turns are KEPT. analyse() reads them, so a new gate used to cost a
 		# re-measurement — which is how six criterion changes in one day turned into
 		# discarded runs. With them in the record, evaluation can be re-derived offline and
@@ -149,7 +150,7 @@ def main():
 				shutil.rmtree(result["sandbox"],ignore_errors=True)
 	fh.close()
 	kept = "kept for inspection" if args.keep_sandbox else "removed (--keep-sandbox to retain)"
-	print(f"\ntrace: {args.out}\nbench {agent.bench_version()} / {trace.grade_version()}")
+	print(f"\ntrace: {args.out}\nbench {agent.bench_version(model.get('transport'))} / {trace.grade_version()}")
 	print(f"final state kept under {state_root} (raw data — do not delete)")
 	print(f"sandboxes under {run_root} ({kept})")
 
