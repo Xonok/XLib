@@ -314,6 +314,41 @@ class TestLeftoverIdentity(CoordTestCase):
 		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-1"})
 		self.assertEqual(self.read_json("claims.json"), {"ws/secretary-1": ["/tmp/b.py", "/tmp/a.py"]})
 
+class TestRecycledPid(CoordTestCase):
+	"""A session key is a pid, and a pid can be recycled.
+
+	The session that had it dies, and a later session in another workspace is
+	given the same pid. The identity it inherits names the *old* session's
+	workspace, which sends its notes to another repository and leaves its
+	claims under a name the session cannot see.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.tool.recycle_dead_slots = lambda: None
+		self.tool.migrate_ids = lambda: None
+		self.tool.session_key = lambda: "pid-100"
+		self.tool.service_keyed_ids = lambda ids: {}
+
+	def test_an_identity_naming_another_workspace_is_re_tagged(self):
+		self.write_json("ids.json", {"pid-100": "Agents/secretary-3"})
+		agent = self.tool.my_id()
+		self.assertEqual(agent, "ws/secretary-3")
+		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-3"})
+
+	def test_the_dead_session_s_claims_are_dropped_not_inherited(self):
+		self.write_json("ids.json", {"pid-100": "Agents/secretary-3"})
+		self.write_json("claims.json", {"Agents/secretary-3": ["/tmp/stale.py"]})
+		self.tool.my_id()
+		self.assertEqual(self.read_json("claims.json"), {})
+
+	def test_an_identity_in_this_workspace_is_left_alone(self):
+		self.write_json("ids.json", {"pid-100": "ws/secretary-3"})
+		self.write_json("claims.json", {"ws/secretary-3": ["/tmp/mine.py"]})
+		agent = self.tool.my_id()
+		self.assertEqual(agent, "ws/secretary-3")
+		self.assertEqual(self.read_json("claims.json"), {"ws/secretary-3": ["/tmp/mine.py"]})
+
 class TestNearestGit(CoordTestCase):
 	"""A worktree's `.git` is a file, and a lookup that recognises only a
 	directory walks past it to the repository that contains it."""
