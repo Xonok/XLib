@@ -304,6 +304,7 @@ HARNESS_MAPPING = (
 	"agent.HARNESS_PROTOCOL",
 	"agent.HARNESS_PROTOCOL_UNASKED",
 	"agent.protocol_label",
+	"agent._is_code_mode",
 	"agent.MAX_TURNS",
 	"transport.CONSOLE_NAMESPACE",
 	"transport.HARNESS_TIMEOUT",
@@ -687,6 +688,23 @@ def _exit_of(part):
 	Big Pickle ran the project's own checker after its last write, the checker answered
 	that all cases passed, and the gate recorded zero verification runs.
 
+	**Three known shapes, and then the else.**
+
+	- **A shell command that ran.** The exit code is in the metadata, one level deeper
+	  in opencode 2.
+	- **A call that failed before it ran.** `state.status == "error"`, so there is no
+	  exit code because nothing ran, and the call is recorded as a failed run.
+	- **A code-mode call.** opencode's `execute` tool runs JavaScript in a sandbox:
+	  there is no process, so there is no exit code and no command text either. **This
+	  shape cost the corpus a fifth of its harness runs** — the mapping raised, and the
+	  whole episode became a hole with the model's other turns lost with it. That is
+	  E26's shape exactly: the instrument manufacturing evidence against a model that
+	  behaved correctly. A code-mode call is not a verification (the gate looks for a
+	  command, and there is none), so it is recorded and the run continues. **Whether a
+	  code-mode call *should* count as a verification is a separate question** — XLib
+	  `SGZN1Y9` — and the source and the output are both kept, so the question can be
+	  answered from the stored trace without a re-measurement.
+
 	And an else for the case nobody foresaw: a shell event with no exit code anywhere
 	is not "the model ran nothing that passed" — it is a shape this tool does not know,
 	and it raises. A hole in a run is legible; a missing exit code quietly read as a
@@ -699,7 +717,21 @@ def _exit_of(part):
 			return str(holder["exit"])
 	if state.get("status") == "error":
 		return "1"
+	if _is_code_mode(state):
+		return None
 	raise transport.UnseenShape(f"no exit code in an opencode shell event: {json.dumps(part)[:300]}")
+
+def _is_code_mode(state):
+	"""True when the call ran code in opencode's sandbox rather than a shell command.
+
+	The input's shape says which tool it was: opencode's shell tool takes a `command`,
+	and its code-mode `execute` tool takes `code`. **The tool name is not a reliable
+	discriminator** — the corpus has seen code-mode calls arrive under the name "exit"
+	and under the name "status", both of them the model inventing a tool that does not
+	exist — so the input is what is read.
+	"""
+	spec = state.get("input") or {}
+	return "code" in spec
 
 def _harness_turn(part,turn,root,protocol="opencode"):
 	state = part.get("state") or {}
@@ -709,6 +741,13 @@ def _harness_turn(part,turn,root,protocol="opencode"):
 	cmd = spec.get("command") or spec.get("cmd") or ""
 	return {"turn":turn,"action":kind,"path":path,"cmd":cmd,
 		"parsed":kind != "other","exit":_exit_of(part) if kind == "run" else None,
+		# What the model ran, when it ran code rather than a shell command. Kept beside
+		# the command text and NOT inside it: the gates read `cmd`, and a JavaScript
+		# source dropped into `cmd` would match the verification pattern ("test",
+		# "check") by accident and turn a computation into a verification. The source
+		# and the output are the evidence `SGZN1Y9` needs, so they are kept where the
+		# question can be answered from the stored trace.
+		"code":spec.get("code") or "",
 		# The whole of what the model saw. It used to be cut to 400 characters, and the
 		# cut could hide the checker's own verdict — which is the evidence for G2.
 		"result":str(state.get("output") or ""),
