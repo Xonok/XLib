@@ -32,6 +32,7 @@ SUITES = [
 	"dev/xschema/tests",
 	"tools/bbprs/test",
 	"tools/taskview/test",
+	"tools/modelbench/test",
 	"tools/xlint/test",
 	"tools/marduk/test",
 	"dev/xhttp/test",

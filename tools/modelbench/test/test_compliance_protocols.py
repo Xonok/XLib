@@ -91,3 +91,6 @@ def test_the_fingerprints_carry_the_protocol():
 	xtest.equal(asked["mapping_version"],unasked["mapping_version"],
 		"while the MAPPING is the same for both — so the protocol is the only difference "
 		"between the two measurements, which is what makes the comparison sound")
+
+if __name__ == "__main__":
+	sys.exit(xtest.run(__file__))
