@@ -61,6 +61,16 @@ def test_a_default_value_is_read_where_the_def_is():
 	})
 	xtest.contains("def helper__compute(VALUE = helper__VALUE)", bundle)
 
+def test_a_name_after_a_dot_is_not_renamed():
+	# `other.classes` is the module's own name — the file's `classes` is a
+	# different name that happens to be spelled the same.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.check()\n",
+		"helper.py": "import other\n\nclasses = other.classes\n\ndef check():\n\treturn classes\n",
+		"other.py": "classes = {}\n",
+	})
+	xtest.contains("helper__classes = other__classes\n", bundle)
+
 def test_a_removed_last_import_leaves_no_double_blank_line():
 	# D32's third rule: removing a statement must not leave a blank pair.
 	bundle = _bundle({

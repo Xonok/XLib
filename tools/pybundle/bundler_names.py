@@ -325,6 +325,11 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 			last = tokens[run[1] - 1]
 			edits.append((start, offsets[last[3][0] - 1] + last[3][1], aliases[run[0]]))
 			index = run[1]
+			# The alias replaced the base *and* the dot, so the name that
+			# follows is an attribute of whatever holds it — the same rule
+			# the plain path already applies, and the one this path used
+			# to skip past.
+			after_dot = True
 			continue
 		if name in shadowed or name not in renames:
 			continue
