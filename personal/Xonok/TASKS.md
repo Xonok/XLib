@@ -595,6 +595,26 @@ needed when there is no due date.
 	`c688726` (PR #72) with a `Solution:` comment. **The same shape as a record
 	quoting a live thing** — and the third time in two days it has cost
 	something.
+- [x] **#177 — hooks: symlink them instead of copying, and guard against a dangling
+	link** (done 2026-10-21, medium) — category: xlib. **On the human's question**
+	(*"would it be practical for the hook install script to just use a symlink
+	instead of copying anything?"*), and their choice of the guard. **The hooks are
+	links now**, so a change to a hook is **live at once** — the whole class of
+	problem `#175` records is gone rather than documented. **Measured before
+	writing it**: git runs a symlinked hook; in a worktree it runs and `2X3PZT3` is
+	unaffected; after **moving** the repository it still runs, **because the link
+	is relative**; editing the source takes effect with no install step; no hook
+	resolves its own location; and `install.sh` was **already symlink-aware**.
+	**The cost, and the guard**: a dangling link is a **silently absent gate** —
+	git accepted a commit with the source deleted and printed nothing at all. So
+	**`pre-commit` is a regular file and is the guard**: it checks every link
+	resolves, fails loudly with the fix if one does not, and then runs the style
+	gate itself. **Three details the measurements decided**: the link is relative
+	where the shared git dir is the repository's own `.git`; the **source** is made
+	executable rather than the link; and the installer **removes stale links** for
+	sources that are deliberately gone. **Verified live** on this machine, both
+	directions. Merged as `e7ff041`; epiq `PZH78FS` is in Done, and `W4QP4GK`'s
+	rule is withdrawn with a comment saying so.
 
 ## Scheduling
 
