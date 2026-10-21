@@ -47,3 +47,16 @@ never-started on every other one.
 
 **Never end a session with "events in flight".** It is the one line in the
 check that says your own work is still only in a file.
+
+**The commit hook says the same thing from the other side.** A freshly filed
+ticket's ref is in the actor's pending log, so `validate-ticket-ref.py` cannot
+find it and refuses the commit — correctly, because a ref nobody else can
+resolve should not pass. It now names the cause rather than the symptom:
+
+```
+ERROR: Ticket ref 'F35YDRX' was filed but not yet synced
+```
+
+The plain message — *"Invalid ticket ref"* — is true and useless: the ticket
+exists, it just has not been synced, and an agent reading it has nothing to act
+on but re-reading the ticket's own title.
