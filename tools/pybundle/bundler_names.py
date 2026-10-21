@@ -287,6 +287,11 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	after a dot belongs to whatever holds it, not to this file. A name a local
 	module binds is its prefix instead, and the dot goes with it (D28).
 
+	**A def's own parameter names stay too** — a parameter is a name the
+	function binds, so R4 makes it the function's own. The body already knew
+	that; the def line did not, and a parameter renamed there while the body
+	kept the old name produced a `NameError` at the first call.
+
 	Names are spliced in by position rather than rebuilt from tokens, because R7
 	requires everything that is not a name to reach the bundle untouched and a
 	rebuild decides the spacing for you.
@@ -302,6 +307,7 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 		walked += len(line)
 	edits = []
 	after_dot = False
+	own = _parameters_of(tokens)
 	index = 0
 	while index < len(tokens):
 		token = tokens[index]
@@ -313,7 +319,7 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 			continue
 		name = token.string
 		start = offsets[token[2][0] - 1] + token[2][1]
-		if after_dot:
+		if after_dot or index - 1 in own:
 			continue
 		if (run := _dotted(name, tokens, index, aliases)) is not None:
 			last = tokens[run[1] - 1]
@@ -326,6 +332,60 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	for start, end, replacement in reversed(edits):
 		text = text[:start] + replacement + text[end:]
 	return text.split("\n")
+
+def _parameters_of(tokens: list) -> set:
+	"""Where a def's own parameter names are, among its tokens.
+
+	A parameter is a name the function binds, so it is the function's own and
+	is not translated (R4). **A default value and an annotation are not
+	parameters**: they are read in the scope around the def, and are translated
+	like any name there. So the parameter list is walked and a name counts only
+	where a parameter can stand — right after the list's own `(` or a `,` at the
+	list's level, or after a `*`.
+
+	Nothing is returned for a statement that is not a def, and the positions are
+	the token indices, so a caller can ask about a token it is holding.
+	"""
+	found = set()
+	open_at = _parameters_open(tokens)
+	if open_at is None:
+		return found
+	depth = 0
+	previous = ""
+	for at in range(open_at, len(tokens)):
+		token = tokens[at]
+		if token[0] == tokenize.OP:
+			if token.string in "([{":
+				depth += 1
+			elif token.string in ")]}":
+				depth -= 1
+				if depth == 0:
+					break
+			previous = token.string if depth == 1 else ""
+			continue
+		if token[0] == tokenize.NAME and depth == 1 and previous in (",", "(", "*", "**"):
+			found.add(at)
+		previous = ""
+	return found
+
+def _parameters_open(tokens: list):
+	"""The token index of the `(` that opens a def's parameter list, or None.
+
+	The def's own name sits between the keyword and the bracket, so the bracket
+	is found by walking past it rather than by counting.
+	"""
+	at = None
+	for index, token in enumerate(tokens):
+		if token[0] == tokenize.NAME and token.string == "def":
+			at = index
+			break
+	if at is None:
+		return None
+	while at + 1 < len(tokens) and tokens[at + 1][0] != tokenize.OP:
+		at += 1
+	if at + 1 >= len(tokens) or tokens[at + 1][1] != "(":
+		return None
+	return at + 1
 
 def _dotted(name: str, tokens: list, index: int, aliases: dict):
 	"""The longest dotted run from here that a local module alias covers.

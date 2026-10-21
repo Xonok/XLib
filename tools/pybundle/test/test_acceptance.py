@@ -44,6 +44,23 @@ def _run(files, entry = "main.py", call = "run"):
 	exec(compile(bundle, "<bundle>", "exec"), space)
 	return space[call]()
 
+def test_a_parameter_that_shadows_a_global_is_not_renamed():
+	# The parameter is the function's own, and the body keeps it too — so the
+	# bundle runs where a renamed parameter would raise a NameError.
+	value = _run({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.compute(1)\n",
+		"helper.py": "VALUE = 42\n\ndef compute(VALUE):\n\treturn VALUE + 1\n",
+	})
+	xtest.equal(value, 2)
+
+def test_a_default_value_is_read_where_the_def_is():
+	# A default is read in the scope around the def, so it is the module's name.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.compute()\n",
+		"helper.py": "VALUE = 42\n\ndef compute(VALUE = VALUE):\n\treturn VALUE\n",
+	})
+	xtest.contains("def helper__compute(VALUE = helper__VALUE)", bundle)
+
 def test_a_removed_last_import_leaves_no_double_blank_line():
 	# D32's third rule: removing a statement must not leave a blank pair.
 	bundle = _bundle({
