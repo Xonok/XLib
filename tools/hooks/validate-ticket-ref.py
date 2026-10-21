@@ -41,15 +41,24 @@ def get_epiq_state_worktree(project_json: Path) -> Path | None:
 		pass
 	return None
 
-def extract_valid_refs(state_worktree: Path) -> set[str]:
-	"""Extract all valid ticket refs from the epiq state worktree."""
+def extract_valid_refs(state_worktree: Path, include_pending: bool = False) -> set[str]:
+	"""Extract all valid ticket refs from the epiq state worktree.
+
+	`include_pending` decides whether an actor's unsynced writes count. They are
+	kept out of the committed set on purpose: a ref found only there is real on
+	this machine and on no other one yet, and a commit naming it would name
+	something nobody else can resolve.
+	"""
 	refs = set()
 	events_dir = state_worktree / ".epiq" / "events"
 	if not events_dir.exists():
 		return refs
 
 	for event_file in events_dir.glob("*.jsonl"):
-		if event_file.name.endswith(".backup") or "~pending" in event_file.name:
+		# The glob excludes the `.jsonl.backup` copies on its own, so only the
+		# pending logs need a name check. They are the actor's unsynced writes,
+		# and they are the reason a freshly filed ticket's ref is not found.
+		if "~pending" in event_file.name and not include_pending:
 			continue
 		try:
 			with open(event_file) as f:
@@ -72,17 +81,33 @@ def extract_valid_refs(state_worktree: Path) -> set[str]:
 
 	return refs
 
-def get_valid_refs_for_repo(repo_root: Path) -> set[str]:
-	"""Get all valid ticket refs for the given repository."""
+def get_state_worktree(repo_root: Path) -> Path | None:
+	"""The epiq state worktree for this repository, if it has one."""
 	project_json = find_epiq_project(repo_root)
 	if not project_json:
-		return set()
+		return None
+	return get_epiq_state_worktree(project_json)
 
-	state_worktree = get_epiq_state_worktree(project_json)
+def get_valid_refs_for_repo(repo_root: Path) -> set[str]:
+	"""Get all valid ticket refs for the given repository."""
+	state_worktree = get_state_worktree(repo_root)
 	if not state_worktree:
 		return set()
 
 	return extract_valid_refs(state_worktree)
+
+def get_pending_refs_for_repo(repo_root: Path) -> set[str]:
+	"""The refs that exist only in an actor's unsynced writes.
+
+	A freshly filed ticket lands in the actor's `~pending` log, so its ref is
+	real and not yet committed. The commit that names it is refused, correctly —
+	and the reason it is refused is a missing sync, not a missing ticket.
+	"""
+	state_worktree = get_state_worktree(repo_root)
+	if not state_worktree:
+		return set()
+
+	return extract_valid_refs(state_worktree, include_pending=True) - get_valid_refs_for_repo(repo_root)
 
 def main():
 	if len(sys.argv) != 2:
@@ -118,6 +143,12 @@ def main():
 	if ref in valid_refs:
 		sys.exit(0)
 	else:
+		pending_refs = get_pending_refs_for_repo(repo_root)
+		if ref in pending_refs:
+			print(f"ERROR: Ticket ref '{ref}' was filed but not yet synced", file=sys.stderr)
+			print("It is in an actor's pending event log, which is not committed and not on any other machine.", file=sys.stderr)
+			print("Run epiq_sync, and again if it reports skipped, then commit.", file=sys.stderr)
+			sys.exit(1)
 		print(f"ERROR: Invalid ticket ref '{ref}'", file=sys.stderr)
 		print("Valid refs:", ", ".join(sorted(valid_refs)), file=sys.stderr)
 		sys.exit(1)
