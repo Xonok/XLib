@@ -10,6 +10,29 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#185 — bbprs: the account, the workspace and the repos are hardcoded —
+	review and merge PR #78** (by decision needed, high) — board: epiq
+	`PNAJ6D0` (In progress). **The public tool carried one user's Bitbucket
+	nickname, the workspace slug and the repo list**, so the repository stated
+	who its author is and what they work on. All three are now configuration —
+	a flag, an environment variable, or `~/.config/bitbucket/bbprs.json` — and a
+	value none of them supplies is an error naming all three ways to supply it,
+	because a built-in default is one person's settings in a tool everybody else
+	runs. **The account matches on nickname, uuid or account_id**, so an account
+	configured by its stable id keeps matching after a rename, and it is carried
+	on the pull request rather than read from a module global. **Two guards
+	against a wrong answer rather than a missing one**: the report names the
+	workspace, the repos and the account it ran with, and the tool warns on
+	stderr when the configured account matched no author or participant in the
+	data it fetched — a mistyped account otherwise reads as "nothing is waiting
+	on you". **43 tests**, offline and fixture-based, mutation-checked; the suite
+	moves to xtest's idiom in the same change. **Measured against the live
+	API**: the flags, the environment and the file produce the same report, an
+	account configured by `account_id` produces the same report as the nickname,
+	a mistyped account warns, and `--check` exits 1. **PR #78 is open, awaiting
+	the human's review** — the change alters the tool's interface, so per
+	`AGENTS.md` it is not merged without it. The config file for this machine
+	is `~/.config/bitbucket/bbprs.json` (mode 600, untracked).
 - [x] **#181 — Herdr: every open window reports its live session, and it agrees
 	with the instance-report plugin** (done 2026-10-21, low) — category: agents.
 	**Herdr's opencode integration is installed** (v12, 2026-10-21) and
