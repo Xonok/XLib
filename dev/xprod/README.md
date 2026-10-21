@@ -25,3 +25,8 @@ In a discrete setting, all their inputs and outputs could be batched, thus requi
 With a continuous formula, the trivial solution would remove the need for extra inputs.
 Perhaps the stock logic is best here. The inertia of production could essentially be a parameter of its own.
 I.e. how much time you need to cover in terms of input to get full output.
+
+## XLib rules
+
+This library(xprod) is not AI-written and should not be edited by AI.
+Tests can be written by AI once the library is in a state where that's helpful.
