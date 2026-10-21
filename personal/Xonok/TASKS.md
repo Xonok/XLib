@@ -33,10 +33,10 @@ needed when there is no due date.
 	human's**: the launcher keeps the name and the plugin stops trying, or the
 	plugin takes the name and must learn the slot from the registry. The
 	plugin's file is outside every repository — Agents board `M9J6F8W`.
-- [ ] **#178 — pybundle: a parameter that shadows a module global is renamed
-	on the def line and not in the body — NameError** (by 2026-10-23, high) —
-	board: epiq `RX5H4P3` (Todo). **Reproduced 2026-10-21, and it is the
-	strongest candidate on the board.** A module with `VALUE = 42` and
+- [x] **#178 — pybundle: a parameter that shadows a module global is renamed
+	on the def line and not in the body — NameError** (done 2026-10-21, high) —
+	board: epiq `RX5H4P3` (Done). **Reproduced 2026-10-21, and fixed the same
+	day, as part of the Traveller acceptance repair.** A module with `VALUE = 42` and
 	`def compute(VALUE): return VALUE + 1` bundles to
 	`def mod__helper__compute(mod__helper__VALUE): return VALUE + 1` — the
 	parameter is renamed on the def line, the body's use of it is not. The
@@ -45,11 +45,10 @@ needed when there is no due date.
 	R4: *"a name defined inside a function or class blocks translation of that
 	name within it, so shadowing does not break"*), so this is conformance, not
 	a design fork — **no decision needed from the human, only an
-	implementer**. Nothing was on it: no assignee, no comments, no taskview
-	task, and no mention in STATUS.md's open list. It is the same failure class
-	as `JD9DWVN`, the defect that stopped the Traveller bundle from running —
-	and the Traveller acceptance test (#137) is still waiting on the human's
-	go.
+	implementer**. **It was found again by the Traveller acceptance run, and
+	fixed with it**: a parameter is a name the function binds, so it is not
+	translated (spec **D40**). Commit `a9b9fe5` on
+	`fix/JD9DWVN-bundle-traveller` (PR #76).
 - [ ] **#179 — run_tests.py: the modelbench suite is not listed, so eight test
 	files are unreachable and the guard is red** (by 2026-10-22, medium) —
 	board: epiq `QPDJ8RF` (Todo, filed 2026-10-21).
@@ -150,8 +149,8 @@ needed when there is no due date.
 	flatters XLib — `dev/` is shallow, while the human's traveller example
 	prefixes 4-character names with 13 characters. Accepted cost: *"I don't really
 	see a way around it either."*
-- [ ] **#127 — pybundle: re-derive and write in the spec edits** (by
-	decision needed, medium) — board: epiq `R9H4PVD` + `EZAVYNM` (Todo).
+- [x] **#127 — pybundle: re-derive and write in the spec edits** (done
+	2026-10-17, medium) — board: epiq `R9H4PVD` + `EZAVYNM` (Todo).
 	**Spec half DONE 2026-10-15.** New section *Decisions — 2026-10-15, after
 	test pass 2* appended to `SPEC.md`: 268 insertions, **0 deletions**, and the
 	first 730 lines verified byte-identical, so the append-only discipline of
@@ -743,16 +742,34 @@ future work.
 	convention note, and no entries because nothing is released yet. The first is
 	`1_0_0`, which `release.py xhttp` now produces — verified with the write
 	redirected to a temp folder, so no release was made.
-- [ ] **#137 — pybundle: bundle Space-Traveller as the acceptance test** (by
-	decision needed, medium) — the human's own framing, 2026-10-18: *"I want to see
+- [x] **#137 — pybundle: bundle Space-Traveller as the acceptance test** (done
+	2026-10-21, medium) — the human's own framing, 2026-10-18: *"I want to see
 	what happens if I bundle traveller at some point. If Traveller can survive the
 	bundling, then it's very likely that the bundler's behaviour is correct
-	overall."* **That is a bigger test than any fixture**: Traveller is real code
-	with real structure, so if it bundles and runs, the bundler's judgement calls —
-	what gets a prefix, what keeps its name, what is left behind — have been right
-	on something nobody wrote the tests for. **It is only possible because the
-	bundler refuses no input for style reasons** (D36), so the gate lives in
-	`release.py` instead (D37). Nothing to do until he says go.
+	overall."* **It survives.** 143 files, ~10 600 lines in, 400 KB out; the
+	bundled server's startup output is **byte-identical** to the unbundled
+	server's across 86 lines, and five HTTP requests return **byte-identical**
+	responses, status codes and lengths. The bundle is **xlint-clean**.
+	**It took five defects to get there, and every one of them produced a bundle
+	that compiled clean and then failed** — the shape a text-level test cannot
+	see: `JD9DWVN` (a module reached through a package attribute reached the
+	package's globals — 141 names, one `NameError` each; **the ruling is
+	alias**), `VQKH390` (a name after a dot renamed when the base was a module
+	alias), `RX5H4P3` (a def's own parameter renamed while the body's use of it
+	was not), `14VP9PT` (**the bundler tracked indent blocks where python tracks
+	scopes**), `86CDJV2` (a removed import that was the file's last statement
+	left a blank behind). **Six commits on `fix/JD9DWVN-bundle-traveller`,
+	PR #76, one per ticket ref, plus the spec's D38–D43. Nine new tests in
+	`tools/pybundle/test/test_acceptance.py`, in xtest's idiom, each checked to
+	fail against the code before its fix. The artefact is not committed — it
+	belongs to the run, not to the repository.
+- [ ] **#183 — pybundle: mark which of the three specs in `tools/pybundle/` is
+	current** (by 2026-10-27, low) — board: epiq `6MFX0Z1` (Todo). `SPEC.md` is
+	the one the rewrite follows; `SPEC_old.md` is the deleted 5-phase bundler's
+	and `SPEC_new.md` is the human's earlier handwritten attempt, and **nothing
+	marks which is current**. This is the housekeeping `DRAFT.md` asks for, and
+	**it is the last thing left on the pybundle epic** besides the shim option
+	(#133).
 - [ ] **#133 — pybundle: an option that emits internal-module shims** (by
 	decision needed, low) — board: epiq `AYB2896` (Todo). The human's own words,
 	2026-10-17: *"We'll probably have to add an option to the bundler for making
