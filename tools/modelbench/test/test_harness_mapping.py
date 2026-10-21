@@ -21,6 +21,10 @@ it was, or as not measurable at all:
        and G2 ("verifies unprompted") could not pass whatever the model did.
   E27  the "the run finished" event is gone, so `finished` was always False and G4
        ("terminates") could not pass either.
+  E29  a code-mode call carries no exit code — there is no process, so there is nothing
+       to exit — and the mapping raised on it. The whole episode became a hole with the
+       model's other turns lost with it, which is E26's shape again: the instrument
+       manufacturing evidence against a model that behaved correctly.
 
 E26 and E27 together capped every harness-transport model at `supervision`, whatever it
 did — the same shape as E16: the instrument manufacturing evidence against a model that
@@ -34,6 +38,7 @@ sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
 import xtest
 import agent
+import trace
 import transport
 
 def _with_flags(flags):
@@ -73,6 +78,50 @@ def test_a_failed_command_is_read_as_a_failure():
 def test_an_exit_code_that_is_nowhere_is_an_error_rather_than_a_failed_check():
 	xtest.raises(transport.UnseenShape,lambda: agent._exit_of({"state":{"metadata":{}}}),
 		"a shape this tool does not know is a hole, not a silent 'did not verify'")
+
+def test_a_code_mode_call_has_no_exit_code_and_does_not_cost_the_run():
+	"""The shape that cost the corpus a fifth of its harness runs.
+
+	opencode's `execute` tool runs JavaScript in a sandbox: there is no process, so
+	there is no exit code. The mapping used to raise, and the whole episode became a
+	hole with the model's other turns lost with it.
+	"""
+	code_mode = {"state":{"status":"completed","input":{"code":"const x = 1;"},
+		"metadata":{"metadata":{"truncated":False}}}}
+	xtest.equal(agent._exit_of(code_mode),None,
+		"a code-mode call has no exit code, and that is not an unknown shape")
+
+def test_a_code_mode_call_under_any_tool_name_is_recognised():
+	"""The tool name is not a discriminator: the model invents tool names.
+
+	The corpus has seen a code-mode call arrive under the name "exit" and under the
+	name "status" — both of them a tool that does not exist.
+	"""
+	for name in ("execute","exit","status","bash"):
+		part = {"state":{"status":"completed","input":{"code":"const x = 1;"},
+			"metadata":{}},"tool":name}
+		xtest.equal(agent._exit_of(part),None,
+			f"a code-mode call under the name {name!r} is still a code-mode call")
+
+def test_a_shell_call_with_no_exit_code_is_still_an_unknown_shape():
+	xtest.raises(transport.UnseenShape,
+		lambda: agent._exit_of({"state":{"status":"completed","input":{"command":"ls"},
+			"metadata":{}}}),
+		"a shell command whose outcome cannot be seen is still a hole, not a guess")
+
+def test_the_code_a_model_ran_is_kept_out_of_the_command_text():
+	"""The gates read `cmd`; a JavaScript source in `cmd` would match the
+	verification pattern by accident and turn a computation into a verification."""
+	part = {"tool":"execute","state":{"status":"completed",
+		"input":{"code":"const t = check('total');"},
+		"output":"2160"}}
+	turn = agent._harness_turn(part,1,"/tmp")
+	xtest.equal(turn["cmd"],"","a code-mode call has no command text")
+	xtest.equal(turn["code"],"const t = check('total');","the source is kept")
+	xtest.equal(turn["result"],"2160","the output is kept")
+	xtest.equal(turn["exit"],None)
+	xtest.equal(trace.is_verification(turn["cmd"]),False,
+		"and nothing about it reads as a verification")
 
 def test_the_token_total_is_read_from_the_old_field_and_the_new_one():
 	xtest.equal(transport.token_total({"tokens":{"total":100}}),100)
