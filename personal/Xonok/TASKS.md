@@ -554,6 +554,21 @@ needed when there is no due date.
 	were durable, which became the **"Sync twice"** rule in `doc/epiq-workflow.md`
 	and a new line in `epiq-pending.py` — merged as `c7f9269` (PR #69, epiq
 	`9FJ358V`).
+- [x] **#174 — epiq: the commit hook says to sync when a ticket's ref is not yet
+	synced** (done 2026-10-21, medium) — category: xlib. **On the human's
+	instruction** (*"Do 9Y4VV1M too, since it's so similar"*). A freshly filed
+	ticket lands in the actor's `~pending` log, so `validate-ticket-ref.py` could
+	not find its ref and refused the commit with **"Invalid ticket ref"** — true,
+	and useless: the ticket exists, it had just not been synced. **It now says
+	that** — *"was filed but not yet synced"*, with the instruction to run
+	`epiq_sync` and again if it reports skipped. **The ref is still refused**: the
+	ticket's option 3, not its option 2, because a ref nobody else can resolve
+	should not pass a gate whose job is to check that it resolves. **One line of
+	dead code went with it** — the loop tested `.endswith(".backup")` inside a
+	`glob("*.jsonl")`, and that glob never matches a `.jsonl.backup`, so the
+	check could not run; the mutation check is what found it. **PR #71, merged as
+	`b05f330`**; epiq `9Y4VV1M` is in Done with a `Solution:` comment. **Six new
+	tests — the validator's first.**
 
 ## Scheduling
 
