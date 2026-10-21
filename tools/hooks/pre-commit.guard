@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# The guard — the one hook that is a regular file rather than a symlink.
+#
+# The other hooks are symlinks into tools/hooks/, so a change to one is live at
+# once: there is no install step, and the running hook cannot be older than the
+# source. The cost of that is a link whose source is missing — the gate does
+# not run, and git says nothing at all about it (it does hint about a hook that
+# is not executable, but it says nothing about one that is not there).
+#
+# That is the failure mode this repository has been bitten by twice: the hook
+# does not run, and nothing says so. So this checks the links before letting a
+# commit through, and then runs the style gate itself.
+#
+# The style gate itself is tools/hooks/pre-commit. It is reached through the
+# source rather than through a link, because the name "pre-commit" in the hooks
+# directory is this file's.
+
+set -eu
+
+common=$(cd "$(git rev-parse --git-common-dir)" && pwd)
+hooks="$common/hooks"
+
+for hook in "$hooks"/*; do
+	[ -L "$hook" ] || continue
+	if [ ! -e "$hook" ]; then
+		echo "ERROR: $(basename "$hook") is a dangling symlink, so that hook will not run." >&2
+		echo "       Re-install the hooks: sh tools/hooks/install.sh" >&2
+		exit 1
+	fi
+done
+
+# The shared git directory is normally the repository's own .git, so the source
+# is two levels up from the hooks directory. A separate git directory is the
+# exception, and the checkout's own root is the answer there.
+source="$(dirname "$common")/tools/hooks/pre-commit"
+if [ ! -f "$source" ]; then
+	source="$(git rev-parse --show-toplevel)/tools/hooks/pre-commit"
+fi
+
+exec "$source" "$@"

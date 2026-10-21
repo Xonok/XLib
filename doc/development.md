@@ -223,32 +223,32 @@ tests still pass, and the implementation matches what the tests specify.
 
 ## Hooks
 
-**The hooks in `tools/hooks/` are the source; `tools/hooks/install.sh` copies them
-into the shared git directory, which is where git looks for them. A change to a
-hook therefore does not change the hook that runs** — the running one is the
-copy, and the copy is as old as the last install.
+**The hooks are symlinked, not copied.** `tools/hooks/install.sh` puts a link in
+the shared git directory — where git looks, from the main checkout and from
+every worktree alike — pointing at `tools/hooks/`. **A change to a hook is live
+at once**: there is no install step, and the running hook cannot be older than
+the source.
 
-So a merged hook fix is inert on the machine until it is re-installed:
+`pre-commit` is the exception, and it is a regular file: it is **the guard**. A
+link whose source is missing is a gate that does not run, and git says nothing
+at all about it — not even the hint it gives for a hook that is not executable.
+That is the failure mode this repository has been bitten by twice (`2X3PZT3`: the
+hook does not run and nothing says so), so the guard checks that every link in
+the hooks directory resolves, fails loudly with the fix if one does not, and
+then runs the style gate itself.
+
+So a hook change needs no step to become live. What it needs is for its link to
+resolve — and the guard is what says so when it does not:
 
 ```
-sh tools/hooks/install.sh
+ERROR: commit-msg is a dangling symlink, so that hook will not run.
+       Re-install the hooks: sh tools/hooks/install.sh
 ```
 
-**Do this after merging a change to a hook, and before believing that the change
-is live.** The check is a diff:
-
-```
-diff .git/hooks/validate-ticket-ref.py tools/hooks/validate-ticket-ref.py
-```
-
-Nothing else says so. The repository looks right, the tests pass against the
-source, and the hook that actually gates every commit is the old one — which is
-the same shape as a record quoting a live thing and being stale: the source
-says one thing, the running copy says another, and only a comparison tells you
-which is which.
-
-The install is per machine, and it is not tracked, so it is a step an agent
-performs rather than something a merge can do.
+The install is per machine and untracked, so it is a step an agent performs
+rather than something a merge can do — but it is needed only to **create** the
+links, not to refresh them. The link is relative, so it survives the repository
+being moved.
 
 ## Handoff (the implementer's contract)
 
