@@ -116,6 +116,10 @@ def _row(root,src,line,rec,baselines):
 		"failed_gates":rec.get("failed_gates"),
 		"bench_version":rec.get("bench_version"),"grade_version":rec.get("grade_version"),
 		"mapping_version":rec.get("mapping_version"),
+		# Which protocol the model was shown, where the record says. The two populations
+		# are read differently on purpose, and the index has to be able to say which is
+		# which without opening a trace.
+		"protocol":rec.get("protocol") or (rec.get("trace") or {}).get("protocol") or "",
 		# Where the run's final state is kept, relative to the trace file. A record that
 		# says so needs no guessing to find it.
 		"state":rec.get("state"),
