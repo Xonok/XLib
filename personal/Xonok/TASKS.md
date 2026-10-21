@@ -10,6 +10,27 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#181 — Restart the open opencode windows so herdr reports each pane's
+	session instead of reading the screen** (by 2026-10-22, low) — category:
+	agents. **Herdr's opencode integration is installed** (v12, 2026-10-21) and
+	**measured in a real window**: the pane reported
+	`agent_session.source = "herdr:opencode"`, the session id herdr named was
+	the one marduk's registry named (`ses_ea2b02f8…`), and
+	`screen_detection_skipped` was true. **The four windows open now were
+	started before the install**, so they keep the screen-detection behaviour
+	until they are restarted — a running TUI does not pick up a plugin installed
+	after it started. **Nothing to do but restart them.**
+- [ ] **#182 — The window's name has two owners: `oc-agent` names the window
+	and the `agent-title` plugin never fires** (by decision needed, medium) —
+	board: epiq `TWA3Z0X` (Todo). **Measured on all four windows**: the service
+	reports the session titles as `secretary`, `secretary-2`, `secretary-3`,
+	`secretary-4` — the launcher's names (`tools/oc-agent:80-81` writes the OSC
+	title, `tools/oc-agent:128-132` creates the session with it). **The plugin
+	never fires in an `oc-agent` window**: its guard (`agent-title.ts:96-113`)
+	renames only a default title or its own previous name. **The fork is the
+	human's**: the launcher keeps the name and the plugin stops trying, or the
+	plugin takes the name and must learn the slot from the registry. The
+	plugin's file is outside every repository — Agents board `M9J6F8W`.
 - [ ] **#178 — pybundle: a parameter that shadows a module global is renamed
 	on the def line and not in the body — NameError** (by 2026-10-23, high) —
 	board: epiq `RX5H4P3` (Todo). **Reproduced 2026-10-21, and it is the

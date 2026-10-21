@@ -24,6 +24,19 @@ Basis: `master` at `45ab7d5` (2026-10-21), **snapshot taken 2026-10-21**, **in
 sync with `origin/master`** — **the skynet display now fits the pane it is in,
 and says how much it left out (PR #58 and PR #59, merged on the human's
 authorisation).**
+**Herdr is the human's active workspace manager now, and tmux holds the passive
+panels** — the human's own split, 2026-10-21: *"I use herdr for actively doing
+stuff and tmux for passive panels… herdr has an extra panel for keeping track of
+agents and letting me quickly switch between them, which is useful, but takes
+space."* **Herdr 0.9.1 is installed, and its opencode integration (v12) is
+installed as of 2026-10-21**, so herdr knows each pane's session id instead of
+reading the screen. **The agent names are in herdr's sidebar now**: they were
+always in herdr's model — it captures the OSC title every pane writes, as
+`terminal_title` — but the default agent rows never asked for it, and herdr owns
+the outer window title, so nothing on screen showed them. **Measured in a real
+window, not read off a document**: the pane reported
+`agent_session.source = "herdr:opencode"` with the same session id marduk's
+registry names (`ses_ea2b02f8…`), and `screen_detection_skipped` was true.
 **PR #50 carried the second half of the `news` repair, which the PR #47 repair
 did not actually fix; it is merged, on 2026-10-20 as `f12ebd5`.** PR #47 is
 merged and pushed, and it carries the two
@@ -477,7 +490,11 @@ Also standing, from the abandoned single-pass attempt:
 	indistinguishable from the original. **Implementation must be checked by
 	launching a real window**: backgrounding the TUI is safe only without `set -m`,
 	or job control puts it in a background process group and the first tty read
-	raises `SIGTTIN`.
+	raises `SIGTTIN`. **The terminal is herdr now (2026-10-21), and the
+	distinction holds unchanged** — herdr's pane is the window, the opencode
+	process is the session — and **herdr's own integration now reports the pane's
+	session id by a second, independent route** (`agent_session.source =
+	"herdr:opencode"`), which is the fact `NAHEGJE` is about, measured live.
 - **Marduk shows the wrong session for a window that has been `/new`ed, and two
 	lines for it while the new session is busy** — the human's report 2026-10-21
 	(*"the panel shows 3 unnumbered secretaries among the number ones… the
@@ -1146,6 +1163,27 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	`xschema`, `xtest`), and `dev/xprod` has no SPEC.md or VERSIONS.md at all
 	(`DCF9EHW`). **These edits are not mine** — they were in the tree when this
 	session started — so they are recorded here rather than edited.
+- **The four open opencode windows predate herdr's opencode integration, so
+	herdr is still reading their screens.** The integration was installed on
+	2026-10-21 and **verified in a fresh window** — a pane launched through
+	`tools/oc-agent` reported `agent_session.source = "herdr:opencode"`, the
+	session id herdr named was the one marduk's registry named, and
+	`screen_detection_skipped` was true. **A running TUI does not pick up a
+	plugin installed after it started**, so the four windows already open keep
+	the old behaviour until they are restarted. **Taskview `#181`** (due
+	2026-10-22), and nothing else is needed for it.
+- **The window's name has two owners, and the one that is under version control
+	is the one that does the naming.** Measured on all four windows: the service
+	reports the session titles as `secretary`, `secretary-2`, `secretary-3`,
+	`secretary-4` — the launcher's names, written by `tools/oc-agent:80-81` (the
+	OSC title) and `tools/oc-agent:128-132` (the session title). **The
+	`agent-title` plugin never fires in an `oc-agent` window**: its guard
+	(`agent-title.ts:96-113`) renames only a default title or its own previous
+	name, and "secretary-3" is neither. **The fork is the human's** — the
+	launcher keeps the name and the plugin stops trying, or the plugin takes the
+	name and must learn the slot from the registry. Filed as epiq `TWA3Z0X`
+	(Todo), taskview `#182` (by decision needed); the plugin's file is outside
+	every repository, which is the Agents board's `M9J6F8W`.
 
 ## Settled — not to be reopened without cause
 
