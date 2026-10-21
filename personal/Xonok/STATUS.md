@@ -545,15 +545,29 @@ Also standing, from the abandoned single-pass attempt:
 	`define` import fails and is **silently ignored**, so the TUI looks fine and
 	the plugin never runs — and `ctx.ui.tabs.enabled()` is **false** here
 	(`cli.json` has `"tabs": {"mode": "off"}`), so the session comes from
-	`ctx.ui.router.current()`, not from the tabs. **What is left is placement
-	and hands:** where the two plugins live (the `~/.config/opencode/agent`
-	symlink into the Agents workspace is the pattern) and **who builds it** — a
-	contract change across `tools/marduk`, `tools/oc-agent` and a plugin in the
-	human's config directory, which is programmer work; the secretary does not
-	write programs, and the human has overridden that once (2026-10-17) after
-	being told. **A probe of the reporter is installed** at
-	`~/.config/opencode/plugins/instance-report/tui.ts` (it is what produced the
-	table above); it is in no repository and load-bearing for nothing yet.
+	`ctx.ui.router.current()`, not from the tabs. **The human authorised the
+	secretary to build it (2026-10-21), and it is built: PR #73**, branch
+	`fix/0AFZHPW-window-session`, on master as `42e137f`. The reporter is
+	`tools/marduk/plugin/instance-report/tui.ts` — **tracked in this
+	repository**, and the launcher links it into `~/.config/opencode/plugins/`
+	the way `agent` is linked into the Agents workspace, so every machine gets
+	the same one. marduk joins the registry to the reports by pid: a registry
+	entry names the session **its process reports**, not the one recorded at
+	launch, so the session a window left behind drops off the panel and the
+	window appears once, under its own name; a window on no session at all is
+	filed under a key of its own. **11 new tests in
+	`tools/marduk/test/test_instance.py` (xtest); the marduk suite is 111
+	green.** **The live panel now shows four windows and four lines**, each on
+	the session its process is on — measured before the change, three of the
+	four were showing the wrong session. **Left out on purpose:** the *session
+	title* after a `/new` still comes out as the bare agent name, which is the
+	`agent-title` plugin's doing and lives in the human's own config directory
+	— Agents board `M9J6F8W`. The panel no longer depends on it: a window's
+	name on the panel comes from the registry, which knows the slot.
+	**One thing to know about the live machine:** the panel is running the fix
+	because the process was restarted from the working tree; **a restart before
+	the PR merges brings back the old behaviour**, and the merge makes it
+	permanent.
 - **Work on a branch is not live until it merges.** Established by `HC1ZJK6`:
 	the `worker-ling` → `worker-longcat` fix for `dispatch general` arrived as an
 	uncommitted working-tree edit, and moving it onto a branch — which the

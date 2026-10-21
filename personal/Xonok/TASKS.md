@@ -370,11 +370,22 @@ needed when there is no due date.
 	inside the opencode TUI process**, and `ctx.ui.router.current()` is the
 	session the window is on. **Measured live against the registry: three of the
 	four windows were showing the wrong session** — only the one that had never
-	been `/new`ed was right. The fix is three pieces, written out in full on the
-	ticket: a TUI plugin writing `~/.opencode/instances/<pid>.json`; marduk's
-	join, so each registry entry names the session **its pid reports** rather
-	than the one recorded at launch; and the launcher exporting the window's
-	name so the session can carry it (a comment on `GY2AVQD`).
+	been `/new`ed was right. **BUILT, on the human's authorisation (2026-10-21):
+	PR #73**, branch `fix/0AFZHPW-window-session`, on master as `42e137f`. The
+	reporter is `tools/marduk/plugin/instance-report/tui.ts`, **tracked in this
+	repository**, and the launcher links it into `~/.config/opencode/plugins/`
+	the way `agent` is linked into the Agents workspace. marduk joins the
+	registry to the reports by pid: a registry entry names the session **its
+	process reports** rather than the one recorded at launch, so the session a
+	window left behind drops off the panel and the window appears once, under
+	its own name; a window on no session at all is filed under a key of its
+	own. **11 new tests in `tools/marduk/test/test_instance.py` (xtest); the
+	marduk suite is 111 green, and the live panel now shows four windows and
+	four lines.** **Left out on purpose:** the *session title* after a `/new`
+	still comes out as the bare agent name — the `agent-title` plugin's doing,
+	in the human's own config directory, Agents board `M9J6F8W`. The panel no
+	longer depends on it: a window's name on the panel comes from the registry,
+	which knows the slot. **Waiting on the human: the merge.**
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
