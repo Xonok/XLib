@@ -1,9 +1,9 @@
 {
-	"_comment": "The human is not a participant at all. `my_participation` is None and nothing is blocked on him — the shape where _my_record finds nothing.",
-	"id": 88,
-	"title": "soundscape_fade_curve",
-	"author": {"nickname": "Anton Slavin"},
-	"source": {"branch": {"name": "soundscape-fade-curve"}},
+	"_comment": "The account is not a participant at all. `my_participation` is None and nothing is blocked on it — the shape where _my_record finds nothing.",
+	"id": 105,
+	"title": "add-fade-curve",
+	"author": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
+	"source": {"branch": {"name": "add-fade-curve"}},
 	"destination": {"branch": {"name": "master"}},
 	"draft": false,
 	"created_on": "2026-09-30T11:00:00.000000+00:00",
@@ -12,7 +12,7 @@
 	"comment_count": 0,
 	"participants": [
 		{
-			"user": {"nickname": "Anton Slavin"},
+			"user": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
 			"role": "PARTICIPANT",
 			"approved": false,
 			"state": "null"

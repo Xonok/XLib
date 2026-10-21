@@ -1,23 +1,50 @@
-# Bitbucket API for agents — briefing
+# bbprs — read-only Bitbucket pull-request triage for agents
 
-Everything an agent needs to read pull requests for the mms work repos, plus
-the four traps that each cost real time on 2026-09-28. Verified against the
-live API that day.
+Triage open pull requests: what is waiting on you, and what of yours is going
+stale. `bbprs.py` in this directory is the tool; this file is the briefing
+that goes with it — how to configure it, the API shapes, and the traps that
+each cost real time the first time somebody met them.
 
-**Companion tool:** `bbprs.py` in this directory does the triage part and
-encodes traps 1–3. Use it first, drop to raw `curl` when you need the comment
-or commit threads, which it does not fetch.
+**The tool carries nothing about you.** The workspace, the repos and your
+account are configuration, not constants, so the repository says nothing about
+whose it is and the same checkout works for anybody with a Bitbucket account.
 
-## Who and what
+## Configuration
 
-| | |
+Three sources, and the first one that says something wins:
+
+| Source | What it looks like |
 |---|---|
-| Human's Bitbucket account | **`Kaarel Veldre`** — he is the author on his own PRs, and a reviewer on colleagues' |
-| Workspace | `matchmysound` |
-| Repos | `mms-frontend` (the Angular app — where the PRs live), `mms` (Django backend) |
-| Base branch | `master` for the human's PRs; colleagues use **stacks**, so a PR's `destination` is often another branch, not `master` |
+| Command-line flag | `--workspace`, `--repo` (repeatable), `--account` |
+| Environment | `BBPRS_WORKSPACE`, `BBPRS_REPOS` (comma-separated), `BBPRS_ACCOUNT` |
+| File | `~/.config/bitbucket/bbprs.json` |
 
-`gh` is irrelevant here — the remote is Bitbucket, not GitHub.
+A value that none of them supplies is an error naming all three ways to supply
+it. There is no default: a default here is one person's settings in a tool
+that everybody else runs.
+
+```json
+{
+	"workspace": "your-workspace",
+	"repos": ["your-repo", "your-other-repo"],
+	"account": "your-nickname"
+}
+```
+
+**The account** is the nickname the API reports for you — which is not always
+your display name — or its `uuid` or `account_id`. The two ids do not change
+when a nickname does, so an account configured by its id keeps matching after a
+rename. All three are read off any pull request you appear on:
+
+```bash
+curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/json' \
+  "$URL/pullrequests/1" | jq '.participants[].user | {nickname, uuid, account_id}'
+```
+
+The account is matched against the authors and the participants of every pull
+request the tool fetches. When it matches nobody, the tool says so on stderr:
+a mistyped account otherwise reads as "nothing is waiting on you", which is
+the one answer that must never be wrong.
 
 ## Credentials
 
@@ -25,16 +52,20 @@ or commit threads, which it does not fetch.
 - **Contents:** `machine api.bitbucket.org`, `login` = the Atlassian account
 	email, `password` = the API token. `login` is the **email**, not the
 	Bitbucket username.
-- Use **`--netrc-file`**, never a bare `~/.netrc`: git reads `~/.netrc`
+- Use **`--netrc`**, never a bare `~/.netrc`: git reads `~/.netrc`
 	automatically, so a token there can be silently used for pushes.
-- The human types the token himself. **Never ask for it in chat, never print
-	it, never `export` it, never put it in a repo or a notes file.** An exported
-	secret leaks into every child process.
-- Scopes present on the current token: `read:repository:bitbucket` and
-	`read:pullrequest:bitbucket`. Both are needed and **neither implies the
-	other**. App passwords no longer exist in the UI; API tokens replaced them.
+- The token is typed by its owner. **Never ask for it in chat, never print
+	it, never `export` it, never put it in a repo or a notes file.** An
+	exported secret leaks into every child process.
+- Scopes needed: `read:repository:bitbucket` and `read:pullrequest:bitbucket`.
+	Both are needed and **neither implies the other**. App passwords no longer
+	exist in the UI; API tokens replaced them.
+- `read:user:bitbucket` is **not** needed and not used. It would let the tool
+	look up the authenticated account, but a token that only reads pull
+	requests is a token that cannot do anything else, and asking for a third
+	scope to learn the user's own name is a poor trade.
 
-The human's own setup command, if the file ever needs recreating:
+Creating the file, if it ever needs recreating:
 
 ```bash
 mkdir -p ~/.config/bitbucket && chmod 700 ~/.config/bitbucket
@@ -47,17 +78,33 @@ chmod 600 ~/.config/bitbucket/credentials
 unset TOKEN
 ```
 
+## Usage
+
+```
+bbprs.py                      # triage the configured repos
+bbprs.py --repo your-repo     # one repo
+bbprs.py --mine               # only PRs you authored
+bbprs.py --include-drafts     # colleagues' drafts too
+bbprs.py --json               # machine-readable
+bbprs.py --watch 300          # re-run every 5 minutes (for a tmux pane)
+bbprs.py --check              # exit 1 if anything is blocked on you
+```
+
+`--check` exits 1 when a colleague's live pull request is waiting on your
+review and 0 otherwise, so it can be a gate in a script.
+
 ## The relevance rule
 
-**Only open PRs matter. Drafts matter only when they are the human's own.**
-On 2026-09-28, 8 of the 16 PRs returned by a plain `state=OPEN` query on
-`mms-frontend` were drafts, and three of the five apparent "blockers" were
-drafts — colleagues still working, not PRs waiting on a reviewer. Getting this
-wrong sends someone to review an unfinished draft.
+**Only open PRs matter. Drafts matter only when they are your own.**
+In the Bitbucket API a draft is `state: OPEN` *plus* a separate `draft: true`
+field, so a plain `state=OPEN` query returns drafts too — and in one workspace
+measured, 8 of the 16 pull requests it returned were drafts, three of the five
+apparent "blockers" among them. Getting this wrong sends somebody to review
+an unfinished draft.
 
 ## Endpoints
 
-Base: `https://api.bitbucket.org/2.0/repositories/matchmysound/mms-frontend`
+Base: `https://api.bitbucket.org/2.0/repositories/{workspace}/{repo}`
 
 | Need | Endpoint |
 |---|---|
@@ -95,98 +142,38 @@ curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/js
 5. **`approved: false` is ambiguous — only `state` tells the two apart.** A
 	reviewer who **requested changes** and a reviewer who **never looked** both
 	arrive as `approved: false`, so reading that boolean alone makes a PR the
-	human has already answered report as `BLOCKED ON YOU` — the inverse of the
-	truth, and a standing instruction to re-review a colleague's PR. Read
-	`state`: `"changes_requested"` means the human has done his part and the
-	ball is with the author. Ticket `3EEXMRK`; the regression is
-	`mms-frontend` #79.
+	reviewer has already answered report as `BLOCKED ON YOU` — the inverse of
+	the truth, and a standing instruction to re-review a colleague's PR. Read
+	`state`: `"changes_requested"` means the reviewer has done their part and
+	the ball is with the author.
 
 6. **`role` is `REVIEWER` only if explicitly added as a reviewer.** Anyone who
 	interacts with a PR otherwise appears as `PARTICIPANT` — including the
-	author, always. So a bare `PARTICIPANT` for the human means *he commented on
-	a PR he was never asked to review*, and he holds no approval right on it.
-	`mms-frontend` #71: three comments on 2026-08-31, never a reviewer, and the
-	tool reported `BLOCKED ON YOU` until it merged — naming a blocker the human
-	could not unblock by any action available to him. Only a `REVIEWER` can be
-	the blocker. `3EEXMRK`.
+	author, always. So a bare `PARTICIPANT` means *the reviewer commented on a
+	PR they were never asked to review*, and they hold no approval right on it.
+	Only a `REVIEWER` can be the blocker.
+
+Traps 5 and 6 are the same class of mistake — a field read as the whole
+truth — and they were found by `3EEXMRK`, whose fixtures are the tests in
+`test/`.
 
 ## Read-only, and it stays that way
 
 Perform GETs and nothing else. **Never post a comment, approve, decline,
-merge or push with this token** — acting on a colleague's PR in the human's
-name is his decision, not an agent's. A tool that reads PRs is genuinely
-useful; a tool that can merge is a hazard, and the token is scoped for reading
-in practice.
-
-## The concrete task: PR#70
-
-`note-viewer-part-staff-switch` (#70, author Timo Tambet). **The human has
-already reviewed this once.** The question is *not* "review it again" — it is
-**whether the five points he raised were actually dealt with**.
-
-The five points are his comments on 2026-09-18, all in **Estonian** (so does
-the surrounding discussion, and the commit messages — an agent must be able to
-read Estonian to do this job):
-
-```bash
-curl -sS --netrc-file ~/.config/bitbucket/credentials -H 'Accept: application/json' \
-  'https://api.bitbucket.org/2.0/repositories/matchmysound/mms-frontend/pullrequests/70/comments?pagelen=50' \
-  | jq -r '.values[] | select(.user.nickname=="Kaarel Veldre")
-  | "#\(.id) \(.created_on[0:16])\n\(.content.raw)\n"'
-```
-
-**Why an independent pass is warranted.** Every one of the five points has a
-same-day commit whose message *claims* to answer it:
-
-| Review point (2026-09-18) | Commit claiming to address it |
-|---|---|
-| waiting on a complex structure is a bad idea | "Wait for note-viewer IO.readFile before switching part staves." |
-| NV already coalesces resize, so `visualUpdateDepth` should go | "Drop visualUpdateDepth; NV already coalesces resize…" |
-| what happens when the timesig changes mid-piece? | "Scale note-map times piecewise so a mid-score timesig does not stretch earlier notes." |
-| race condition with the deferred load | "Keep the part dropdown closed until the deferred MIDI default load starts." |
-| should `prepareMidiEtalon` be here too? | "Rebuild the MIDI etalon when switching parts so matching uses the visible staves" |
-
-**A commit message claiming to address a point is not evidence that it does.**
-That gap is the entire job: for each point, read the code as it is now and
-decide whether it was actually addressed, partially addressed, or missed. The
-human explicitly asked for "one way or another", which includes a legitimate
-"rejected, and here is why".
-
-**#70 is a stacked PR and it IS mergeable — into a branch, not into master.**
-A pull request merges into its *destination*, whatever that happens to be, so
-#70 can be approved and merged into `note-viewer-renderer-switch` as soon as
-the points are addressed. Do not describe it as blocked. The stack is:
-
-```
-master <- #41 exercise-view (Anton)                    DRAFT
-  <- #46 exercise-view-ai-temp-fb (Anton)        DRAFT
-  <- #62 note-viewer-renderer-switch (Timo)       DRAFT
-  <- #70 note-viewer-part-staff-switch (Timo)     LIVE — the human reviews this
-```
-
-The cost of the stack is coordination, not a hard block: merging onto a base
-that is itself a draft means the work rides on a branch that keeps moving, and
-the chain reaches `master` only from the top down. The human is aware the
-process is suboptimal and is running with it for now — do not propose
-unpicking the stack.
-
-So the pass has a real action behind it: report the state of the five points so
-the human can approve and merge. Anton Slavin has already approved #70; the
-human has not.
-
-Report per point: **addressed / partially / missed / rejected-with-reason**,
-each with the file and line evidence, and say plainly if a point is ambiguous.
-Do not post the findings to Bitbucket — hand them to the human.
+merge or push with this token** — acting on a colleague's PR in your own name
+is your decision, not an agent's. A tool that reads PRs is genuinely useful; a
+tool that can merge is a hazard, and the token is scoped for reading in
+practice.
 
 ## Tests
 
 ```
-python3 -m unittest tools.bbprs.test.test_bbprs -v
+python3 dev/xtest/xtest.py tools/bbprs/test/test_bbprs.py
 ```
 
 Offline and fixture-based: the triage predicates are pure functions over a
 participant record, so none of this needs the network. The fixtures in
 `test/fixtures/` are shaped like real API responses and go through
-`parse_pr`, the same mapping the live code uses — a test that hand-builds a
+`parse_pr`, the same mapping the live code uses — a test that hand-built a
 `PullRequest` would prove nothing about what Bitbucket actually sends. Each
 fixture carries a `_comment` saying which case it pins and why.

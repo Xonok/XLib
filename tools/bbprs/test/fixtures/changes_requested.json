@@ -1,9 +1,9 @@
 {
-	"_comment": "Regression case, 3EEXMRK. mms-frontend #79 as of 2026-09-30: the human requested changes, so the review is done and the ball is with the author. Must NOT be BLOCKED ON YOU.",
-	"id": 79,
-	"title": "profile_subscription",
-	"author": {"nickname": "Timo Tambet"},
-	"source": {"branch": {"name": "profile-subscription"}},
+	"_comment": "The regression case: the account requested changes, so the review is done and the ball is with the author. Must NOT be BLOCKED ON YOU.",
+	"id": 102,
+	"title": "add-profile-subscription",
+	"author": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
+	"source": {"branch": {"name": "add-profile-subscription"}},
 	"destination": {"branch": {"name": "master"}},
 	"draft": false,
 	"created_on": "2026-09-29T09:14:00.000000+00:00",
@@ -12,13 +12,13 @@
 	"comment_count": 4,
 	"participants": [
 		{
-			"user": {"nickname": "Timo Tambet"},
+			"user": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
 			"role": "PARTICIPANT",
 			"approved": false,
 			"state": "null"
 		},
 		{
-			"user": {"nickname": "Kaarel Veldre"},
+			"user": {"nickname": "the-account", "display_name": "The Account", "uuid": "{aaaaaaaa-1111-4111-8111-111111111111}", "account_id": "557058:aaaaaaaa-1111-4111-8111-111111111111"},
 			"role": "REVIEWER",
 			"approved": false,
 			"state": "changes_requested"
