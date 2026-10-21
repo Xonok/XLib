@@ -17,7 +17,7 @@ class AgentStatus(Enum):
 class AgentState:
 	"""In-memory state for a single agent."""
 
-	__slots__=("session_id","role","status","current_tool","last_event_ts","port","pid","started_at","warn_sse_silence","_sse_client","disconnected_at","workspace","_tool_names")
+	__slots__=("session_id","role","status","current_tool","last_event_ts","port","pid","started_at","warn_sse_silence","_sse_client","disconnected_at","workspace","_tool_names","no_session")
 
 	def __init__(self,session_id:str,role:str,port:int,pid:int,started_at:float=0.0,workspace:str=""):
 		self.session_id=session_id
@@ -33,6 +33,7 @@ class AgentState:
 		self.workspace=workspace
 		self._tool_names={}
 		self._sse_client=None
+		self.no_session=False
 
 DELEGATING_TOOLS=("task","subagent")
 

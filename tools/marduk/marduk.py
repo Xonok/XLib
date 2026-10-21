@@ -49,7 +49,13 @@ class Marduk:
 			created=session.get("started_at")
 		started=created/1000 if isinstance(created,(int,float)) else time.time()
 		if session_id not in self._agents:
-			self._agents[session_id]=AgentState(session_id=session_id,role=session.get("title") or session.get("agent") or "unknown",port=0,pid=0,started_at=started,workspace=service.session_workspace(session))
+			state=AgentState(session_id=session_id,role=session.get("title") or session.get("agent") or "unknown",port=0,pid=0,started_at=started,workspace=service.session_workspace(session))
+			if session.get("window"):
+				# A window with no session: there is no event stream to be silent
+				# about, so its age is the window's own age.
+				state.no_session=True
+				state.last_event_ts=started
+			self._agents[session_id]=state
 			return
 		# Already known: refresh what the registry can correct, but keep the
 		# status and age, which only the event stream knows.
@@ -83,8 +89,11 @@ class Marduk:
 			sse_silent=now-agent.last_event_ts if agent.last_event_ts else float("inf")
 			file_age_hours=(now-agent.started_at)/3600
 			warn=False
-			if sse_silent>self.warn_sse_secs:
-				warn=True
+			if not agent.no_session:
+				# A window with no session has no event stream, so its silence
+				# says nothing; only its age can warn.
+				if sse_silent>self.warn_sse_secs:
+					warn=True
 			if file_age_hours>self.warn_age_hours:
 				warn=True
 			agent.warn_sse_silence=warn
