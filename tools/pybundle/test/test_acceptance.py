@@ -71,6 +71,27 @@ def test_a_name_after_a_dot_is_not_renamed():
 	})
 	xtest.contains("helper__classes = other__classes\n", bundle)
 
+def test_a_name_assigned_in_a_block_is_the_function_s_own():
+	# Python binds a name in the function that holds the assignment, not in the
+	# block the assignment sits in — so the use above the block is that local
+	# and not the module's.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.compute(True)\n",
+		"helper.py": "value = 0\n\ndef compute(flag):\n\tif flag:\n\t\tvalue = 1\n\telse:\n"
+			"\t\tvalue = 2\n\treturn value\n",
+	})
+	xtest.contains("\treturn value\n", bundle)
+
+def test_a_class_body_s_names_are_not_visible_in_its_methods():
+	# A class body is not an enclosing scope for the methods defined in it, so
+	# the method reads the module's name and not the class's.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.Items().size()\n",
+		"helper.py": "def size(item):\n\treturn 1\n\nclass Items:\n\tdef size(self):\n"
+			"\t\treturn size(1)\n",
+	})
+	xtest.contains("return helper__size(1)", bundle)
+
 def test_a_removed_last_import_leaves_no_double_blank_line():
 	# D32's third rule: removing a statement must not leave a blank pair.
 	bundle = _bundle({

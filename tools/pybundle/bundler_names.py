@@ -55,16 +55,27 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 	"""
 	entries = {id(entry["statement"]): entry for entry in resolved}
 	aliases = _aliases(resolved)
-	blocks = [[set(), set()]]
-	waiting = set()
+	blocks = [0]
+	scopes = [{"bound": set(), "global": set(), "parent": -1, "kind": "module", "depth": 0}]
+	waiting = None
+	kind = None
 	out = []
 	pending = False
 	for depth, index, statement in _scanned(statements):
 		while len(blocks) > depth + 1:
 			blocks.pop()
+		while len(scopes) > 1 and scopes[-1]["depth"] >= len(blocks):
+			scopes.pop()
 		while len(blocks) < depth + 1:
-			blocks.append([set(waiting), set()])
-			waiting = set()
+			if waiting is None:
+				blocks.append(blocks[-1])
+				continue
+			scopes.append({"bound": set(waiting), "global": set(),
+				"parent": _parent_scope(scopes, blocks[-1], kind), "kind": kind,
+				"depth": len(blocks)})
+			blocks.append(len(scopes) - 1)
+			waiting = None
+			kind = None
 		entry = entries.get(id(statement))
 		if entry is not None:
 			kept = _imported(statement, entry, renames)
@@ -84,13 +95,19 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 		pending = False
 		body = statement["text"].strip()
 		if _GLOBAL.match(body):
-			blocks[-1][1].update(_NAMED.findall(body))
+			waiting = None
+			kind = None
+			scopes[-1]["global"].update(_NAMED.findall(body))
 		elif _NONLOCAL.match(body):
-			blocks[-1][0].update(_NAMED.findall(body))
+			waiting = None
+			kind = None
+			scopes[-1]["bound"].update(_NAMED.findall(body))
 		else:
-			own, waiting = _bindings(body)
-			blocks[-1][0].update(own)
-		out.extend(_rewritten(statement["text"], renames, aliases, _shadowed(blocks)))
+			own, parameters = _bindings(body)
+			kind = _scope_kind(body)
+			waiting = set(parameters) if kind is not None else None
+			scopes[-1]["bound"].update(own)
+		out.extend(_rewritten(statement["text"], renames, aliases, _shadowed(scopes)))
 	if not out:
 		return ""
 	return "\n".join(out)
@@ -111,16 +128,61 @@ def defined(statements: list) -> list:
 		found.extend(_bindings(body)[0])
 	return found
 
-def _shadowed(blocks: list) -> set:
+def _scope_kind(body: str):
+	"""What kind of scope this statement opens, or None when it opens none.
+
+	A function body and a class body are scopes, and the two are told apart
+	from an `if` or a `for` because python binds a name in the scope around
+	them and not in the block they sit in. So a name assigned inside an `if`
+	inside a function is the function's own, and a name assigned inside a `for`
+	inside a class body is the class body's own (R4).
+
+	**The two are not the same scope, though.** A class body is not an
+	enclosing scope for the methods defined in it, so a name the class body
+	binds is not visible in them — while a function's names are visible in a
+	function nested in it. That is what `_parent_scope` is for.
+	"""
+	if body.startswith("def ") or body.startswith("async def "):
+		return "function"
+	if body.startswith("class "):
+		return "class"
+	return None
+
+def _parent_scope(scopes: list, scope_id: int, kind: str) -> int:
+	"""The scope a new scope sees.
+
+	**A function's parent is the nearest enclosing scope that is not a class
+	body.** A class body is not an enclosing scope for the methods defined in
+	it — python reads a method's names from the module and the function around
+	it, never from the class the method was written in — so a name the class
+	body binds is not visible in the method, and a name the module binds is
+	renamed there rather than shadowed.
+
+	A class body's parent is the scope around it, whatever that is.
+	"""
+	if kind != "function":
+		return scope_id
+	parent = scope_id
+	while scopes[parent]["kind"] == "class":
+		parent = scopes[parent]["parent"]
+	return parent
+
+def _shadowed(scopes: list) -> set:
 	"""The names a use here cannot touch (R4).
 
-	Only blocks below the module count. A module-level name is one this file
-	*defines*, which is exactly what gets renamed; a name bound inside a function
-	or class is that block's own. A name a block declared `global` is module-level
-	however deep it is declared, so it is taken back out.
+	The module's own names are not among them: a module-level name is one
+	this file *defines*, which is exactly what gets renamed. A name bound in a
+	scope is that scope's own, and a name a scope declared `global` is
+	module-level however deep it is declared, so it is taken back out.
 	"""
-	hidden = set().union(*(block[0] for block in blocks[1:])) if len(blocks) > 1 else set()
-	return hidden - set().union(*(block[1] for block in blocks))
+	hidden = set()
+	global_names = set()
+	scope = scopes[-1]
+	while scope["parent"] >= 0:
+		hidden |= scope["bound"]
+		global_names |= scope["global"]
+		scope = scopes[scope["parent"]]
+	return hidden - global_names
 
 def _scanned(statements: list):
 	"""Each statement with the depth the tokenizer puts it at, in order.
