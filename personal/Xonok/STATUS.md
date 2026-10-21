@@ -229,9 +229,8 @@ events were stranded on 2026-10-01, 13 of them issue creations**; the drain ran
 on 2026-10-02 and `tools/epiq-pending.py` reported **1 event still stranded**
 (a bare `create.contributor` carrying no ticket content), confirmed 2026-10-08 —
 **and reports 0 stranded events now, re-measured 2026-10-20.**
-**One pull request is open: PR #50**, the `news` command's workspace resolution
-(`K93Z39B`), which waits for the human because it changes a live machine's
-coordination state. PR #33 (`ZRTSZMB`, the `ctx` opencode-2.0 fix)
+**No pull request is open**: PR #50, the `news` command's workspace resolution
+(`K93Z39B`), was merged on 2026-10-20 as `f12ebd5`, and PR #33 (`ZRTSZMB`, the `ctx` opencode-2.0 fix)
 was merged on 2026-10-18 as a rebase merge with the branch deleted, `dc078ce`, and
 with it the seven Done-lane tickets whose commits are on master are closed: `ZRTSZMB`,
 `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`. Before that, four
@@ -297,13 +296,14 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**One pull request is open: PR #50** (`K93Z39B`, the `news` command's workspace resolution) — one commit on
-`fix/K93Z39B-agent-coord-news`, 36 tests and 11 mutations killed, and it waits for the human because it changes a live machine's coordination state. The queue was empty before it. **PR #68**
-(`62624K9`, `xlint --watch` never reloaded `.xlintignore`) and **PR #69**
-(`9FJ358V`, the epiq sync rule) were both merged on 2026-10-21 — by rebase, on
-the human's authorisation for the first and on the human's own instruction for
-the second — as `dd2f27b` and `c7f9269`, both branches and worktrees deleted.
-PR #33 (`ZRTSZMB`) was merged on 2026-10-18 — rebase, branch
+**No pull request is open.** PR #50 (`K93Z39B`, the `news` command's workspace resolution) was
+merged on 2026-10-20 as `f12ebd5` — 36 tests and 11 mutations killed — and this
+line said it was still waiting for the human, which it had not been since the
+previous day. **PR #68** (`62624K9`, `xlint --watch` never reloaded
+`.xlintignore`) and **PR #69** (`9FJ358V`, the epiq sync rule) were both merged
+on 2026-10-21 — by rebase, on the human's authorisation for the first and on the
+human's own instruction for the second — as `dd2f27b` and `c7f9269`, both
+branches and worktrees deleted. PR #33 (`ZRTSZMB`) was merged on 2026-10-18 — rebase, branch
 deleted, `dc078ce` — and with it the seven Done-lane tickets whose commits are on
 master are closed: `ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`,
 `VC9QWYY`. Each got a `Solution:` comment first; the four that only had a
