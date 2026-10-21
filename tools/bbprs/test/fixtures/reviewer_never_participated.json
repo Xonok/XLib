@@ -1,9 +1,9 @@
 {
-	"_comment": "The human is a reviewer who has not looked. `state` is the string \"null\", not JSON null — the wart the live API actually sends. This IS blocked on him.",
-	"id": 70,
-	"title": "note-viewer-part-staff-switch",
-	"author": {"nickname": "Timo Tambet"},
-	"source": {"branch": {"name": "note-viewer-part-staff-switch"}},
+	"_comment": "The account is a reviewer who has not looked. `state` is the string \"null\", not JSON null — the wart the live API actually sends. This IS blocked on the account.",
+	"id": 107,
+	"title": "add-part-staff-switch",
+	"author": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
+	"source": {"branch": {"name": "add-part-staff-switch"}},
 	"destination": {"branch": {"name": "master"}},
 	"draft": false,
 	"created_on": "2026-09-18T10:00:00.000000+00:00",
@@ -12,19 +12,19 @@
 	"comment_count": 2,
 	"participants": [
 		{
-			"user": {"nickname": "Timo Tambet"},
+			"user": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
 			"role": "PARTICIPANT",
 			"approved": false,
 			"state": "null"
 		},
 		{
-			"user": {"nickname": "Anton Slavin"},
+			"user": {"nickname": "a-colleague", "display_name": "A Colleague", "uuid": "{cccccccc-3333-4333-8333-333333333333}", "account_id": "712020:cccccccc-3333-4333-8333-333333333333"},
 			"role": "REVIEWER",
 			"approved": true,
 			"state": "approved"
 		},
 		{
-			"user": {"nickname": "Kaarel Veldre"},
+			"user": {"nickname": "the-account", "display_name": "The Account", "uuid": "{aaaaaaaa-1111-4111-8111-111111111111}", "account_id": "557058:aaaaaaaa-1111-4111-8111-111111111111"},
 			"role": "REVIEWER",
 			"approved": false,
 			"state": "null"

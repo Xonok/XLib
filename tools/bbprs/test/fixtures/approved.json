@@ -1,9 +1,9 @@
 {
-	"_comment": "The human approved. Handled already, never blocked.",
-	"id": 81,
-	"title": "match_list_keyboard_nav",
-	"author": {"nickname": "Anton Slavin"},
-	"source": {"branch": {"name": "match-list-keyboard-nav"}},
+	"_comment": "The account approved. Handled already, never blocked.",
+	"id": 101,
+	"title": "add-keyboard-navigation",
+	"author": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
+	"source": {"branch": {"name": "add-keyboard-navigation"}},
 	"destination": {"branch": {"name": "master"}},
 	"draft": false,
 	"created_on": "2026-09-27T12:00:00.000000+00:00",
@@ -12,13 +12,13 @@
 	"comment_count": 1,
 	"participants": [
 		{
-			"user": {"nickname": "Anton Slavin"},
+			"user": {"nickname": "the-author", "display_name": "The Author", "uuid": "{bbbbbbbb-2222-4222-8222-222222222222}", "account_id": "557058:bbbbbbbb-2222-4222-8222-222222222222"},
 			"role": "PARTICIPANT",
 			"approved": false,
 			"state": "null"
 		},
 		{
-			"user": {"nickname": "Kaarel Veldre"},
+			"user": {"nickname": "the-account", "display_name": "The Account", "uuid": "{aaaaaaaa-1111-4111-8111-111111111111}", "account_id": "557058:aaaaaaaa-1111-4111-8111-111111111111"},
 			"role": "REVIEWER",
 			"approved": true,
 			"state": "approved"
