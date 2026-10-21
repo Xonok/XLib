@@ -221,6 +221,35 @@ tests still pass, and the implementation matches what the tests specify.
 	must check the marker first; an unmarked spec is the human's and is off
 	limits unless the human asked for that edit.
 
+## Hooks
+
+**The hooks in `tools/hooks/` are the source; `tools/hooks/install.sh` copies them
+into the shared git directory, which is where git looks for them. A change to a
+hook therefore does not change the hook that runs** — the running one is the
+copy, and the copy is as old as the last install.
+
+So a merged hook fix is inert on the machine until it is re-installed:
+
+```
+sh tools/hooks/install.sh
+```
+
+**Do this after merging a change to a hook, and before believing that the change
+is live.** The check is a diff:
+
+```
+diff .git/hooks/validate-ticket-ref.py tools/hooks/validate-ticket-ref.py
+```
+
+Nothing else says so. The repository looks right, the tests pass against the
+source, and the hook that actually gates every commit is the old one — which is
+the same shape as a record quoting a live thing and being stale: the source
+says one thing, the running copy says another, and only a comparison tells you
+which is which.
+
+The install is per machine, and it is not tracked, so it is a step an agent
+performs rather than something a merge can do.
+
 ## Handoff (the implementer's contract)
 
 The programmer works from these inputs, and no others:
