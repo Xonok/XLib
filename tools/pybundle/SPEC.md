@@ -1578,3 +1578,157 @@ different tool from this one and the two rules are different:
 	travels verbatim into its bundle is refused, which is the assertion that would
 	fail if the check were pointed at the dev tree.
 - The probe file the check writes beside the target does not survive it.
+
+## Decisions — 2026-10-21, what the Space-Traveller acceptance run found
+
+Same discipline: **append-only, nothing above was edited**, each decision naming
+the defect it answers and restating the corrected text so this section reads on
+its own. **Five defects, and the human's answer to the ruling `JD9DWVN` was
+recorded on the same day: alias, and the bundled Traveller has to work.**
+
+The run: Space-Traveller's `server.py`, 143 files, about 10 600 lines in and
+400 KB out. The bundle compiled clean and **did not run** — it raised at the
+first call, and then at the first use of a package attribute. Every defect
+below was found by running it, and every one of them produced a bundle that
+parsed and compiled and then failed, which is the shape a text-level test
+cannot see.
+
+**What the run measured at the end**, against the unbundled server on the same
+tree: the startup output is **byte-identical** (86 lines), and five HTTP
+requests — `/`, `/index.html`, `/js/main.js`, `/defs/defs.json`, `/nope.html` —
+return **byte-identical** responses, status codes and lengths. The bundle is
+also xlint-clean, which D32 requires of it.
+
+### D38 — A module reached through a package attribute is an alias of its own. Answers `JD9DWVN`
+
+**Ruled 2026-10-21.** The ticket asked for one of three: warn, alias, or leave
+as D17's exclusion. The human's answer was that the bundled Traveller has to
+work, and a warning does not make it work.
+
+> **A package's own name reaches the package's `__init__.py` globals, and
+> `pkg.sub` reaches the submodule's — those are two different places.** So each
+> module a package's folder carries is an alias of its own, keyed by the path as
+> it is written after the package's name: `pkg.sub` is the key `sub`.
+
+D28's alias covers the case where the *importing* file names the module
+directly (`from pkg import sub` gives the name `sub`). It does not cover the
+case where the module is reached *through* the package — `pkg.sub`, where the
+package's name is what the file wrote and the module is one step further.
+
+**The package's own `__init__.py` decides what its namespace holds**, and this
+is where a package is not like any other module. `init = init.init` in a
+package's `__init__.py` makes `pkg.init` the *function*, not the module beside
+it — so a module the package overwrites is not in the namespace, and the
+package's own name reaches the value instead.
+
+**Where the namespace is read matters.** It is read where the package is
+*named*, not where the package is *inlined*: the file that uses the package is
+often translated before the package itself is reached, and the second reference
+to a package is dropped by R1.6 rather than inlined — so there is no later
+moment at which the information could be gathered.
+
+### D39 — A name after a dot is never renamed, whichever path reached it. Answers `VQKH390`
+
+**Ruled 2026-10-21.**
+
+> **A name after a dot belongs to whatever holds it, not to this file.** This
+> holds on the path that reaches the name through a module alias as well as on
+> the plain path.
+
+R7 says only names are rewritten, and the plain path already applied the rule.
+The alias path did not, because it replaced the base *and* the dot in one
+splice and carried on past the attribute name — which was then rewritten as
+though it were the importing file's own.
+
+### D40 — A def's own parameter names are the function's own. Answers `RX5H4P3`
+
+**Ruled 2026-10-21.**
+
+> **A parameter is a name the function binds, so it is not translated.** A
+> default value and an annotation are not parameters: they are read in the
+> scope around the def, and are translated like any name there.
+
+R4 already said a name defined inside a function blocks translation within it,
+and the *body* knew that — the scope tracker blocks a name bound inside a
+function. The def line did not, so a parameter was renamed to the module's
+prefixed name while the body's use of it was not. The bundle compiled clean
+and raised `NameError` at the first call.
+
+### D41 — A scope is a function or a class, and a class body is not an enclosing scope for its methods. Answers `14VP9PT`
+
+**Ruled 2026-10-21.** **R4's second sentence is superseded** — *"Class bodies
+follow the same rule as functions"* is not what python does, and the two
+differ in a way a real project found.
+
+> **A scope is a function body or a class body. A name bound anywhere in a
+> scope is that scope's own — not only below the assignment. And a function's
+> parent scope is the nearest enclosing scope that is not a class body: a class
+> body is not an enclosing scope for the methods defined in it, while a
+> function's names are visible in a function nested in it.**
+
+Two halves, and both were found by running the bundle.
+
+**A name assigned in a nested block is the function's own for the whole
+function.** Python binds a name in the function that holds the assignment, not
+in the block the assignment sits in. The bundler bound it in the block, so a
+use of the name *above* the block was rewritten as though it were the module's.
+
+**A class body is not an enclosing scope for its methods.** A method reads its
+names from the module and the function around it, never from the class it was
+written in — so a name the class body binds is not visible in the method, and a
+name the module binds is rewritten there rather than shadowed.
+
+The model is now scopes rather than indent blocks, and the two are told apart
+by what opens them: a `def` or a `class` opens a scope, an `if` or a `for`
+opens a block inside the scope around it.
+
+### D42 — A name bound to the module it already names is dropped. Answers `JD9DWVN`
+
+**Ruled 2026-10-21.**
+
+> **A statement that binds a name to the module that name already is emits
+> nothing.** Any other assignment of a module is left alone, and still fails at
+> run time as D17 says it does.
+
+`query = query`, in a package's `__init__.py`, says the package's namespace
+carries the module `query`. D38's alias already says it, and D17 says the
+module object exists in the bundle under no name at all — so there is nothing
+for the statement to bind, and nothing left for it to do. Emitting it produced
+a name bound to itself, which the bundle raised `NameError` on.
+
+### D43 — A removed import that was the file's last statement leaves nothing behind. Answers `86CDJV2`
+
+**Ruled 2026-10-21.** **D32's third rule read as if it did not cover this
+case, and it does.**
+
+> **Removing a module-level import that was the file's last statement leaves
+> nothing behind.** The blank the source wrote above it stays, and it is one
+> blank — not the pair D32's third rule forbids.
+
+A removed import left a blank line where it was, and the source's own blank
+above it was the other half of the pair, so the bundle carried two consecutive
+blanks and was not xlint-clean. **D32's rule is about the bundler's own edits,
+and this was one.**
+
+### What the tests must now cover
+
+The nine cases are in `tools/pybundle/test/test_acceptance.py`, in xtest's
+idiom, and each one is a defect the acceptance run found.
+
+**Every tree in that file puts the code under test in a module the bundler
+renames, and reaches it from the root.** The root's own prefix is empty (D3),
+so nothing in the root file is renamed — a case about renaming cannot show
+itself there, and a test that puts it there passes whether the defect is or is
+not.
+
+- A module reached through a package attribute reaches its own globals.
+- A package attribute the package's own `__init__.py` overwrites reaches the
+	package's own name.
+- A name after a dot is not renamed.
+- A parameter that shadows a global is not renamed — **and the bundle runs**,
+	which is the assertion a text-level test cannot make.
+- A default value is read where the def is.
+- A name assigned in a block is the function's own.
+- A class body's names are not visible in its methods.
+- A name bound to the module it already names is dropped.
+- A removed last import leaves no double blank line.
