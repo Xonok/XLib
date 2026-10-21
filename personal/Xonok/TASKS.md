@@ -569,6 +569,17 @@ needed when there is no due date.
 	check could not run; the mutation check is what found it. **PR #71, merged as
 	`b05f330`**; epiq `9Y4VV1M` is in Done with a `Solution:` comment. **Six new
 	tests — the validator's first.**
+- [x] **#175 — hooks: changing a hook does not change the running hook — re-run
+	install.sh** (done 2026-10-21, medium) — category: xlib. **Found while
+	verifying the fix above**: `tools/hooks/install.sh` **copies** the hooks into
+	the shared git directory, so a merged hook fix is **inert on the machine**
+	until it is re-installed. `b05f330` was on master and the hook that gated
+	every commit was still the old one; the repository looked right and the tests
+	passed against the source. **The rule and the diff that checks it are now in
+	`doc/development.md`, under "Hooks".** Filed as epiq `W4QP4GK`, merged as
+	`c688726` (PR #72) with a `Solution:` comment. **The same shape as a record
+	quoting a live thing** — and the third time in two days it has cost
+	something.
 
 ## Scheduling
 
