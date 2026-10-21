@@ -44,6 +44,38 @@ def _run(files, entry = "main.py", call = "run"):
 	exec(compile(bundle, "<bundle>", "exec"), space)
 	return space[call]()
 
+def test_a_module_reached_through_a_package_attribute_reaches_its_globals():
+	# `tools` is a package, so `tools.helper` is the module beside it — and the
+	# bundle has to reach that module's own names, not the package's.
+	bundle = _bundle({
+		"main.py": "from pkg import tools\n\ndef run():\n\treturn tools.helper.count()\n",
+		"pkg/__init__.py": "from . import tools\n",
+		"pkg/tools/__init__.py": "from . import helper\n",
+		"pkg/tools/helper.py": "def count():\n\treturn 7\n",
+	})
+	xtest.contains("\treturn pkg__tools__helper__count()\n", bundle)
+
+def test_a_package_attribute_the_package_overwrites_reaches_the_package():
+	# `init = init.init` makes the package's `init` the function and not the
+	# module beside it, so the package's own name reaches the function.
+	bundle = _bundle({
+		"main.py": "from pkg import tools\n\ndef run():\n\treturn tools.init()\n",
+		"pkg/__init__.py": "from . import tools\n",
+		"pkg/tools/__init__.py": "from . import init\n\ninit = init.init\n",
+		"pkg/tools/init.py": "def init():\n\treturn 3\n",
+	})
+	xtest.contains("pkg__tools____init__init = pkg__tools__init__init\n", bundle)
+
+def test_a_name_after_a_dot_is_not_renamed():
+	# `other.classes` is the module's own name — the file's `classes` is a
+	# different name that happens to be spelled the same.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.check()\n",
+		"helper.py": "import other\n\nclasses = other.classes\n\ndef check():\n\treturn classes\n",
+		"other.py": "classes = {}\n",
+	})
+	xtest.contains("helper__classes = other__classes\n", bundle)
+
 def test_a_parameter_that_shadows_a_global_is_not_renamed():
 	# The parameter is the function's own, and the body keeps it too — so the
 	# bundle runs where a renamed parameter would raise a NameError.
@@ -60,16 +92,6 @@ def test_a_default_value_is_read_where_the_def_is():
 		"helper.py": "VALUE = 42\n\ndef compute(VALUE = VALUE):\n\treturn VALUE\n",
 	})
 	xtest.contains("def helper__compute(VALUE = helper__VALUE)", bundle)
-
-def test_a_name_after_a_dot_is_not_renamed():
-	# `other.classes` is the module's own name — the file's `classes` is a
-	# different name that happens to be spelled the same.
-	bundle = _bundle({
-		"main.py": "import helper\n\ndef run():\n\treturn helper.check()\n",
-		"helper.py": "import other\n\nclasses = other.classes\n\ndef check():\n\treturn classes\n",
-		"other.py": "classes = {}\n",
-	})
-	xtest.contains("helper__classes = other__classes\n", bundle)
 
 def test_a_name_assigned_in_a_block_is_the_function_s_own():
 	# Python binds a name in the function that holds the assignment, not in the
@@ -91,6 +113,16 @@ def test_a_class_body_s_names_are_not_visible_in_its_methods():
 			"\t\treturn size(1)\n",
 	})
 	xtest.contains("return helper__size(1)", bundle)
+
+def test_a_name_bound_to_the_module_it_already_names_is_dropped():
+	# `sub = sub` in a package's `__init__.py` says the package's namespace
+	# carries the module — and the alias already says it.
+	bundle = _bundle({
+		"main.py": "import pkg\n\ndef run():\n\treturn pkg.sub.value\n",
+		"pkg/__init__.py": "from . import sub\n\nsub = sub\n",
+		"pkg/sub.py": "value = 5\n",
+	})
+	xtest.not_equal("pkg____init__sub" in bundle, True)
 
 def test_a_removed_last_import_leaves_no_double_blank_line():
 	# D32's third rule: removing a statement must not leave a blank pair.

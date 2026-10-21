@@ -26,6 +26,7 @@ _WALRUS = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*:=")
 _CLAUSE = re.compile(r":\s*(import\b|from\b)\s")
 _IMPORT = re.compile(r"^(?:import\s+(?P<module>.+)|from\s+(?P<source>[.\w]+)\s+import\s+(?P<names>.+))$")
 _DEF_NAME = re.compile(r"^(?:async\s+)?def\s+([A-Za-z_]\w*)")
+_SELF_ASSIGNMENT = re.compile(r"^([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$")
 
 def renamed(name: str, prefix: str) -> str:
 	"""The name this one is called in the bundle, under `prefix`.
@@ -88,6 +89,12 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 				# the blank above it next to the blank below it. A blank the source
 				# wrote twice is carried and stays that library's own finding.
 				pending = bool(out) and out[-1] == "" and _blank_at(statements, index)
+			continue
+		if _names_the_module_it_already_names(statement["text"], aliases):
+			# D38: `query = query` in a package's `__init__.py` says the package's
+			# namespace carries the module — and the alias already says it, so the
+			# statement has nothing left to do.
+			pending = bool(out) and out[-1] == "" and _blank_at(statements, index)
 			continue
 		if pending and not statement["text"].strip():
 			pending = False
@@ -225,6 +232,12 @@ def _aliases(resolved: list) -> dict:
 	A use of such a name is the callee's prefix followed by the attribute, so
 	`helper.run` becomes `helper__run`. Only a local module import gets this; a
 	non-local one is an ordinary rename (D20), because its attribute stays.
+
+	**A package's namespace comes with it.** A package's own name reaches the
+	package's `__init__.py` globals, but `pkg.sub` reaches the submodule's, and
+	those are two different places. So each module the package's folder carries
+	is an alias of its own, keyed by the path as it is written after the
+	package's name — `pkg.sub` is the key `sub`.
 	"""
 	found = {}
 	for entry in resolved:
@@ -236,6 +249,8 @@ def _aliases(resolved: list) -> dict:
 			found[target["written"] if target["dotted"] else target["binds"]] = target["prefix"]
 			if target["alias"] is None and not target["dotted"]:
 				found[target["name"]] = target["prefix"]
+			for name, prefix in target.get("namespace", {}).items():
+				found[f"{target['binds']}.{name}"] = prefix
 	return found
 
 def _imported(statement: dict, entry: dict, renames: dict):
@@ -399,6 +414,21 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	for start, end, replacement in reversed(edits):
 		text = text[:start] + replacement + text[end:]
 	return text.split("\n")
+
+def _names_the_module_it_already_names(text: str, aliases: dict) -> bool:
+	"""Whether this statement binds a name to the module that name already is.
+
+	`query = query`, in a package's `__init__.py`, says the package's namespace
+	carries the module `query`. **The alias already says it** — D28's alias
+	makes a use of `query` reach the module's globals — so in the bundle the
+	statement has nothing left to do, and the module itself has no value to
+	bind (D17).
+
+	Only the name that names the module qualifies. Any other assignment of a
+	module is left alone, and still fails at run time as D17 says it does.
+	"""
+	match = _SELF_ASSIGNMENT.match(text.strip())
+	return match is not None and match.group(1) == match.group(2) and match.group(1) in aliases
 
 def _parameters_of(tokens: list) -> set:
 	"""Where a def's own parameter names are, among its tokens.
