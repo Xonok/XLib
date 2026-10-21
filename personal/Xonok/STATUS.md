@@ -20,7 +20,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `c7f9269` (2026-10-21), **snapshot taken 2026-10-21**, **in
+Basis: `master` at `aa59ae4` (2026-10-21), **snapshot taken 2026-10-21**, **in
 sync with `origin/master`** — **the skynet display now fits the pane it is in,
 and says how much it left out (PR #58 and PR #59, merged on the human's
 authorisation).**
