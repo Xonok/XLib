@@ -26,7 +26,7 @@ def load_episode(name):
 	return {"name":name,"dir":dir_path,"request":request,
 		"baseline_pass":baseline_pass,"baseline":baseline}
 
-def fingerprints(model):
+def fingerprints(model,protocol=None):
 	"""The fingerprints that say what this row was measured and evaluated on.
 
 	Three, and the third is new. `bench_version` is the measurement side, `grade_version`
@@ -37,9 +37,13 @@ def fingerprints(model):
 	and not one of its 55 graded harness rows carried it.
 	"""
 	transport_name = model.get("transport")
-	return {"bench_version":agent.bench_version(transport_name),
+	return {"bench_version":agent.bench_version(transport_name,protocol=protocol),
 		"grade_version":trace.grade_version(),
-		"mapping_version":agent.mapping_version(transport_name)}
+		"mapping_version":agent.mapping_version(transport_name),
+		# Which protocol the model was shown, in the row itself. The two populations are
+		# read differently on purpose - one measures compliance, one measures the habit -
+		# so a reader must be able to tell them apart without opening the trace.
+		"protocol":agent.protocol_label(protocol)}
 
 def episode_hash(dir_path):
 	"""A hash of one episode's files: what the model was actually asked to do.
@@ -60,7 +64,7 @@ def episode_hash(dir_path):
 			except OSError: pass
 	return "ep-" + h.hexdigest()[:12]
 
-def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
+def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096,protocol=None):
 	"""One episode attempt in a throwaway copy of the episode directory."""
 	sandbox = tempfile.mkdtemp(prefix=f"ep-{episode['name']}-",dir=run_root)
 	shutil.copytree(episode["dir"],sandbox,dirs_exist_ok=True)
@@ -72,7 +76,7 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 	started = int(time.time())
 	if model.get("transport") == "harness":
 		raw = agent.run_episode_harness(model,episode["request"],sandbox,
-			max_turns=max_turns,max_tokens=max_tokens)
+			max_turns=max_turns,max_tokens=max_tokens,protocol=protocol)
 	else:
 		raw = agent.run_episode(model,episode["request"],sandbox,
 			max_turns=max_turns,max_tokens=max_tokens)
@@ -86,7 +90,7 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 		# was measured on. The three are allowed to move at different rates: bench_*
 		# changes invalidate, grade_* changes are re-derivable, and mapping_version says
 		# which part of the measurement was the mapping.
-		**fingerprints(model),
+		**fingerprints(model,protocol=protocol),
 		# When it ran, and under what settings. A measurement without a timestamp cannot
 		# be placed, and a measurement without its settings cannot be reproduced — and
 		# the point of keeping a measurement is that somebody can build a benchmark over
@@ -109,6 +113,7 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096):
 		"trace":{"turns":raw.get("turns",[]),"finished":raw.get("finished"),
 			"claim":raw.get("claim"),"status":raw.get("status"),
 			"n_turns":raw.get("n_turns"),"usage":raw.get("usage"),
+			"protocol":raw.get("protocol"),
 			"prompt":raw.get("prompt"),"messages":raw.get("messages"),
 			"raw":raw.get("raw"),"session":raw.get("session")},
 		# The confounds of the harness path travel with the result, so a report cannot
@@ -135,6 +140,13 @@ def main():
 	p.add_argument("--out",required=True)
 	p.add_argument("--registry",default=REGISTRY)
 	p.add_argument("--keep-sandbox",action="store_true")
+	# Which protocol the model is shown. The default is the one the corpus was
+	# measured under; the other one exists so the compliance question can be measured
+	# both ways rather than argued.
+	p.add_argument("--protocol",choices=("asked","unasked"),default="asked",
+		help="asked: the protocol that asks for the verification (the default). "
+			"unasked: the same protocol with that one instruction removed, so the "
+			"verification that happens is the model's habit and not its compliance")
 	args = p.parse_args()
 
 	with open(args.registry,"rb") as f:
@@ -145,6 +157,8 @@ def main():
 	if args.model not in registry:
 		raise SystemExit(f"unknown model {args.model!r}; known: {', '.join(sorted(registry))}")
 	model = registry[args.model]
+	protocol = {"asked":agent.HARNESS_PROTOCOL,
+		"unasked":agent.HARNESS_PROTOCOL_UNASKED}[args.protocol]
 
 	names = args.episode or sorted(os.listdir(EPISODES))
 	episodes = [load_episode(n) for n in names if os.path.isdir(os.path.join(EPISODES,n))]
@@ -158,7 +172,8 @@ def main():
 		print(f"\n== {episode['name']} ({verdict}; {args.repeats} repeats)",flush=True)
 		for rep in range(1,args.repeats+1):
 			try:
-				result = run_once(model,episode,run_root,max_turns=args.max_turns,max_tokens=args.max_tokens)
+				result = run_once(model,episode,run_root,max_turns=args.max_turns,
+					max_tokens=args.max_tokens,protocol=protocol)
 			except Exception as e:
 				# A harness failure must not be recorded as a model result. It is a hole in
 				# the run, kept separate so the report can say which.
