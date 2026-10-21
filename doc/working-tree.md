@@ -2,6 +2,18 @@
 
 Don't change files that carry uncommitted changes you did not make. Before your first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. A file you created yourself earlier in the session is yours to keep editing. The human can override by explicit instruction.
 
+## The boundary is the worktree
+
+**Work in a worktree, one per ticket.** `git worktree add .work/<ticket>-<slug> -b fix/<ticket>-<slug> master` gives you your own checkout, so two agents cannot edit one file in one place, and a commit in one cannot land on another's branch. The root checkout is shared, and so is its **index**: a commit made there can carry another session's staged work under your subject. That happened on 2026-10-21, and the recovery kept both works.
+
+**There is no file-claim mechanism.** This repository had one until 2026-10-21 — `agent-coord.py claim`, `release`, `release-all` and `status` — and it was retired (epiq `5S8FY10`, ruled by the human). Two measurements said it had to go: it keyed claims by absolute path, which a worktree changes without changing the file, so the same file could be claimed twice in two disjoint claim stores and the conflict check could not fire; and nothing checked a claim at commit time, so it protected nothing.
+
+`check-clean` stays, and it is the guard that remains: it reads the **working tree**, so it needs no shared state, works in any checkout, and sees across worktrees. The claim system's key was the thing that was broken, and `check-clean` has no key.
+
+## Who writes the state files
+
+**Not a feature branch.** `personal/<person>/{STATUS,TASKS,HISTORY}.md` are written by the secretary, at merge time. A Done ticket does not carry them — the rule and its reason are in `doc/state-files-history.md`.
+
 ## `git checkout` is banned
 
 **Never run `git checkout`.** Use `git switch` to change branch and `git restore` to change a file. This is a blanket ban until further notice, not a preference to weigh case by case.

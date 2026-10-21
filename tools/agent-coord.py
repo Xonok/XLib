@@ -656,9 +656,6 @@ def role_note_path(role, ws_root=None):
 		ws_root = workspace_root()
 	return os.path.join(ws_root, ".agents", "role-notes-%s.md" % role)
 
-def claim_paths(paths):
-	return [os.path.realpath(os.path.abspath(p)) for p in paths]
-
 def cmd_id(args):
 	print(my_id())
 
@@ -684,61 +681,6 @@ def cmd_role_note(args):
 			sys_stderr("unknown workspace tag: %s" % args.workspace)
 			raise SystemExit(1)
 	print(role_note_path(role, ws_root))
-
-def cmd_claim(args):
-	paths = claim_paths(args.paths)
-	agent = my_id()
-	with locked():
-		claims = load(CLAIMS, {})
-		owner = {}
-		for slot, owned in claims.items():
-			for p in owned:
-				owner[p] = slot
-		conflicts = [p for p in paths if p in owner and owner[p] != agent]
-		if conflicts and not args.force:
-			for p in conflicts:
-				sys_stderr("%s is held by %s" % (p, owner[p]))
-			sys_stderr("pass --force to steal it (the holder may be editing)")
-			raise SystemExit(1)
-		for slot, owned in claims.items():
-			claims[slot] = [p for p in owned if p not in conflicts]
-		mine = claims.get(agent, [])
-		for p in paths:
-			if p not in mine:
-				mine.append(p)
-		claims[agent] = mine
-		save(CLAIMS, claims)
-	for p in paths:
-		print("claimed %s" % p)
-
-def cmd_release(args):
-	paths = claim_paths(args.paths)
-	agent = my_id()
-	with locked():
-		claims = load(CLAIMS, {})
-		mine = [p for p in claims.get(agent, []) if p not in paths]
-		claims[agent] = mine
-		save(CLAIMS, claims)
-	for p in paths:
-		print("released %s" % p)
-
-def cmd_release_all(args):
-	agent = my_id()
-	with locked():
-		claims = load(CLAIMS, {})
-		claims.pop(agent, None)
-		save(CLAIMS, claims)
-	print("released all")
-
-def cmd_status(args):
-	with locked():
-		claims = load(CLAIMS, {})
-		if not claims:
-			print("no claims")
-			return
-		for slot, owned in sorted(claims.items()):
-			if owned:
-				print("%s: %s" % (slot, ", ".join(owned)))
 
 def cmd_role_status(args):
 	"""Show role note claims (claims on role-notes-{role}.md files)."""
@@ -1136,13 +1078,6 @@ def main():
 	sub.add_parser("note", help="(deprecated) print this agent's instance notes file path")
 	sub.add_parser("instance-note", help="print this agent's instance notes file path")
 	sub.add_parser("workspace", help="print this session's workspace root and tag")
-	p = sub.add_parser("claim", help="claim files before editing")
-	p.add_argument("paths", nargs="+")
-	p.add_argument("--force", action="store_true", help="steal files held by the other agent")
-	p = sub.add_parser("release", help="release claimed files")
-	p.add_argument("paths", nargs="+")
-	sub.add_parser("release-all", help="release everything this agent claimed")
-	sub.add_parser("status", help="show who holds what")
 	p = sub.add_parser("news", help="report rule-file changes since this agent last looked (and mark them seen)")
 	p.add_argument("--peek", action="store_true", help="report changes without marking them seen")
 	p.add_argument("--status", action="store_true", help="print caught-up status without changing anything")
@@ -1201,8 +1136,7 @@ def main():
 	sp.add_argument("--type", default=None, help="reset only this type (else reset all)")
 	args = parser.parse_args()
 	{"id": cmd_id, "note": cmd_note, "instance-note": cmd_instance_note,
-	 "workspace": cmd_workspace, "claim": cmd_claim,
-	 "release": cmd_release, "release-all": cmd_release_all, "status": cmd_status,
+	 "workspace": cmd_workspace,
 	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch,
 	 "role-note": cmd_role_note, "role-claim": cmd_role_claim,
 	 "role-release": cmd_role_release, "role-status": cmd_role_status,
