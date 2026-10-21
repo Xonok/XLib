@@ -10,16 +10,18 @@ needed when there is no due date.
 
 ## Open
 
-- [ ] **#181 — Restart the open opencode windows so herdr reports each pane's
-	session instead of reading the screen** (by 2026-10-22, low) — category:
-	agents. **Herdr's opencode integration is installed** (v12, 2026-10-21) and
-	**measured in a real window**: the pane reported
-	`agent_session.source = "herdr:opencode"`, the session id herdr named was
-	the one marduk's registry named (`ses_ea2b02f8…`), and
-	`screen_detection_skipped` was true. **The four windows open now were
-	started before the install**, so they keep the screen-detection behaviour
-	until they are restarted — a running TUI does not pick up a plugin installed
-	after it started. **Nothing to do but restart them.**
+- [x] **#181 — Herdr: every open window reports its live session, and it agrees
+	with the instance-report plugin** (done 2026-10-21, low) — category: agents.
+	**Herdr's opencode integration is installed** (v12, 2026-10-21) and
+	**measured**: every pane reports `screen_detection_skipped = true` and a
+	session id, and **every one of those ids is the session the
+	`instance-report` plugin reports for the same process** — `wK:p1`
+	`secretary-3` `ses_ea2b1cd8…`, `wK:p2` `secretary-4` `ses_ea2c1eda…`,
+	`wJ:p1` `secretary` `ses_ea2c55ab…`, `wM:p1` `secretary-2`
+	`ses_ea611963…`. **The premise of this task was wrong**: it said the four
+	windows would need restarting, because a running TUI was assumed not to
+	pick up a newly installed plugin. **The measurement refuted that** — they
+	picked it up without a restart, so nothing was left to do.
 - [ ] **#182 — The window's name has two owners: `oc-agent` names the window
 	and the `agent-title` plugin never fires** (by decision needed, medium) —
 	board: epiq `TWA3Z0X` (Todo). **Measured on all four windows**: the service

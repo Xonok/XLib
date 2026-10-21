@@ -1163,15 +1163,21 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	`xschema`, `xtest`), and `dev/xprod` has no SPEC.md or VERSIONS.md at all
 	(`DCF9EHW`). **These edits are not mine** — they were in the tree when this
 	session started — so they are recorded here rather than edited.
-- **The four open opencode windows predate herdr's opencode integration, so
-	herdr is still reading their screens.** The integration was installed on
-	2026-10-21 and **verified in a fresh window** — a pane launched through
-	`tools/oc-agent` reported `agent_session.source = "herdr:opencode"`, the
-	session id herdr named was the one marduk's registry named, and
-	`screen_detection_skipped` was true. **A running TUI does not pick up a
-	plugin installed after it started**, so the four windows already open keep
-	the old behaviour until they are restarted. **Taskview `#181`** (due
-	2026-10-22), and nothing else is needed for it.
+- **Herdr now reports every open window's live session, and the running windows
+	picked the integration up without a restart.** The integration was installed
+	on 2026-10-21 and **verified in a fresh window** first — a pane launched
+	through `tools/oc-agent` reported `agent_session.source = "herdr:opencode"`,
+	the session id herdr named was the one marduk's registry named, and
+	`screen_detection_skipped` was true. **Then the four windows that were
+	already open were re-read, and they report too**: every pane has
+	`screen_detection_skipped = true` and a session id, and **every one of those
+	ids is the same session the `instance-report` plugin reports for the same
+	process** — `wK:p1` `secretary-3` `ses_ea2b1cd8…`, `wK:p2` `secretary-4`
+	`ses_ea2c1eda…`, `wJ:p1` `secretary` `ses_ea2c55ab…`, `wM:p1` `secretary-2`
+	`ses_ea611963…`. **Two independent mechanisms, one answer** — which is the
+	kind of agreement worth having, and it is the fact `NAHEGJE` was filed for.
+	**The premise that a running TUI does not pick up a newly installed plugin
+	was an inference, and the measurement refuted it.** Taskview `#181` (done).
 - **The window's name has two owners, and the one that is under version control
 	is the one that does the naming.** Measured on all four windows: the service
 	reports the session titles as `secretary`, `secretary-2`, `secretary-3`,
