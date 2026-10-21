@@ -347,9 +347,9 @@ needed when there is no due date.
 	rather than the session. Three decisions taken 2026-10-18: record the
 	opencode child's pid, keep service-only sessions shown but uncorroborated,
 	and fold in the no-usable-pid and pid-reuse leaks.
-- [ ] **#173 — marduk: a `/new` in a window replaces its session and the
+- [x] **#173 — marduk: a `/new` in a window replaces its session and the
 	registry still names the old one — the panel shows two lines for one
-	window** (by 2026-10-23, medium) — board: epiq `0AFZHPW` (Todo), plus
+	window** (done 2026-10-21, medium) — board: epiq `0AFZHPW` (Done), plus
 	`M9J6F8W` on the Agents board. The human's report, 2026-10-21: *"the panel
 	shows 3 unnumbered secretaries among the number ones… the unnumbered ones
 	are essentially secretary-1, so it doesn't make sense for there to be 3 of
@@ -385,7 +385,11 @@ needed when there is no due date.
 	still comes out as the bare agent name — the `agent-title` plugin's doing,
 	in the human's own config directory, Agents board `M9J6F8W`. The panel no
 	longer depends on it: a window's name on the panel comes from the registry,
-	which knows the slot. **Waiting on the human: the merge.**
+	which knows the slot. **MERGED 2026-10-21 — PR #73, on master as `dbe6c13`**,
+	on the human's authorisation; the panel was restarted on the merged code and
+	the plugin link points at the root checkout, so both are permanent. **The
+	remaining half — the session title after a `/new` — is the `agent-title`
+	plugin's, in the human's own config directory: Agents board `M9J6F8W`.**
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.

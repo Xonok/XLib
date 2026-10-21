@@ -564,15 +564,13 @@ Also standing, from the abandoned single-pass attempt:
 	`agent-title` plugin's doing and lives in the human's own config directory
 	— Agents board `M9J6F8W`. The panel no longer depends on it: a window's
 	name on the panel comes from the registry, which knows the slot.
-	**One thing to know about the live machine:** the panel is running the fix
-	because the process was restarted from the working tree; **a restart before
-	the PR merges brings back the old behaviour**, and the merge makes it
-	permanent. **And the plugin link points at the branch's worktree**
+	**MERGED 2026-10-21 — PR #73, on master as `dbe6c13`**, on the human's
+	authorisation ("you can do the merge"). The panel was restarted on the
+	merged code and the plugin link now points at the root checkout
 	(`~/.config/opencode/plugins/instance-report` →
-	`.work/0AFZHPW-window-session/tools/marduk/plugin/instance-report`), so it
-	dangles once the worktree goes — **re-point it at
-	`tools/marduk/plugin/instance-report` in the root checkout after the
-	merge**, or a new window will not report itself and will show the old way.
+	`tools/marduk/plugin/instance-report`), so both are permanent: a new window
+	reports itself, and a panel restart keeps the join. **The panel shows four
+	windows and four lines**, each on the session its process is on.
 - **Work on a branch is not live until it merges.** Established by `HC1ZJK6`:
 	the `worker-ling` → `worker-longcat` fix for `dispatch general` arrived as an
 	uncommitted working-tree edit, and moving it onto a branch — which the
