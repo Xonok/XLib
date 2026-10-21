@@ -157,6 +157,40 @@ def test_recent_pending_counts_as_in_flight_not_stranded():
 	finally:
 		shutil.rmtree(root)
 
+def test_the_in_flight_line_says_to_sync_again():
+	"""Unsynced writes read like a successful sync unless the tool says otherwise.
+
+	The line an agent reads is the one that says its own writes are in flight, and
+	"not yet synced" alone does not say what to do about it. A write that was
+	never synced is a write that did not happen, so the tool says so.
+	"""
+	root = tempfile.mkdtemp()
+	try:
+		events = _clean_project(root)
+		_write(os.path.join(events, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb~pending.jsonl"), [
+			_event("p1", "p0", **{"add.issue": {"id": "ISSUE4", "name": "mine", "parent": "L"}}),
+		])
+		code, out = _run(root)
+		xtest.equal(code, 0)
+		xtest.contains("not yet synced", out)
+		xtest.contains("run epiq_sync again", out)
+	finally:
+		shutil.rmtree(root)
+
+def test_a_clean_project_says_nothing_about_syncing():
+	"""The instruction must not appear when there is nothing in flight.
+
+	A line that always says "run epiq_sync again" is a line that stops being read.
+	"""
+	root = tempfile.mkdtemp()
+	try:
+		_clean_project(root)
+		code, out = _run(root)
+		xtest.equal(code, 0)
+		xtest.not_equal("run epiq_sync again" in out, True)
+	finally:
+		shutil.rmtree(root)
+
 def test_old_pending_is_stranded_and_fails():
 	"""Same file, aged past the threshold: now it is loss, and the check fails."""
 	root = tempfile.mkdtemp()
