@@ -14,9 +14,11 @@ A session is shown when it is in either. Registry entries outrank the service
 for role and workspace, since the service knows neither reliably.
 """
 
-import json,os,time
+import json,time
 from pathlib import Path
 from . import service
+from .instance import INSTANCES_DIR,is_window,read_instances,window_session
+from .process import alive as _alive,start_ticks as _start_ticks
 
 REGISTRY_DIR=Path.home()/".opencode"/"agents"
 
@@ -66,55 +68,45 @@ def _running(entry:dict) -> bool:
 		return False
 	return _start_ticks(pid)==ticks
 
-def _start_ticks(pid:int):
-	"""Clock ticks since boot at which a process started, or None if unreadable.
+def _registry_session(entry:dict,session_id:str=None) -> dict:
+	"""A registry entry shaped like a service session, so both sources merge.
 
-	Field 22 of `/proc/<pid>/stat`. The `comm` field (2) is parenthesised and may
-	contain spaces, so the line is cut after its *last* `)` before it is split —
-	cutting at the first would miscount every field behind a parenthesis in the
-	process name.
+	`session_id` is the session the window is on now, which is not always the one
+	the entry was written with — a `/new` replaces it — so it is passed in rather
+	than read from the entry.
 	"""
-	try:
-		after=Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()
-		return int(after[19])
-	except (OSError,ValueError,IndexError):
-		return None
-
-def _alive(pid:int) -> bool:
-	"""Whether a process id is still running."""
-	try:
-		os.kill(pid,0)
-	except ProcessLookupError:
-		return False
-	except PermissionError:
-		return True
-	except OSError:
-		return True
-	return True
-
-def _registry_session(entry:dict) -> dict:
-	"""A registry entry shaped like a service session, so both sources merge."""
-	return {"id":entry.get("session_id"),"agent":entry.get("agent") or entry.get("role") or "unknown","title":entry.get("role"),"location":{"directory":entry.get("workspace","")},"started_at":entry.get("started_at")}
+	sid=session_id if session_id else entry.get("session_id")
+	return {"id":sid,"agent":entry.get("agent") or entry.get("role") or "unknown","title":entry.get("role"),"location":{"directory":entry.get("workspace","")},"started_at":entry.get("started_at"),"window":is_window(sid)}
 
 class SessionWatcher:
 	"""Poll the registry and the service, reporting sessions as they come and go."""
 
-	def __init__(self,base_url:str,pw:str,on_new,on_removed,poll_seconds:float=3.0,registry_dir:Path=REGISTRY_DIR):
+	def __init__(self,base_url:str,pw:str,on_new,on_removed,poll_seconds:float=3.0,registry_dir:Path=REGISTRY_DIR,instances_dir:Path=INSTANCES_DIR):
 		self.base_url=base_url
 		self.pw=pw
 		self.on_new=on_new
 		self.on_removed=on_removed
 		self.poll_seconds=poll_seconds
 		self.registry_dir=registry_dir
+		self.instances_dir=instances_dir
 		self._known:set=set()
 		self._running=False
 
 	def _collect(self) -> dict:
-		"""Every session worth showing, keyed by id, registry first."""
+		"""Every session worth showing, keyed by id, registry first.
+
+		A registry entry is a window, and the window's session is not the one the
+		entry was written with: a `/new` replaces it while the process lives on.
+		The instance report says which session the process is on now, and it is
+		what the entry is keyed by — so the session the window left behind stops
+		being shown at all, and the window is shown once, under its own name.
+		"""
 		found={}
 		registry=read_registry(self.registry_dir)
+		instances=read_instances(self.instances_dir)
 		for session_id,entry in registry.items():
-			found[session_id]=_registry_session(entry)
+			current=window_session(entry,instances.get(entry.get("pid")))
+			found[current]=_registry_session(entry,current)
 		active=service.active_session_ids(self.base_url,self.pw)
 		if active is None:
 			return found

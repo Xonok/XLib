@@ -95,6 +95,22 @@ registry_dir="$HOME/.opencode/agents"
 mkdir -p "$registry_dir"
 registry_file=""
 
+# The opencode process has to report which session it is on, or marduk cannot
+# tell a window's session from the one it left behind: a `/new` replaces the
+# session while the process lives on, and the registry — written once, here —
+# still names the old one. The plugin that does the reporting lives in this
+# repository, and the config directory links to it the way `agent` is linked to
+# the Agents workspace, so every machine gets the same one. It is linked, not
+# copied, and only when nothing is there already: a link the human made
+# themselves is left alone.
+script_path="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+plugin_source="$(dirname "$script_path")/marduk/plugin/instance-report"
+plugin_link="$HOME/.config/opencode/plugins/instance-report"
+if [ -d "$plugin_source" ] && [ ! -e "$plugin_link" ]; then
+	mkdir -p "$(dirname "$plugin_link")"
+	ln -s "$plugin_source" "$plugin_link"
+fi
+
 cleanup() {
 	[ -n "$registry_file" ] && rm -f "$registry_file"
 	rm -rf "$STATE/$AGENT.$N"
