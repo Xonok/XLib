@@ -264,10 +264,16 @@ def _header(statement: dict) -> str:
 
 def _emptied(statement: dict, statements: list, index: int) -> list:
 	"""What is left of a removed import — D22's `pass`, where the removal was the
-	only statement of its block, and nothing at all otherwise."""
+	only statement of its block, and nothing at all otherwise.
+
+	**A module-level import that was the file's last statement leaves nothing
+	behind.** D32's third rule says removing a statement must not leave a double
+	blank line, and a blank line left where the import was is one half of that
+	pair — the other half is the blank the source wrote above it.
+	"""
 	indent = statement["indent"]
 	if not indent or (index + 1 < len(statements) and statements[index + 1]["indent"] == indent):
-		return [] if index + 1 < len(statements) else ["pass" if indent else ""]
+		return [] if index + 1 < len(statements) or not indent else ["pass"]
 	return [f"{indent}pass"]
 
 def _blank_at(statements: list, index: int) -> bool:
