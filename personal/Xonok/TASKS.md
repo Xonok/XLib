@@ -98,17 +98,22 @@ needed when there is no due date.
 	same file**. **Seven new tests**, each checked to fail against the old code.
 	**The loss is named: there is no longer a way to ask who holds what.**
 - [ ] **#186 — the dev libraries say who wrote them, but only in the READMEs** —
-	by decision needed, low. **Ruled 2026-10-21: `dev/xhttp` and `dev/xprod`
-	are hand-written, and the other four are AI-written**, so the four say the
-	opposite — **four READMEs are new** (`xconf`, `xcsv`, `xschema`, `xtest` had
-	a SPEC.md and no README), each with an **"XLib rules"** section in the same
-	shape as the two hand-written ones. **The gap: the convention exists only in
-	the six READMEs.** No rule file carries it, so nothing announces it and
-	nothing enforces it — `doc/development.md:94` covers only the AI-written
-	*spec* marker, and no rule file mentions a library that must not be edited.
-	**The two hand-written READMEs are still uncommitted and are not mine**, and
-	they disagree on heading level (`##` in `dev/xhttp`, `#` in `dev/xprod`).
-	And `dev/xprod` still has no SPEC.md or VERSIONS.md at all (`DCF9EHW`).
+	by decision needed, low. Board: epiq `B1BKTP0` (In progress). **Ruled
+	2026-10-21: `dev/xhttp` and `dev/xprod` are hand-written, and the other
+	four are AI-written**, so the four say the opposite. **All six READMEs are
+	committed**: the two hand-written ones as `31cf8a9` (PR #80 — the human's
+	own uncommitted edits, and **the human corrected the heading-level
+	disagreement** that was recorded here before, so both are now `## XLib
+	rules`), the four AI-written ones as `54e9621` (PR #79). **The gap, and the
+	whole of this task: the convention lives only in the six READMEs.** No rule
+	file carries it, so nothing announces it and nothing enforces it —
+	`doc/development.md:94` still covers only the AI-written *spec* marker, and
+	no rule file mentions a library that must not be edited by AI, which is the
+	whole of what a reader needs to know before touching the code. **What needs
+	a decision: where the rule lives.** A README section binds the reader who
+	opens the README; a rule in `doc/development.md` binds an agent that never
+	opens it, and `AGENTS.md` would announce a change to it through `news`.
+	Also open: `dev/xprod` has no SPEC.md and no VERSIONS.md (`DCF9EHW`).
 - [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
 	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
 	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)

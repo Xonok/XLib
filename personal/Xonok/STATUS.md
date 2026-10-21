@@ -1202,15 +1202,14 @@ tripped on. One false-positive class remains unruled and costs nothing either
 - **Every dev library now says who wrote it, in the same section of a README.**
 	Ruled by the human, 2026-10-21: `dev/xhttp` and `dev/xprod` are
 	**hand-written**, and the other four are **AI-written** — so the four say
-	**the opposite**. **Four READMEs are new** (`xconf`, `xcsv`, `xschema`,
-	`xtest` had a SPEC.md and no README), and each carries an **"XLib rules"**
-	section in the same shape as the two hand-written ones. **The convention now
-	exists, but only in the six READMEs** — no rule file carries it, so nothing
-	announces it and nothing enforces it; `doc/development.md:94` still covers
-	only the AI-written *spec* marker. **The two hand-written READMEs are still
-	uncommitted and are not mine**, and they **disagree on heading level** —
-	`dev/xhttp/README.md` uses `##` and `dev/xprod/README.md` uses `#`. And
-	`dev/xprod` still has no SPEC.md or VERSIONS.md at all (`DCF9EHW`).
+	**the opposite**. **All six are committed now**: the two hand-written
+	READMEs as `31cf8a9` (PR #80, the human's own uncommitted edits), the four
+	AI-written ones as `54e9621` (PR #79). Each carries an **"XLib rules"**
+	section in the same shape, at the same heading level. **The convention lives
+	only in the six READMEs** — no rule file carries it, so nothing announces
+	it and nothing enforces it; `doc/development.md:94` still covers only the
+	AI-written *spec* marker. That gap is epiq `B1BKTP0` and taskview `#186`.
+	And `dev/xprod` still has no SPEC.md or VERSIONS.md at all (`DCF9EHW`).
 - **Herdr now reports every open window's live session, and the running windows
 	picked the integration up without a restart.** The integration was installed
 	on 2026-10-21 and **verified in a fresh window** first — a pane launched
