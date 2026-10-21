@@ -160,6 +160,7 @@ def cmd_epiq_pending(args: argparse.Namespace) -> None:
 			if inflight:
 				print("epiq project %s: no stranded events (%d events in flight, not yet synced)"
 					% (pid, sum(r["stranded"] for r in inflight)))
+				print("  these writes are not durable: run epiq_sync again until this line is gone")
 			elif args.verbose:
 				print("%s: clean" % pid)
 			continue
@@ -170,7 +171,7 @@ def cmd_epiq_pending(args: argparse.Namespace) -> None:
 			"draining needs a session running as the actor, which the board refuses",
 			titles)
 		_print_rows(inflight, "in flight (under %ds old, counted clean):" % args.stale_seconds,
-			"a live process owns these; a sync from that actor commits them", titles)
+			"a live process owns these; run epiq_sync as that actor to commit them", titles)
 		for orphan in orphans:
 			print("  ORPHAN reference: %s is referenced by committed events but never created in one" % orphan)
 			print("    a clone of this state branch cannot resolve it")
@@ -181,7 +182,7 @@ def cmd_epiq_pending(args: argparse.Namespace) -> None:
 	print("%d epiq project(s) with stranded events" % problems)
 	print("epiq_sync drains only the calling actor's own log, so these persist until a")
 	print("session runs as each actor above — and epiq_actor_assume refuses a name the")
-	print("server was not launched with. See AGENTS.md, 'epiq writes are per-actor'.")
+	print("server was not launched with. See doc/epiq-workflow.md.")
 	raise SystemExit(1)
 
 def main() -> None:
