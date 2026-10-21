@@ -49,17 +49,6 @@ needed when there is no due date.
 	fixed with it**: a parameter is a name the function binds, so it is not
 	translated (spec **D40**). Commit `a9b9fe5` on
 	`fix/JD9DWVN-bundle-traveller` (PR #76).
-- [ ] **#179 — run_tests.py: the modelbench suite is not listed, so eight test
-	files are unreachable and the guard is red** (by 2026-10-22, medium) —
-	board: epiq `QPDJ8RF` (Todo, filed 2026-10-21).
-	`tools/test/test_suites.py` fails with **"test files that no runner
-	reaches"** — all eight in `tools/modelbench/test/`, added by the modelbench
-	work of 2026-10-20/21 (PRs #62–#67, #70) without adding the suite. **The
-	eight pass on their own — 77 tests, 0 failed** — so the fix is the one line
-	the guard is asking for. This is the failure class the guard was written
-	for: *"a suite that cannot be run is a suite that does not exist"*, and this
-	one reported success over content it never examined. **One line, and it
-	makes a documented claim true again.**
 - [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
 	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
 	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)
@@ -308,6 +297,18 @@ needed when there is no due date.
 	taskview's selection layer (`read_csv`, `select_tasks`, `compute_metrics`)
 	rather than reimplementing it, and it reads the same CSV, which stays the
 	single authority.
+	**RULED 2026-10-21 — the spec does NOT require a priority column.** The
+	human: *"Make sure you remember, but don't otherwise work on that task."*
+	That settles the question the ticket's own description calls *"the real
+	content of this spec"* — priority is not a new CSV field, the wide tool
+	orders by due date, and **no schema change is proposed**, which also settles
+	the collision with the append-only last-write-wins model the description
+	flagged. It is consistent with the human's 2026-10-20 framing above.
+	**Do not reopen the priority column.** The remaining question is the one the
+	human sketched: how much editing belongs in the tool — set a new due date
+	directly (`2026/10/27`) or bump it relative (`+7d`). **Recorded, not
+	worked on**, per the human's instruction; the ruling is on epiq `E5MH4S2`
+	as a comment, and in the task store's own description.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
@@ -678,17 +679,40 @@ needed when there is no due date.
 	sources that are deliberately gone. **Verified live** on this machine, both
 	directions. Merged as `e7ff041`; epiq `PZH78FS` is in Done, and `W4QP4GK`'s
 	rule is withdrawn with a comment saying so.
+- [x] **#179 — run_tests.py: the modelbench suite is not listed, so eight test
+	files are unreachable and the guard is red** (done 2026-10-21, medium) —
+	board: epiq `QPDJ8RF` (Done). **Merged as `b1dd369` (PR #77), on the human's
+	authorisation** — the change breaks nothing, so per `AGENTS.md` it went
+	through without review. **The one line the guard asked for**:
+	`tools/run_tests.py`'s `SUITES` gains `tools/modelbench/test`. **And the
+	guard then found a second defect that had been invisible behind the first**
+	— `test_compliance_protocols.py` and `test_db_regrade.py` had no `__main__`
+	block, so running either on its own imported it and **exited 0 having run
+	nothing**. That is the failure the guard's own docstring names: *"one that
+	cannot be run by the obvious command is worse than one that fails loudly: it
+	reports success over content it never examined"*. **The ticket's own premise
+	— "the eight pass on their own" — was true and misleading**: seven of them
+	ran, and the two that did not also reported success. Both now carry the
+	house block the other six already have. **Measured in the worktree**:
+	`tools/modelbench/test` 81 passed, 0 failed; `tools/test` 62 passed 1 failed
+	→ **63 passed, 0 failed**; **14 suites passed, 1 failed** — the one remaining
+	failure is the known `ContentNegotiationTest` six in `dev/xhttp/test`
+	(epi `BFNRBG7`), deliberately not fixed. **The suite was checked for
+	hermeticity before the merge** — no absolute paths, no home references, no
+	network, and the one subprocess call builds its path from `__file__`.
 
 ## Scheduling
 
 - [ ] Give #104 a due date (by decision needed) — it is blocked on a style
 	ruling, not on writing code, so it needs a date for the ruling rather than
 	for the fix.
-- [ ] Give #75 a due date (by decision needed) — high importance, open since
-	2026-09-29, and it is the one task here that blocks nothing else while
-	everybody waits on it.
-- [ ] Give #77 a real due date or keep 2026-10-05 (by decision needed) — a
-	testing task with no test written yet is a task that will slip.
+- [x] Give #75 a due date — **done: 2026-10-23**, so the ask is closed. It
+	stays high importance and open since 2026-09-29, and it is still the one
+	task here that blocks nothing else while everybody waits on it.
+- [ ] Give #77 a real due date — **it has one now, 2026-10-17, and it is
+	overdue**, so the question is no longer "give it a date" but "is the
+	2026-10-17 date still the one it should have". A testing task with no test
+	written yet is a task that will slip, and this one already has.
 
 ## pybundle — after the implementation, 2026-10-17
 
