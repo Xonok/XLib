@@ -157,3 +157,6 @@ def test_a_record_with_no_session_is_reported_as_such():
 	got = db_regrade.regrade(db,{"sandbox":"/tmp/opencode/ep-gone-000000",
 		"model":"m","transport":"harness"},"/tmp",None)
 	xtest.equal(got,None,"a row whose session is not in the database cannot be re-graded")
+
+if __name__ == "__main__":
+	sys.exit(xtest.run(__file__))
