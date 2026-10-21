@@ -411,19 +411,51 @@ needed when there is no due date.
 	misses a change is worse than no watcher — it is trusted, so nothing checks it
 	by hand.
 - [ ] **#143 — xhttp: gzip regardless of Accept-Encoding** (by decision needed, medium) —
-	board: epiq `BFNRBG7` (Todo). **The only red in xhttp**: `send_response_full`
+	board: epiq `BFNRBG7` (In progress). **The only red in xhttp**: `send_response_full`
 	compresses whenever `compress=True`, which is the default, so a client that
 	sent no `Accept-Encoding`, an empty one, or `gzip;q=0` is answered with gzip
 	anyway. `ContentNegotiationTest` (`dev/xhttp/test/test_response.py:282`) is
 	the marker — six failures, deliberately not fixed, per the 1_0_1 release note
 	(epi `VC9QWYY`). **The shape is already sketched there**: reuse the
 	thread-local pattern `closing` uses — `wrap_handler` reads the header off the
-	request, `send_response_full` consults it, no public signature change. **One
-	case needs a ruling rather than an assumption**: what `send_response_full`
-	should do when it is called outside any request. **Filed 2026-10-19 because
+	request, `send_response_full` consults it, no public signature change. **Filed 2026-10-19 because
 	`AC9YJYQ`'s description claimed the six failures "are filed separately" and
 	they were not** — no ticket and no taskview task existed, which is how a
 	known defect goes quiet.
+	**RULED 2026-10-21: the negotiation filters the server's own `compress`
+	decision** — so outside a request there is nothing to filter against and the
+	server's own flag stands. **And: xhttp's code is human work, only its tests
+	are AI-written.** **The tests are landed** — `1ff8940` (PR #81),
+	`dev/xhttp/test/test_negotiation.py`: two guards that pass today and must
+	still pass after the fix (the ruled case, and `compress=False` winning), one
+	differential test that only bites on a **latched** filter (the likeliest
+	mistake in a thread-local implementation), and **one red on purpose** — two
+	requests on the *same* connection with different headers must get different
+	answers, which the six cannot say because each uses a fresh connection.
+	**The implementation and the release are the human's**: Traveller imports
+	`from xlib import xhttp_1_0_1 as xhttp`, so the fix reaches the running
+	server only through a **`1_0_2` release**, and `dev/xhttp/VERSIONS.md` is
+	xhttp.
+- [ ] **#187 — xhttp: two requests in one segment hang the connection and leak
+	the thread** (by decision needed, high) — board: epiq `7VFKBXT` (In progress).
+	**Found 2026-10-21, while writing the negotiation tests** — the keep-alive
+	path needs two requests on one connection, and the obvious way to send them
+	is the one that hangs. **Measured on xhttp's own code path: two requests in
+	separate segments → the connection is answered and ends; two requests in one
+	segment → `wrap_handler` never returns.** `read_request` reads up to 4096
+	bytes at a time, so both requests are consumed by the first read; the parser
+	returns the surplus as `req["leftover"]` and `_/websocket.py` uses it, but
+	**`wrap_handler` does not** — its `buffer` local is `b""` for every
+	iteration (`_/server.py:42`), so the second read asks a socket with nothing
+	left to give. **`serve_forever` starts a thread per connection**
+	(`_/server.py:33`), so **each affected connection leaks that thread**.
+	**`dev/xhttp/SPEC.md:135` says this is implemented**, and it is not — the
+	parser half is pinned by `ParseEdgeTest.test_two_requests_in_one_segment`,
+	and **nothing pins what `wrap_handler` then does with the second request**.
+	The **fix is one line** — carry `req["leftover"]` into the next iteration's
+	`buffer` — **and it is the human's**. **The test is landed** (`9632a53`,
+	PR #81), red on purpose: the server runs on a daemon thread and the test
+	asserts the thread *finished*, so a test for a hang cannot hang the suite.
 - [x] **#144 — xlint: reports clean inside a `.work/` worktree, checking nothing**
 	(done 2026-10-19, medium) — category: XLib. **Found 2026-10-19 while adding
 	html support to xlint.** The root repo's `.xlintignore` lists `.work/`, and

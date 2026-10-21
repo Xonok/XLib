@@ -22,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `54e9621` (2026-10-21), **snapshot taken 2026-10-21**, **in
+Basis: `master` at `9632a53` (2026-10-21), **snapshot taken 2026-10-21**, **in
 sync with `origin/master`** — **the skynet display now fits the pane it is in,
 and says how much it left out (PR #58 and PR #59, merged on the human's
 authorisation).**
@@ -421,6 +421,30 @@ Also standing, from the abandoned single-pass attempt:
 
 ## Blocked / needs attention
 
+- **xhttp: two requests in one segment hang the connection and leak the
+	thread. The spec says this is implemented, and it is not.** Measured
+	2026-10-21, on xhttp's own code path: **two requests in separate segments
+	→ the connection is answered and ends; two requests in one segment →
+	`wrap_handler` never returns.** `read_request` reads up to 4096 bytes at a
+	time, so a client that writes two requests before reading the first answer
+	has **both of them consumed by the first read**. The parser is careful — it
+	returns the surplus as `req["leftover"]`, and `_/websocket.py` uses it —
+	but **`wrap_handler` does not**: its `buffer` local is `b""` for every
+	iteration (`_/server.py:42`), so the second read asks a socket that has
+	nothing left to give. **`serve_forever` starts a thread per connection**
+	(`_/server.py:33`), so **each affected connection leaks that thread** for
+	the life of the process. **`dev/xhttp/SPEC.md:135` says this is
+	implemented** — *"read_request returns leftover, and wrap_handler feeds it
+	back as the next request's buffer"* — and the parser half is pinned by
+	`ParseEdgeTest.test_two_requests_in_one_segment`; **nothing pins what
+	`wrap_handler` then does with the second request**, and what it does is
+	hang. A browser does not pipeline, so Space-Traveller is not hit in
+	practice. **The fix is one line** — carry `req["leftover"]` into the next
+	iteration's `buffer` — **and it is the human's**: *"updating anything in
+	xhttp except the tests is human work"*, ruled 2026-10-21. The **test is
+	landed** (`9632a53`, PR #81) and is red on purpose; it runs the server on
+	a daemon thread and asserts the thread *finished*, so a test for a hang
+	cannot hang the suite. Board: epiq `7VFKBXT`.
 - **The secretary switched XLib's working tree onto a stray branch named `other`
 	this session, minutes before shutdown — caused, caught and reverted.** Two
 	`shell` calls issued in one block raced: the first began `rm -rf
