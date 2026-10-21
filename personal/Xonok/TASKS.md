@@ -513,9 +513,19 @@ needed when there is no due date.
 	enters it. **The other half of the ticket**: `main()` built the rules from
 	`args.paths[0]` alone, so a run over two repositories was governed by the first
 	one's chain — each path is now governed by its own, and the deepest watched
-	path wins for a file under two of them. **PR #68, commit `62f672b` — open and
-	not merged**, for the human's review: it changes what a tool does. **13 new
+	path wins for a file under two of them. **PR #68, merged 2026-10-21 on the human's
+	authorisation — on master as `dd2f27b`**, by rebase; the branch and the worktree
+	are deleted and epiq `62624K9` is in Done with a `Solution:` comment. **13 new
 	tests, all 13 failing against the old code**, and mutation-checked.
+- [x] **#166 — xlint watch reload: merge PR #68 and close epiq 62624K9** (done
+	2026-10-21, medium) — category: xlib. **Done the same day it was filed.** PR #68
+	merged by rebase as `dd2f27b`; the branch `fix/62624K9-xlint-watch-reload` and
+	the worktree `.work/62624K9-xlint-watch` are deleted; the ticket is in Done with
+	a `Solution:` comment naming the commit and the approach. **The follow-up that
+	was worth writing down**: the board sync had to be done twice before the writes
+	were durable, which became the **"Sync twice"** rule in `doc/epiq-workflow.md`
+	and a new line in `epiq-pending.py` — merged as `c7f9269` (PR #69, epiq
+	`9FJ358V`).
 
 ## Scheduling
 
