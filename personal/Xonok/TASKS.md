@@ -347,6 +347,26 @@ needed when there is no due date.
 	rather than the session. Three decisions taken 2026-10-18: record the
 	opencode child's pid, keep service-only sessions shown but uncorroborated,
 	and fold in the no-usable-pid and pid-reuse leaks.
+- [ ] **#173 — marduk: a `/new` in a window replaces its session and the
+	registry still names the old one — the panel shows two lines for one
+	window** (by 2026-10-23, medium) — board: epiq `0AFZHPW` (Todo), plus
+	`M9J6F8W` on the Agents board. The human's report, 2026-10-21: *"the panel
+	shows 3 unnumbered secretaries among the number ones… the unnumbered ones
+	are essentially secretary-1, so it doesn't make sense for there to be 3 of
+	them."* **Four windows were open (oc-agent slots 1–4) and the panel showed
+	six lines, three named `secretary`.** Two defects, one trigger (`/new`):
+	**the registry names a session while the durable thing is a window** — the
+	entry is written once at launch (`tools/oc-agent:140-150`) and never
+	updated, so one window was stale by two `/new`s, and when the live session
+	goes idle it drops off the panel and the *dead* launch session is shown in
+	its place; and **the live session loses its slot number** because
+	`~/.config/opencode/plugins/agent-title.ts` renames any session with a
+	default title to the *agent* name — proven, not inferred: a session created
+	with `agent:secretary` and no title had `title=None`, and after one model
+	call (the plugin's `context` hook) its title was `"secretary"`. **The fork
+	is the human's**: the launcher keeps the registry current, or marduk
+	reconciles by (workspace, name), or the plugin reports its own session
+	(exact, but it puts XLib's contract in an unversioned file).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
