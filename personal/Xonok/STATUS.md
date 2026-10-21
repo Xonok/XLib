@@ -9,8 +9,10 @@ bottom; this file stays a summary.
 
 - Update this file when you start or finish something, or when your progress
 	estimate changes. One line per work item: what, who, % done, where to look.
-- Claim `STATUS.md` before editing (`python3 tools/agent-coord.py claim
-	STATUS.md`), release when done.
+- **These state files are written by the secretary, at merge time.** A feature
+	branch does not carry them — a Done ticket does not carry `STATUS.md`,
+	`TASKS.md` or `HISTORY.md`. The rule and its reason are in
+	`doc/state-files-history.md`. Ruled by the human, 2026-10-21.
 - Finished items are appended to `HISTORY.md`, not moved to a "Recently done"
 	section here. The open list simply loses them. History is append-only:
 	nothing is rewritten or removed without the human's sign-off.
@@ -20,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `c38e23b` (2026-10-21), **snapshot taken 2026-10-21**, **in
+Basis: `master` at `54e9621` (2026-10-21), **snapshot taken 2026-10-21**, **in
 sync with `origin/master`** — **the skynet display now fits the pane it is in,
 and says how much it left out (PR #58 and PR #59, merged on the human's
 authorisation).**
@@ -289,8 +291,10 @@ the human's call.
 	`.opencode/opencode.jsonc` and `node_modules` are ignored too. There is no
 	coordinator agent file — planning and assumption-auditing belong to the main
 	model.
-- Live coordination state: `python3 tools/agent-coord.py status` (claims) /
-	`news` (changed rule files).
+- Live coordination state: `python3 tools/agent-coord.py news` (changed rule
+	files). **There is no `status` command any more** — the file-claim mechanism
+	was retired on 2026-10-21 (epiq `5S8FY10`), and with it the only way to ask
+	who held what. `check-clean` is the guard that remains.
 - **There are two epiq boards, one per repo, and 16 tickets moved between them
 	on 2026-09-30.** The filing rule is that a ticket belongs on the board of the
 	repo where its change lands, because that is the only board whose state
@@ -319,7 +323,7 @@ the human's call.
 | **xtest 1_1_0 — released** | secretary | **RELEASED 2026-10-20 — PR #55, on master as `e8ffe49`** (epi `48GH7NW`, Done). **Verified against the release rather than the source:** `from xlib import xtest` resolves to `xlib/xtest_1_1_0.py`, and that file runs xtest's own suite — 13 passed. The release gate ran this repository's own xlint over the bundle and it is clean. **The decision the release carries, written into `AGENTS.md`, `doc/development.md` and `dev/xtest/SPEC.md`:** *rewrite to xtest if it gets in the way*, and *always write new tests with xtest* — the human's ruling, *"standardize on xtest means eventually using only xtest. Avoiding a full rewrite is reasonable, but the decision should be tagged … so the dogfooding works and won't turn into two parallel systems."* The two names are also epiq tags on `QJEA7EM` and `48GH7NW`, so the decision is findable by tag | epiq `48GH7NW`, `QJEA7EM`, taskview `#155` |
 | **skynet: the window bounds** | secretary | **MERGED 2026-10-20 — PR #58 on master as `57d4e37`, PR #59 as `97d62e2`, both on the human's authorisation** (*"you can merge the changes, so I can test them myself"*). Board epiq `VTJVHMY` (Done), taskview `#158` (done). The cap comes from the space available — the terminal's own height, which in a tmux pane is the pane — and the six lines spoken for before a model is shown leave the rest, split evenly between the two sections **with the odd line to Today** (the human's ruling, 2026-10-20). A section with more to show spends one line of its allowance on the note, so a table with *n* lines of room shows *n − 1* models and one line of `… +N more`. **Measured**: the display fits every pane height from 1 to 49 lines, checked through a pty at each height; at 30 lines it is exactly 30. The suite is 26 tests, 19 of them new, in xtest's idiom; `xlint` is clean. **The human's review, 2026-10-20, in two parts**: the blank after the `Skynet` header is out (*"the current version of skynet doesn't have that empty line, so it's not necessary"*), and the section title moved into the header row to carry the column labels (*"dropping the 'Model' header in both tables and replacing it with the previous line's contents"*) — so each table shows **one more model** than before the review. The floor, where a pane is too short for the two sections, is six lines, and it gets the counts on one line (*"makes sense"*). **The watch loop now watches the terminal's size as well as the database's** — a resized pane has to redraw, or the old layout stays and overflows. | epiq `VTJVHMY`, taskview `#158`, PR #58, PR #59 |
 | **the repository's own guard over its test layout** | secretary | **MERGED 2026-10-21 — PR #77, on master as `b1dd369`**, on the human's authorisation, and without review because the change breaks nothing. `tools/run_tests.py`'s `SUITES` did not list `tools/modelbench/test`, so eight modelbench test files were unreachable and **the guard over the test layout was red** — the failure the guard exists for, reported by the guard itself. **The fix is the one line the guard asked for, and the guard immediately found a second defect it had been hiding**: two of the eight had no `__main__` block, so running either on its own imported it and **exited 0 having run nothing** — *"a suite that cannot be run by the obvious command is worse than one that fails loudly: it reports success over content it never examined"*, in the guard's own words. **The ticket's own premise, "the eight pass on their own", was true and misleading**: seven ran, and the two that did not also reported success. Measured in the worktree: `tools/modelbench/test` 81 passed, 0 failed; `tools/test` 62 passed 1 failed → **63 passed, 0 failed**; **14 suites passed, 1 failed** — the one remaining failure is the known `ContentNegotiationTest` six. The suite was checked for hermeticity before the merge — no absolute paths, no home references, no network | epiq `QPDJ8RF` (Done), taskview `#179` |
-| **the coordination mechanism** | secretary | **THE RULING IS BEING PREPARED — `5S8FY10` is the only ticket on the board assigned to the secretary's seat, it is 20 days old, and its own stated blocker (`8FVW49J`) landed on 2026-10-19.** The ticket proposes retiring the file-claim system, because a worktree per ticket makes the filesystem the boundary — and it needs the human's ruling on one thing: whether `personal/<person>/{STATUS,HISTORY,TASKS}.md` are written by the secretary **at merge time** rather than carried on feature branches, **which changes what a Done ticket is allowed to contain**. **The audit is written: `doc/audits/2026-10-21-claim-system.md`.** **Measured 2026-10-21, and two of the ticket's premises have moved**: **nothing checks a claim at commit time** — the pre-commit hook runs xlint, the pre-push hook validates ticket refs, neither reads `claims.json` — and **the claim key is the path, which differs per worktree**, so one source file has two claim keys in two disjoint claim stores and the conflict check cannot fire; and **0 of the 4 open branches modify the state files**, with `git merge-tree` between the two live branches clean — so **the collision the proposal exists to prevent is not currently happening**. That is the difference between a rule for a live problem and a rule for principle, and it is the human's to settle | epiq `5S8FY10` (Todo), `doc/audits/2026-10-21-claim-system.md` |
+| **the coordination mechanism** | secretary | **RULED AND LANDED 2026-10-21 — the file-claim system is retired, and the per-person state files are written by the secretary at merge time.** PR #79, on master as `54e9621`. **The audit is `doc/audits/2026-10-21-claim-system.md`** (commit `3497f7b`), and it is measured rather than read off the ticket: **nothing checked a claim at commit time** — the pre-commit hook runs xlint, the pre-push hook validates ticket refs, neither reads `claims.json`; and **the claim key was the path, which differs per worktree**, so one source file had two claim keys in two disjoint claim stores and the conflict check could not fire, while two of the three live worktrees had no `.agents/` at all. **What went:** `claim`, `release`, `release-all` and `status` — nothing in the repository called them. **What stayed:** `check-clean`, because it reads the **working tree**, so it needs no shared state and sees across worktrees. **What replaced it:** a worktree per ticket is the boundary, and **a Done ticket does not carry `STATUS.md`, `TASKS.md` or `HISTORY.md`** — the secretary writes them at merge time, which takes the file every session writes out of every branch's diff. **Seven new tests**, each checked to fail against the old code. **The loss is named:** there is no longer a way to ask who holds what. | epiq `5S8FY10` (Done), taskview `#184`, `doc/audits/2026-10-21-claim-system.md` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
@@ -1195,17 +1199,18 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	which was right at the time. The fork is moot now, so the ticket is ready
 	for the human's `ai-ok` and that call is theirs. **Now taskview `#180`
 	(due 2026-10-27); the re-measurement is on the ticket as a comment.**
-- **The working tree carries two uncommitted README edits, and they disagree
-	with each other.** `dev/xhttp/README.md` and `dev/xprod/README.md` both
-	gained an **"XLib rules"** section saying the library is human-written and
-	should not be edited by AI — `dev/xhttp/README.md:12` uses `##` and
-	`dev/xprod/README.md:29` uses `#`. **Nothing else in the repository carries
-	the convention**: `doc/development.md:94` covers the AI-written *spec*
-	marker, and no rule file or SPEC mentions a library that must not be edited.
-	**Four of the six dev libraries have no such section** (`xconf`, `xcsv`,
-	`xschema`, `xtest`), and `dev/xprod` has no SPEC.md or VERSIONS.md at all
-	(`DCF9EHW`). **These edits are not mine** — they were in the tree when this
-	session started — so they are recorded here rather than edited.
+- **Every dev library now says who wrote it, in the same section of a README.**
+	Ruled by the human, 2026-10-21: `dev/xhttp` and `dev/xprod` are
+	**hand-written**, and the other four are **AI-written** — so the four say
+	**the opposite**. **Four READMEs are new** (`xconf`, `xcsv`, `xschema`,
+	`xtest` had a SPEC.md and no README), and each carries an **"XLib rules"**
+	section in the same shape as the two hand-written ones. **The convention now
+	exists, but only in the six READMEs** — no rule file carries it, so nothing
+	announces it and nothing enforces it; `doc/development.md:94` still covers
+	only the AI-written *spec* marker. **The two hand-written READMEs are still
+	uncommitted and are not mine**, and they **disagree on heading level** —
+	`dev/xhttp/README.md` uses `##` and `dev/xprod/README.md` uses `#`. And
+	`dev/xprod` still has no SPEC.md or VERSIONS.md at all (`DCF9EHW`).
 - **Herdr now reports every open window's live session, and the running windows
 	picked the integration up without a restart.** The integration was installed
 	on 2026-10-21 and **verified in a fresh window** first — a pane launched
@@ -1314,13 +1319,19 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	is deliberate. If deliberate it should be written down; if not it belongs in
 	`1ZY2Q5Q`. Related: `Z491RDN`'s "entry written when the change reaches master"
 	has no tooling behind it.
-5. **Three pull requests rewrote `STATUS.md` from the same base, and merging them
-	meant three hand-resolutions.** They conflicted because each was written as a
-	snapshot of the moment before its own merge, so the merged file had to pick one
-	version of every shared claim. That happened twice already (#1/#11, then this
-	run) and will happen again while state-file rewrites are a per-ticket
-	deliverable. Worth deciding whether a STATUS.md rewrite is a ticket of its own
-	or a final step of the merge, since the second stops two agents racing for it.
+5. ~~**Three pull requests rewrote `STATUS.md` from the same base, and merging
+	them meant three hand-resolutions.** They conflicted because each was written
+	as a snapshot of the moment before its own merge, so the merged file had to
+	pick one version of every shared claim. That happened twice already (#1/#11,
+	then this run) and will happen again while state-file rewrites are a
+	per-ticket deliverable. Worth deciding whether a STATUS.md rewrite is a
+	ticket of its own or a final step of the merge, since the second stops two
+	agents racing for it.~~ **ANSWERED 2026-10-21: it is a final step of the
+	merge, and it is no longer a per-ticket deliverable at all.** The human
+	ruled that the per-person state files are written by the secretary **at merge
+	time** (epiq `5S8FY10`, PR #79) — so a branch does not carry them, which is
+	what stops two agents racing for them. **The question was open in this file
+	while the ruling was being prepared.**
 6. **Should `doc/style/prose.md` bind dispatched workers too?** The rule file
 	is reachable through `AGENTS.md`, which every agent reads, but a subagent
 	runs from its own prompt in `.opencode/agent/` and does not necessarily get

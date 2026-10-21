@@ -72,39 +72,43 @@ needed when there is no due date.
 	fixed with it**: a parameter is a name the function binds, so it is not
 	translated (spec **D40**). Commit `a9b9fe5` on
 	`fix/JD9DWVN-bundle-traveller` (PR #76).
-- [ ] **#184 — agent-coord: retire the file-claim system, and rule on who
-	writes the state files** (by 2026-10-27, medium) — board: epiq `5S8FY10`
-	(In progress, assigned to `opencode/secretary` — **the only ticket on the
-	board assigned to the secretary's seat**, and 20 days old). **The audit is
-	written: `doc/audits/2026-10-21-claim-system.md`**, commit `3497f7b` on
-	master, with the measurements, the options and the reproduction commands.
-	**The ticket's own prerequisite is gone** — `8FVW49J` landed 2026-10-19
-	(PR #47, `806253e`). **Three measurements, taken against the live tree on
-	2026-10-21.** **(1) Nothing checks a claim at commit time** — the
-	pre-commit hook runs xlint on staged `.py`/`.md`, the pre-push hook
-	validates ticket refs, and **neither reads `claims.json`**. **(2) The claim
-	key is the path, and the path differs per worktree** — `claim_paths`
-	(`agent-coord.py:659`) resolves to an absolute path, so one source file has
-	**two claim keys in two disjoint claim stores**, and the conflict check
-	compares key strings and cannot fire; `.agents/` is gitignored
-	(`.gitignore:2`), so **two of the three live worktrees have no `.agents/`
-	at all** and an agent there gets no claim and nothing tells it so.
-	**(3) The collision the proposal exists to prevent is not currently
-	happening** — **0 of the 4 open branches** modify the state files, and
-	`git merge-tree` between the two live branches is **clean**. **And the two
-	things that cut the other way**, which the audit says plainly: the claim
-	system is **the only guard the per-person state files have**, and every
-	session writes them; and the ticket's second half is **the human's
-	ruling**, because *"it changes what a Done ticket is allowed to contain"*.
-	**The question, narrowed to one line: do
-	`personal/<person>/{STATUS,HISTORY,TASKS}.md` get written by the secretary
-	at merge time, instead of being carried on feature branches?** **And a
-	third possibility the audit ends on, because it may be enough: keep
-	`check-clean`, drop `claim`/`release`/`status`** — `check-clean` reads the
-	**working tree**, so it needs no shared state, works in any checkout and
-	sees across worktrees. **The claim system's key is the thing that is
-	broken**, and `check-clean` has no key. **The implementation is programmer
-	work and has not been done.**
+- [x] **#184 — agent-coord: retire the file-claim system, and rule on who
+	writes the state files** (done 2026-10-21, medium) — board: epiq `5S8FY10`
+	(Done). **RULED AND LANDED 2026-10-21 — PR #79, on master as `54e9621`.**
+	**The audit is `doc/audits/2026-10-21-claim-system.md`** (commit `3497f7b`),
+	measured rather than read off the ticket. **Three measurements.** **(1)
+	Nothing checks a claim at commit time** — the pre-commit hook runs xlint, the
+	pre-push hook validates ticket refs, and neither reads `claims.json`.
+	**(2) The claim key was the path, and the path differs per worktree**, so one
+	source file had **two claim keys in two disjoint claim stores** and the
+	conflict check compares key strings and cannot fire; `.agents/` is
+	gitignored, so **two of the three live worktrees had no `.agents/` at all**.
+	**(3) The collision the proposal exists to prevent was not currently
+	happening** — 0 of the 4 open branches modified the state files. **The
+	human's ruling: delete `claim`/`release`/`release-all`/`status`, keep
+	`check-clean`, and write the state files at merge time.** **What went:** the
+	four commands and the `claim_paths` helper they were the only users of —
+	nothing in the repository called them. **What stayed:** `check-clean`,
+	because it reads the **working tree**, so it needs no shared state and sees
+	across worktrees. **What replaced it:** a worktree per ticket is the
+	boundary, and **a Done ticket does not carry `STATUS.md`, `TASKS.md` or
+	`HISTORY.md`** — the secretary writes them at merge time, which takes the
+	file every session writes out of every branch's diff, and which **answers
+	the open question in `STATUS.md` about state-file rewrites racing for the
+	same file**. **Seven new tests**, each checked to fail against the old code.
+	**The loss is named: there is no longer a way to ask who holds what.**
+- [ ] **#186 — the dev libraries say who wrote them, but only in the READMEs** —
+	by decision needed, low. **Ruled 2026-10-21: `dev/xhttp` and `dev/xprod`
+	are hand-written, and the other four are AI-written**, so the four say the
+	opposite — **four READMEs are new** (`xconf`, `xcsv`, `xschema`, `xtest` had
+	a SPEC.md and no README), each with an **"XLib rules"** section in the same
+	shape as the two hand-written ones. **The gap: the convention exists only in
+	the six READMEs.** No rule file carries it, so nothing announces it and
+	nothing enforces it — `doc/development.md:94` covers only the AI-written
+	*spec* marker, and no rule file mentions a library that must not be edited.
+	**The two hand-written READMEs are still uncommitted and are not mine**, and
+	they disagree on heading level (`##` in `dev/xhttp`, `#` in `dev/xprod`).
+	And `dev/xprod` still has no SPEC.md or VERSIONS.md at all (`DCF9EHW`).
 - [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
 	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
 	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)
