@@ -20,13 +20,13 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `e7ff041` (2026-10-21), **snapshot taken 2026-10-21**, **in
+Basis: `master` at `45ab7d5` (2026-10-21), **snapshot taken 2026-10-21**, **in
 sync with `origin/master`** — **the skynet display now fits the pane it is in,
 and says how much it left out (PR #58 and PR #59, merged on the human's
 authorisation).**
-**PR #50 is open and waiting for the human: it
-carries the second half of the `news` repair, which the PR #47 repair did not
-actually fix.** PR #47 is merged and pushed, and it carries the two
+**PR #50 carried the second half of the `news` repair, which the PR #47 repair
+did not actually fix; it is merged, on 2026-10-20 as `f12ebd5`.** PR #47 is
+merged and pushed, and it carries the two
 coordination fixes: `K93Z39B` (the `news` command) and `8FVW49J` (the
 `check-clean` guard). PR #44 is merged and pushed too, and it carries two
 fixes of its own: `XP56NNC` (the linter inside a worktree) and `2X3PZT3` (the
@@ -37,6 +37,18 @@ so did PR #34 (`MY4ZS5D`, the `git checkout` ban and the 2026-10-18 state
 files). The Traveller acceptance test has been run — the bundle was produced and
 does not run — **though the artefact is no longer on disk, so a repeat run is
 needed to see it again**.
+
+**Three things this sweep found, and the first is the next task worth doing:
+`RX5H4P3` reproduces** — a bundled function parameter that shadows a module
+global is renamed on the def line and not in the body, so the bundle compiles
+clean and then raises `NameError` at the first call. **The spec already rules
+it** (R4), so it needs an implementer, not a decision, and nothing is on it.
+Alongside it: **the repository's own guard over its test layout is red** — eight
+modelbench test files are unreachable by `tools/run_tests.py`, and the one-line
+fix is what the guard asks for (epi `QPDJ8RF`); and **`2VD2XZC`'s blocker is
+gone** — the rename it was waiting on is now a pure rename, and the ticket's
+`ai-ok` is the human's to give. The three are written out in *Blocked / needs
+attention* below, and are now taskview `#178`, `#179` and `#180`.
 
 **Five more merges on 2026-10-20, on the human's authorisation** ("you can
 commit the changes that are on master and whatever else makes sense"):
@@ -397,10 +409,10 @@ Also standing, from the abandoned single-pass attempt:
 	them, and because the near-miss is the clearest possible demonstration of why
 	`checkout` is the banned one.
 - **`agent-coord.py news` destroyed every agent's claims, and the rule changes
-	it exists to announce never arrived. The claims-wipe is FIXED and on master:
-	PR #47, commits `36554c9` and `806253e`. The workspace resolution is NOT:
-	PR #50 is open, waiting for the human. #142 (reopened), and `8FVW49J` for
-	the guard beside it.**
+	it exists to announce never arrived. Both halves are fixed and on master:
+	PR #47, commits `36554c9` and `806253e`, for the claims-wipe, and PR #50,
+	merged 2026-10-20 as `f12ebd5`, for the workspace resolution. #142
+	(reopened), and `8FVW49J` for the guard beside it.**
 	The four breaks and what they measure are in the Snapshot above. **What PR
 	#47 did not fix is the first break.** The repair settled on the opencode
 	client by walking this process's ancestry and assumed the client is an
@@ -1062,6 +1074,78 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	are a different set: #104–#110, #122, #123, #127, #133, #137, #138, #140,
 	#141, #143. The store is the record; `TASKS.md` holds this workspace's
 	**28** open items, not two.
+- **The repository's guard over its own test layout is red — eight modelbench
+	test files are unreachable by the one command meant to run them.** Measured
+	2026-10-21: `python3 tools/run_tests.py` gives **12 suites passed, 2 failed**,
+	and the two are `tools/test` and `dev/xhttp/test`. The `dev/xhttp` half is
+	the known `ContentNegotiationTest` six (`BFNRBG7`). **The `tools/test` half
+	is new**, and it is the guard that exists for exactly this failure:
+	`tools/test/test_suites.py:test_every_test_file_is_in_a_suite_or_a_listed_exception`
+	fails with **"test files that no runner reaches"** — all eight in
+	`tools/modelbench/test/` (`test_bench_mapping_hash.py`,
+	`test_compliance_protocols.py`, `test_db_regrade.py`,
+	`test_harness_mapping.py`, `test_ledger_state.py`,
+	`test_provider_error.py`, `test_raw_data.py`, `test_review_vocabulary.py`).
+	`run_tests.py`'s `SUITES` list has no `tools/modelbench/test` entry. **The
+	eight files pass on their own — 77 tests, 0 failed** — so the fix is the one
+	line the guard is asking for. **The cause is the modelbench work of
+	2026-10-20/21** (PRs #62–#67, #70), which added test files without adding
+	the suite. This is the failure class the guard was written for: *"a suite
+	that cannot be run is a suite that does not exist"*, and this one reported
+	success over content it never examined. **Filed as epiq `QPDJ8RF`,
+	taskview `#179`.**
+- **`RX5H4P3` reproduces, and it is a spec-conformance defect rather than a
+	design fork.** The bundler renames a module global to its prefixed name, and
+	a function parameter carrying the same name is a name defined inside the
+	function — so **R4 says it must not be translated**
+	(`tools/pybundle/SPEC.md:100-104`: *"A name defined inside a function or
+	class blocks translation of that name within it, so shadowing does not
+	break"*). **Measured 2026-10-21**: a module with `VALUE = 42` and
+	`def compute(VALUE): return VALUE + 1` bundles to
+	`def mod__helper__compute(mod__helper__VALUE): return VALUE + 1` — the
+	parameter is renamed on the def line and **the body's use of it is not**.
+	The bundle **compiles clean** and then raises **`NameError: name 'VALUE' is
+	not defined`** the first time the function is called. **Nothing is on it**:
+	no assignee, no comments, and — until this sweep — no taskview task and no
+	mention in this file's open list. **The spec already rules it**, so it needs
+	no decision from the human — it needs an implementer. It is the same failure
+	class as `JD9DWVN`, the defect that stopped the Traveller bundle from
+	running, and the Traveller acceptance test (`#137`) is still waiting on the
+	human's go. **The reproduction is on the ticket as a comment, and it is now
+	taskview `#178` (due 2026-10-23) — this is the strongest candidate on the
+	board.**
+- **`2VD2XZC`'s blocker was already resolved in this file on 2026-10-20, and the
+	board ticket still carries the old answer.** The xlint bullet above records
+	that `is_ignored` no longer excludes any path part named `test`, so the
+	rename moves four libraries **into** coverage rather than out of it, and the
+	fork the ticket recorded — widen the exclusion set, or accept the loss — is
+	moot. **The ticket has not been re-read since**: its last comment
+	(2026-10-01) still says *"ai-ok removed"* and *"the fork … is still
+	unmade"*. **Re-measured 2026-10-21**: `python3 tools/xlint/xlint.py
+	dev/xcsv/tests/test_xcsv.py` → `clean`, the same over a `test/` folder
+	(`dev/xhttp/test/test_response.py`) → `clean`, and `.xlintignore` excludes no
+	test folder. So the rename is a **pure rename**: four `git mv`s, four lines
+	in `tools/run_tests.py`, and the human's ruling of 2026-09-30
+	(`doc/development.md:140-142`) becomes true rather than outstanding. **A
+	scope question the ticket does not settle**: `xlib_dev/tests/` is a fifth
+	folder with the old name, and `xlib_dev/` is not a dev folder — the ruling
+	says "a library's tests go in a `test/` folder in its dev folder". **The
+	`ai-ok` tag was deliberately not restored** — "In progress" means the human
+	has ai-ok'd the ticket, and the tag came off because this fork was unmade,
+	which was right at the time. The fork is moot now, so the ticket is ready
+	for the human's `ai-ok` and that call is theirs. **Now taskview `#180`
+	(due 2026-10-27); the re-measurement is on the ticket as a comment.**
+- **The working tree carries two uncommitted README edits, and they disagree
+	with each other.** `dev/xhttp/README.md` and `dev/xprod/README.md` both
+	gained an **"XLib rules"** section saying the library is human-written and
+	should not be edited by AI — `dev/xhttp/README.md:12` uses `##` and
+	`dev/xprod/README.md:29` uses `#`. **Nothing else in the repository carries
+	the convention**: `doc/development.md:94` covers the AI-written *spec*
+	marker, and no rule file or SPEC mentions a library that must not be edited.
+	**Four of the six dev libraries have no such section** (`xconf`, `xcsv`,
+	`xschema`, `xtest`), and `dev/xprod` has no SPEC.md or VERSIONS.md at all
+	(`DCF9EHW`). **These edits are not mine** — they were in the tree when this
+	session started — so they are recorded here rather than edited.
 
 ## Settled — not to be reopened without cause
 

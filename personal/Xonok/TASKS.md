@@ -10,6 +10,47 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#178 — pybundle: a parameter that shadows a module global is renamed
+	on the def line and not in the body — NameError** (by 2026-10-23, high) —
+	board: epiq `RX5H4P3` (Todo). **Reproduced 2026-10-21, and it is the
+	strongest candidate on the board.** A module with `VALUE = 42` and
+	`def compute(VALUE): return VALUE + 1` bundles to
+	`def mod__helper__compute(mod__helper__VALUE): return VALUE + 1` — the
+	parameter is renamed on the def line, the body's use of it is not. The
+	bundle **compiles clean** and then raises `NameError: name 'VALUE' is not
+	defined` at the first call. **The spec already rules it** (`SPEC.md:100-104`,
+	R4: *"a name defined inside a function or class blocks translation of that
+	name within it, so shadowing does not break"*), so this is conformance, not
+	a design fork — **no decision needed from the human, only an
+	implementer**. Nothing was on it: no assignee, no comments, no taskview
+	task, and no mention in STATUS.md's open list. It is the same failure class
+	as `JD9DWVN`, the defect that stopped the Traveller bundle from running —
+	and the Traveller acceptance test (#137) is still waiting on the human's
+	go.
+- [ ] **#179 — run_tests.py: the modelbench suite is not listed, so eight test
+	files are unreachable and the guard is red** (by 2026-10-22, medium) —
+	board: epiq `QPDJ8RF` (Todo, filed 2026-10-21).
+	`tools/test/test_suites.py` fails with **"test files that no runner
+	reaches"** — all eight in `tools/modelbench/test/`, added by the modelbench
+	work of 2026-10-20/21 (PRs #62–#67, #70) without adding the suite. **The
+	eight pass on their own — 77 tests, 0 failed** — so the fix is the one line
+	the guard is asking for. This is the failure class the guard was written
+	for: *"a suite that cannot be run is a suite that does not exist"*, and this
+	one reported success over content it never examined. **One line, and it
+	makes a documented claim true again.**
+- [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
+	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
+	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)
+	still names four libraries as *"being renamed"*. **The ticket's blocker was
+	resolved on 2026-10-20 by `AK633QC`** — `test` is no longer a built-in
+	exclusion and `.xlintignore` excludes no test folder, so the rename moves
+	those libraries **into** lint coverage rather than out of it. **Re-measured
+	2026-10-21**: `xlint` over `dev/xcsv/tests/test_xcsv.py` → clean, and over
+	a `test/` folder → clean. So it is four `git mv`s and four lines in
+	`tools/run_tests.py`. **The board ticket has not been re-read since
+	2026-10-01** and still carries *"ai-ok removed"* and *"the fork … is still
+	unmade"*. **A scope question it does not settle**: `xlib_dev/tests/` is a
+	fifth folder with the old name, and `xlib_dev/` is not a dev folder.
 - [x] **#128 — pybundle: inlining across indentation conventions — CLOSED by
 	ruling, 2026-10-15** (done 2026-10-15, high) — board: epiq `S1G5037` (Todo).
 	Opened 2026-10-15 when a tab-indented module inlined into a space-indented
