@@ -567,7 +567,12 @@ Also standing, from the abandoned single-pass attempt:
 	**One thing to know about the live machine:** the panel is running the fix
 	because the process was restarted from the working tree; **a restart before
 	the PR merges brings back the old behaviour**, and the merge makes it
-	permanent.
+	permanent. **And the plugin link points at the branch's worktree**
+	(`~/.config/opencode/plugins/instance-report` →
+	`.work/0AFZHPW-window-session/tools/marduk/plugin/instance-report`), so it
+	dangles once the worktree goes — **re-point it at
+	`tools/marduk/plugin/instance-report` in the root checkout after the
+	merge**, or a new window will not report itself and will show the old way.
 - **Work on a branch is not live until it merges.** Established by `HC1ZJK6`:
 	the `worker-ling` → `worker-longcat` fix for `dispatch general` arrived as an
 	uncommitted working-tree edit, and moving it onto a branch — which the
