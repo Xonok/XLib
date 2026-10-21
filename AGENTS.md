@@ -4,7 +4,7 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 `.agents/agent-notes-<id>.md` is a per-agent, git-ignored file for session state. `.agents/shared-notes.md` is a shared, cross-agent file for user preferences and cross-cutting context. Both survive `/new`.
 
-Multiple agents may work in this repo at once. Coordinate through `tools/agent-coord.py`: claim files before editing, release when done, `status` to see who holds what. Claim fails if the other agent holds the same path.
+Multiple agents may work in this repo at once. **A worktree per ticket is the boundary** — each agent works in its own checkout, so two agents cannot edit one file in one place. Before a first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. **There is no file-claim mechanism**: the one this repository had until 2026-10-21 keyed claims by absolute path, which a worktree changes without changing the file, so one file had two claim keys that could not collide, and nothing checked a claim at commit time, so it protected nothing the filesystem was not already protecting.
 
 **Testing**: the repository's testing solution is `xtest` (`dev/xtest/`), and
 standardising on it means eventually using only xtest. Two rules: **rewrite to
@@ -34,17 +34,17 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `doc/style/prose.md` | How to explain technical things so the human can check them |
 | `doc/plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps; index in `doc/plans/README.md` |
 | `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
-| `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). Claim/update the `personal/<person>/...` path; claims resolve symlinks by realpath. |
-| `personal/<person>/HISTORY.md` (tracked) — the append-only record of what happened and when. STATUS.md states the present and only the present; anything worth reading in six weeks goes in HISTORY.md instead. Claim before appending. |
+| `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). **Written by the secretary at merge time, not carried on feature branches** — a Done ticket does not carry the state files. |
+| `personal/<person>/HISTORY.md` (tracked) — the append-only record of what happened and when. STATUS.md states the present and only the present; anything worth reading in six weeks goes in HISTORY.md instead. **Also written by the secretary at merge time**, for the same reason. |
 
 The following rules live in dedicated docs files and are also linked from the table above:
 
 | File | What it covers |
 |------|---------------|
 | `doc/epiq-workflow.md` | Epiq board mechanics: per-actor writes, **sync twice — a sync that reports `skipped` has not drained anything**, stranded events |
-| `doc/working-tree.md` | Check-clean before editing, don't touch others' uncommitted changes; **`git checkout` is banned** — use `git switch` / `git restore`, and prefer a worktree to switching at all. **`git reset --hard` and `git reset --merge` are banned**; plain `git reset` is allowed but it resets the index, so it silently unstages another agent's work |
+| `doc/working-tree.md` | Check-clean before editing, don't touch others' uncommitted changes; **a worktree per ticket is the boundary, and the file-claim mechanism is gone**; **`git checkout` is banned** — use `git switch` / `git restore`, and prefer a worktree to switching at all. **`git reset --hard` and `git reset --merge` are banned**; plain `git reset` is allowed but it resets the index, so it silently unstages another agent's work |
 | `doc/paths-in-tracked-files.md` | No machine-specific paths in tracked files; use repo-relative or `.agents/machine-info.md` |
-| `doc/state-files-history.md` | STATUS.md vs HISTORY.md; append-only history policy |
+| `doc/state-files-history.md` | STATUS.md vs HISTORY.md; append-only history policy; **who writes them, and when — the secretary, at merge time** |
 | `doc/versioning.md` | Library versioning scheme: revision/minor/major bumps, deprecation timeline |
 | `doc/development-approach.md` | Dev folders, versioned imports, VERSIONS.md |
 | `doc/code-structure.md` | Entry file = public API only; internals in separate files; no `__init__.py` at library root |
