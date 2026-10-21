@@ -468,12 +468,28 @@ Also standing, from the abandoned single-pass attempt:
 	(*"the panel shows 3 unnumbered secretaries among the number ones… the
 	unnumbered ones are essentially secretary-1, so it doesn't make sense for
 	there to be 3 of them"*), filed as epiq `0AFZHPW` (XLib) and `M9J6F8W`
-	(Agents), task **#173**. **Four windows were open** (oc-agent slots 1–4, all
-	four registry pids alive) and the panel showed **six lines, three of them
-	named `secretary`** — so the panel was wrong in two ways at once, and the
-	wrongness is not marduk's alone. **First, the registry names a session while
-	the durable thing is a window.** `~/.opencode/agents/<sessionID>.json` is
-	written once at launch (`tools/oc-agent:140-150`) and never updated; a
+	(Agents), task **#173**. **The human's decision, 2026-10-21**: *"the result
+	must be some kind of process that represents the specific opencode instance,
+	even if the backend is the same… when a new session appears, it should be
+	possible to determine whether it's in the same opencode instance (not the
+	kitty or herd window, but the opencode process within it)."* **So the
+	identity is the opencode process and the link comes from the process
+	itself — and the mechanism for it exists and is proved.** A local plugin
+	with a **`tui` entrypoint runs inside the opencode TUI process** (a local
+	plugin is a directory under `~/.config/opencode/plugins/`, and its
+	entrypoints are resolved by name inside it — `server.ts` for the service,
+	`tui.ts` for the TUI), and `ctx.ui.router.current()` is the session the
+	window is on. **Measured against the registry, live: three of the four
+	windows were showing the wrong session** — only the one that had never been
+	`/new`ed was right. The Space-Traveller window is the case the panel hides
+	best: its live session has been idle for hours, so it is not in
+	`/api/session/active`, so the panel shows its **dead launch session** — which
+	is what *"secretary-2 idle⚠ 14h15m"* is. **Four windows were open** (oc-agent
+	slots 1–4, all four registry pids alive) and the panel showed **six lines,
+	three of them named `secretary`** — so the panel was wrong in two ways at
+	once, and the wrongness is not marduk's alone. **First, the registry names a
+	session while the durable thing is a window.** `~/.opencode/agents/<sessionID>.json`
+	is written once at launch (`tools/oc-agent:140-150`) and never updated; a
 	`/new` replaces the window's session and the entry keeps naming the old one.
 	Measured on the live machine: the XLib slot-3 window had been `/new`ed at
 	18:06 and again at 22:22, so its entry was stale by two `/new`s, and the
@@ -499,13 +515,43 @@ Also standing, from the abandoned single-pass attempt:
 	the **plugin that names every session is in no repository** — `~/.config/opencode`
 	is not a git repo, and the only other copy on the machine is a v1-era backup;
 	every session name on the sidebar and on the panel comes from it. **The fork
-	is the human's** and is the ticket's own question: the launcher keeps the
-	registry current by polling, or marduk reconciles the registry against the
-	service by (workspace, name), or the plugin reports its own session keyed by
-	pid — exact, no heuristics, but it puts XLib's contract inside an unversioned
-	file. The first two both need the naming fix first, so the launcher half is
-	a comment on `GY2AVQD` (the session title is a fourth surface the
-	allocator's name has to be rendered on).
+	is settled — by the human's own ruling, and the third option is the one that
+	works:** the process reports its own session, keyed by pid, and marduk joins
+	that against the registry's pid. **The proof, live, on every opencode process
+	on this machine:**
+
+| pid | slot | role | workspace | registry names | the process is on |
+|---|---|---|---|---|---|
+| 26248 | 4 | secretary-4 | XLib | `ses_ea320750…` | `ses_ea320750…` same |
+| 4370 | 1 | secretary | Agents | `ses_ea6ba68d…` | `ses_ea2e5a47…` **different** |
+| 10116 | 3 | secretary-3 | XLib | `ses_ea6d8376…` | `ses_ea53c242…` **different** |
+| 23231 | 2 | secretary-2 | Space-Traveller | `ses_ea784d83…` | `ses_ea611963…` **different** |
+
+	**Three of the four windows were showing the wrong session, and only the one
+	that had never been `/new`ed was right.** The implementation is three pieces
+	and is written out in full on `0AFZHPW`: a TUI plugin writing
+	`~/.opencode/instances/<pid>.json` (`{pid, cwd, sessionID, role, at}`, with
+	`sessionID` **null while the window is on no session** — the honest answer
+	between a `/new` and the first message of the new one); marduk's join, which
+	changes the first step of `_collect()` so that each registry entry names the
+	session **its pid reports** rather than the one recorded at launch, with the
+	entry's role and workspace staying with the window; and the launcher half,
+	which is a comment on `GY2AVQD` (the session title is a fourth surface the
+	allocator's name has to be rendered on, and the join is by pid but the panel
+	still needs a *name* for each window). **Two things an implementer should
+	not re-learn:** the TUI plugin's export is **`Plugin.define`** — a named
+	`define` import fails and is **silently ignored**, so the TUI looks fine and
+	the plugin never runs — and `ctx.ui.tabs.enabled()` is **false** here
+	(`cli.json` has `"tabs": {"mode": "off"}`), so the session comes from
+	`ctx.ui.router.current()`, not from the tabs. **What is left is placement
+	and hands:** where the two plugins live (the `~/.config/opencode/agent`
+	symlink into the Agents workspace is the pattern) and **who builds it** — a
+	contract change across `tools/marduk`, `tools/oc-agent` and a plugin in the
+	human's config directory, which is programmer work; the secretary does not
+	write programs, and the human has overridden that once (2026-10-17) after
+	being told. **A probe of the reporter is installed** at
+	`~/.config/opencode/plugins/instance-report/tui.ts` (it is what produced the
+	table above); it is in no repository and load-bearing for nothing yet.
 - **Work on a branch is not live until it merges.** Established by `HC1ZJK6`:
 	the `worker-ling` → `worker-longcat` fix for `dispatch general` arrived as an
 	uncommitted working-tree edit, and moving it onto a branch — which the

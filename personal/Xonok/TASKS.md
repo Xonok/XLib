@@ -363,10 +363,18 @@ needed when there is no due date.
 	`~/.config/opencode/plugins/agent-title.ts` renames any session with a
 	default title to the *agent* name — proven, not inferred: a session created
 	with `agent:secretary` and no title had `title=None`, and after one model
-	call (the plugin's `context` hook) its title was `"secretary"`. **The fork
-	is the human's**: the launcher keeps the registry current, or marduk
-	reconciles by (workspace, name), or the plugin reports its own session
-	(exact, but it puts XLib's contract in an unversioned file).
+	call (the plugin's `context` hook) its title was `"secretary"`.
+	**The fork is settled by the human's own ruling (2026-10-21): the identity
+	is the opencode process, and the process reports its own session.** The
+	mechanism exists and is proved: a local plugin with a **`tui` entrypoint runs
+	inside the opencode TUI process**, and `ctx.ui.router.current()` is the
+	session the window is on. **Measured live against the registry: three of the
+	four windows were showing the wrong session** — only the one that had never
+	been `/new`ed was right. The fix is three pieces, written out in full on the
+	ticket: a TUI plugin writing `~/.opencode/instances/<pid>.json`; marduk's
+	join, so each registry entry names the session **its pid reports** rather
+	than the one recorded at launch; and the launcher exporting the window's
+	name so the session can carry it (a comment on `GY2AVQD`).
 - [x] **#116 — xhttp: fix `_/websocket.py` so `xlib_dev` can load it** (done
 	2026-10-10, high) — import chain fixed; `_/websocket.py` now uses
 	`from .. import xhttp`. `from xlib_dev import xhttp` loads and tests pass.
