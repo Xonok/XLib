@@ -145,13 +145,13 @@ needed when there is no due date.
 	opens the README; a rule in `doc/development.md` binds an agent that never
 	opens it, and `AGENTS.md` would announce a change to it through `news`.
 	Also open: `dev/xprod` has no SPEC.md and no VERSIONS.md (`DCF9EHW`).
-- [ ] **#192 — Mallesne's tunnel discards a request when the backend
+- [ ] **#192 — a private project's tunnel discards a request when the backend
 	connection dies — the client waits forever** (by 2026-10-24, high) — board:
 	epiq `GA6MVE9` (In progress). **The human's own reproduction, 2026-10-22:**
 	*"I restart the traveller server, but not the frontend."* Measured **7 of
 	30 trials stall** — the client gets nothing at all, forever — which is
 	exactly *"stalls less often, but still sometimes does"*. **The mechanism,
-	proven by instrumentation.** Mallesne's `forward` opens a backend connection
+	proven by instrumentation.** a private project's `forward` opens a backend connection
 	for the client's first request, then hands the rest of the client connection
 	to `ws_sender`, a thread tunnelling client→backend on *that* socket. When
 	the backend dies, `forward`'s `recv` gets EOF, `forward` returns and closes
@@ -167,10 +167,10 @@ needed when there is no due date.
 	**It is a race**, which is why it is intermittent. **The fix, measured**:
 	as now (discard the request) **7/30**; close the client when the backend
 	ends **0/30**; close the client when a request is discarded **8/30**.
-	**The winner is one line in Mallesne's `forward`** — in the `finally`,
+	**The winner is one line in a private project's `forward`** — in the `finally`,
 	after `sock.close()`, also `client.close()`, so the client sees its
 	connection closed and the browser reconnects instead of waiting on a
-	request that will never be answered. **Mallesne's `server.py` is the
+	request that will never be answered. **a private project's `server.py` is the
 	human's code**, so it is theirs to make. **This is NOT the pipelining bug**
 	(`7VFKBXT`): that is two requests in one segment, and its fix is xhttp's
 	`buffer = req["leftover"]`, **which the human has already restored in
@@ -365,9 +365,9 @@ needed when there is no due date.
 	the tool shell — under opencode 2 it is not. The shell descends from the
 	shared service and the client is a separate process, so the walk finds the
 	service, whose cwd is the home directory, and the session resolves to
-	`/home/xonok`. **Measured live, in the session that found it: `news` printed
-	`no rule files found in /home/xonok — nothing checked`, 0 rule files, and
-	`workspace` printed `/home/xonok`.** The verification recorded on the ticket
+	`~`. **Measured live, in the session that found it: `news` printed
+	`no rule files found in ~ — nothing checked`, 0 rule files, and
+	`workspace` printed `~`.** The verification recorded on the ticket
 	was taken in a session whose ancestry happened to hold a client; the topology
 	this machine actually runs — one service, four clients, no client in any tool
 	shell's ancestry — was not covered. **So the `git checkout` ban, which this
@@ -499,7 +499,7 @@ needed when there is no due date.
 	`tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule
 	— imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag
 	family (7 flags). **23 new tests; the suite is 90 green.** **Measured on
-	Traveller's 27 html files and Mallesne's one: unclosed 0, stray 0, depth 774 —
+	Traveller's 27 html files and a private project's one: unclosed 0, stray 0, depth 774 —
 	589 of them the one systematic off-by-one — spaces 0, trailing whitespace 7,
 	double blank 2, final newline 0.** The depth is one finding from the earlier
 	measurement (773 and 588) and the shape matches: the same 184 deeper findings,
@@ -507,7 +507,7 @@ needed when there is no due date.
 	3 that earlier script found: the difference is four lines ending in a tab**,
 	which xlint's own generic rule catches and that script's did not. The corpus
 	is clean on structure, so the two structural rules have their own fixtures
-	rather than the acceptance test; Mallesne's one html file is clean on
+	rather than the acceptance test; a private project's one html file is clean on
 	everything.
 - [ ] **#140 — New XLib html-bundling library + watch option** (by decision needed,
 	medium) — board: epiq `WAH4BYM` (the library) + `6BGG7TH` (the watch option),
@@ -580,11 +580,11 @@ needed when there is no due date.
 	working version and later broke it"* — is exactly right. `SPEC.md:135`
 	still describes the working behaviour, because the spec was written when it
 	worked; its line reference is stale.
-	**Reproduced through the real tunnel** — Mallesne's `forward` verbatim, the
+	**Reproduced through the real tunnel** — a private project's `forward` verbatim, the
 	real released `xhttp_1_0_1`: **one write → 1 response and then silence
 	forever**; two writes → 2 responses; with the line restored → 2 either
 	way. **The fix belongs in the BACKEND** — a broken proxy in front of a
-	fixed backend works, because Mallesne's `forward` already does
+	fixed backend works, because a private project's `forward` already does
 	`sock.sendall(leftover)`. **The trigger is specifically two requests in ONE
 	segment**; "the second request sent before the first answer is read" is
 	fine in every combination. **Not confirmed:** the human's *"specifically
