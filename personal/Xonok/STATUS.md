@@ -22,8 +22,12 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `eaac0d1` (2026-10-22), **snapshot taken 2026-10-22**, **in
-sync with `origin/master`** — **the skynet display now fits the pane it is in,
+Basis: `master` at `28c65d3` (2026-10-22), **snapshot taken 2026-10-22**, **in
+sync with `origin/master`** — **the repository no longer states the human's
+identity: the one history entry that quoted the reviewer's real name, the
+private workspace slug and the private repo names was redacted in place (PR
+#84), and five board descriptions no longer carry the private project names.**
+**The skynet display now fits the pane it is in,
 says how much it left out (PR #58 and PR #59), and gives the room a section
 does not need to the section that has more to show (PR #82).**
 **Herdr is the human's active workspace manager now, and tmux holds the passive
@@ -325,6 +329,7 @@ the human's call.
 | **the repository's own guard over its test layout** | secretary | **MERGED 2026-10-21 — PR #77, on master as `b1dd369`**, on the human's authorisation, and without review because the change breaks nothing. `tools/run_tests.py`'s `SUITES` did not list `tools/modelbench/test`, so eight modelbench test files were unreachable and **the guard over the test layout was red** — the failure the guard exists for, reported by the guard itself. **The fix is the one line the guard asked for, and the guard immediately found a second defect it had been hiding**: two of the eight had no `__main__` block, so running either on its own imported it and **exited 0 having run nothing** — *"a suite that cannot be run by the obvious command is worse than one that fails loudly: it reports success over content it never examined"*, in the guard's own words. **The ticket's own premise, "the eight pass on their own", was true and misleading**: seven ran, and the two that did not also reported success. Measured in the worktree: `tools/modelbench/test` 81 passed, 0 failed; `tools/test` 62 passed 1 failed → **63 passed, 0 failed**; **14 suites passed, 1 failed** — the one remaining failure is the known `ContentNegotiationTest` six. The suite was checked for hermeticity before the merge — no absolute paths, no home references, no network | epiq `QPDJ8RF` (Done), taskview `#179` |
 | **the coordination mechanism** | secretary | **RULED AND LANDED 2026-10-21 — the file-claim system is retired, and the per-person state files are written by the secretary at merge time.** PR #79, on master as `54e9621`. **The audit is `doc/audits/2026-10-21-claim-system.md`** (commit `3497f7b`), and it is measured rather than read off the ticket: **nothing checked a claim at commit time** — the pre-commit hook runs xlint, the pre-push hook validates ticket refs, neither reads `claims.json`; and **the claim key was the path, which differs per worktree**, so one source file had two claim keys in two disjoint claim stores and the conflict check could not fire, while two of the three live worktrees had no `.agents/` at all. **What went:** `claim`, `release`, `release-all` and `status` — nothing in the repository called them. **What stayed:** `check-clean`, because it reads the **working tree**, so it needs no shared state and sees across worktrees. **What replaced it:** a worktree per ticket is the boundary, and **a Done ticket does not carry `STATUS.md`, `TASKS.md` or `HISTORY.md`** — the secretary writes them at merge time, which takes the file every session writes out of every branch's diff. **Seven new tests**, each checked to fail against the old code. **The loss is named:** there is no longer a way to ask who holds what. | epiq `5S8FY10` (Done), taskview `#184`, `doc/audits/2026-10-21-claim-system.md` |
 | **xAudit tool** | — | Decided, not started | `doc/plans/xaudit.md` |
+| **personal details in a public repository** | secretary | **The human ruled, 2026-10-22, that personal details do not belong in the repo — and `Xonok/XLib` is public** (`gh repo view Xonok/XLib` → `visibility: PUBLIC`), so the tree on `master` and the board's `__epiq_state__` branch are both readable by anyone. **Landed: the one `HISTORY.md` entry that quoted the reviewer's real name, the private workspace slug and the private repo names was redacted in place** (PR #84, `28c65d3`, documentation only, merged without review per `AGENTS.md`), and five board descriptions no longer carry the private project names (`3EEXMRK`, `SNXBR23`, `QKRW2Z0`, `5DZ8NB1`, `N56NE6M`). **Redacted in place, not corrected by an appended entry** — an appended entry leaves the values standing in the entry it claims to supersede, and the human's ruling wins over the append-only rule in this one case. **The git history and the board's event log are left alone by the human's own sentence** — *"these particular details aren't sensitive, so it's fine if careful checking of gits logs can reveal them. The issue is more a matter of principle."* **What is left**: the residue (`#197`) and the prevention mechanism (`#196`, epi `EFJ4ZC6`, tagged `human-input-needed`). | epiq `53XDNKC` (Done), `EFJ4ZC6` (Todo), taskview `#196`, `#197` |
 | **taskview periodic time refresh** | — | Planned only | `doc/plans/taskview-time-refresh.md` |
 
 ### Merging
@@ -1464,6 +1469,25 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	has its meaning changed, because the definition is prefixed and the bare name
 	stays the module. It is also a second class of unprefixed name alongside the
 	non-local star import D24 warns about.
+10. **Personal details: how far does the removal go, and who cleans the board's
+	comments?** The human's ruling of 2026-10-22 was general — *"personal details
+	should not be in the repo"* — and it has been applied to the human's own
+	identity. **Still there, and the human's to rule on:** the private project
+	names in `tools/taskview/SPEC.md` (with its test fixtures) and
+	`tools/tmux-xlib.sh`, the colleagues' names in `HISTORY.md` and in two board
+	descriptions, and the machine's home path in
+	`doc/audits/2026-09-11-workspace.md`. The first two are the human's own
+	earlier ruling about the bbprs README — R7: *"stops carrying one user's
+	workspace, repos, account or colleagues' names"* — applied to the rest of the
+	repository; the third is already against `doc/paths-in-tracked-files.md`.
+	**The trade-off in the spec**: `tools/taskview/SPEC.md` documents the
+	category vocabulary the human's own task store actually uses, so genericising
+	those names makes the spec describe a vocabulary the store does not have.
+	**The board's ten comments cannot be cleaned from this session** — epiq lets
+	an actor edit or delete only its own comments, one of them is under the
+	human's own board identity, and seven are under `opencode/secretary`. So the
+	human either pastes the redacted text (it is a comment on `EFJ4ZC6`) or a
+	session runs as `opencode/secretary` and does the other seven.
 
 ## Pointers
 

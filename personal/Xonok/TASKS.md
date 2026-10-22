@@ -10,6 +10,37 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#196 — personal details: a rule and a check so an identifier cannot
+	reach a tracked file or the board** (by decision needed, high) — board: epiq
+	`EFJ4ZC6` (Todo). **The human's ruling, 2026-10-22:** *"Personal details
+	should not be in the repo. Remove them from history and then let's figure out
+	ways to prevent this from happening again. These particular details aren't
+	sensitive, so it's fine if careful checking of gits logs can reveal them. The
+	issue is more a matter of principle."* `Xonok/XLib` is **public**
+	(`gh repo view Xonok/XLib` → `visibility: PUBLIC`), so the tree on `master`
+	and the board's `__epiq_state__` branch are both readable by anyone.
+	**Nothing in the rules stops the next agent from writing a value into a
+	record** — the bbprs fix was a one-off, asked for by the human, and the
+	record of it kept the values. **The proposal, three options with the
+	trade-off written down on the ticket:** a rule file; a rule plus a
+	mechanical check that refuses the commit; the check plus a gate on the
+	board's own push. **The check's token list lives outside the repository**
+	(`~/.config/xlib/personal-details.txt`), because a check that keeps the
+	forbidden values in the repository is itself the leak.
+- [ ] **#197 — personal details: the residue — the tree's project names, the
+	colleagues' names, and the board's ten comments** (by decision needed,
+	medium) — board: epiq `EFJ4ZC6` (Todo). **Measured, not assumed, after
+	`53XDNKC`.** **In the tracked tree:** the private project names used as
+	examples and as fixtures in `tools/taskview/SPEC.md`,
+	`tools/taskview/test/test_taskupdate.py` and `tools/tmux-xlib.sh`; the
+	machine's home path in `doc/audits/2026-09-11-workspace.md`; the
+	colleagues' names in `HISTORY.md`; the account name in
+	`tools/test/test_agent_coord.py`. **In the board:** ten comments carry the
+	project names, the colleagues' names and the email address, and two
+	descriptions carry the colleagues' names. **Epiq lets an actor edit or
+	delete only its own comments**, so the board's part needs identities this
+	session does not have — the descriptions were editable by anyone, the
+	comments are not.
 - [x] **#185 — bbprs: the account, the workspace and the repos are hardcoded —
 	review and merge PR #78** (done 2026-10-21, high) — board: epiq `PNAJ6D0`
 	(Done). **The public tool carried one user's Bitbucket nickname, the
