@@ -106,9 +106,9 @@ hold: the repair settled on the opencode *client* by walking this process's
 ancestry, and it assumed the client is an ancestor of the tool shell. Under
 opencode 2 it is not — the shell descends from the shared service, and the
 client is a separate process — so the walk finds the service, whose cwd is the
-home directory, and the session resolves to `/home/xonok` again. **Measured
+home directory, and the session resolves to `~` again. **Measured
 live on 2026-10-20, in a session shaped like this one: `news` printed `no rule
-files found in /home/xonok — nothing checked`, 0 rule files.** The
+files found in ~ — nothing checked`, 0 rule files.** The
 verification recorded on the ticket was taken in a session whose ancestry
 happened to hold a client; the topology this machine actually runs — one
 service, four clients, no client in any tool shell's ancestry — was not
@@ -162,7 +162,7 @@ spaces-not-tabs, with the depth measured in the file's own unit). The code is
 `tools/xlint/_html.py` — a tokenizer, one walk over the tags, and the depth
 rule — imported by `xlint.py`, with a `--no-html-*` flag family (seven flags) and
 `.html` in `_ALL_SUFFIXES`. **Twenty-three new tests; the suite is 90 green.**
-**Measured on the acceptance corpus (Traveller's 27 html files and Mallesne's
+**Measured on the acceptance corpus (Traveller's 27 html files and a private project's
 one): unclosed 0, stray closer 0, depth 774** — 589 of them the one systematic
 off-by-one, and the single -1 is `main.html:134` exactly as the earlier
 measurement said. The earlier measurement said 773 and 588: the one-finding
@@ -314,7 +314,7 @@ the human's call.
 | **modelbench** | — | Under active work (commits 2026-09-28/29 replaced the results catalogue with `ledger.py`); two questions left | `tools/modelbench/`, taskview #61, #63 |
 | **epiq boards** | secretary | XLib **57 tickets — 36 in Todo, 6 in progress, 15 in Done**, counted 2026-10-22. **The In progress lane holds `7VFKBXT` and `BFNRBG7`** (xhttp — the pipelining hang and the gzip defect; the fix and the release are the human's), `AC9YJYQ` (xhttp collect, waiting for the next release), `9FJ358V` (the epiq sync rule — part merged as `c7f9269`, the stranded-event report still open), `NAHEGJE` (marduk: the entry follows the window) and `B1BKTP0` (each README says who wrote its library; the rule's home is still open). **The Done lane holds fifteen**: the 2026-10-21/22 merges are `62624K9` (the xlint watch reload), `9Y4VV1M` (the commit hook's diagnosis), `5S8FY10` (the file-claim system retired), `PZH78FS` (hooks symlinked, with a guard), `QPDJ8RF` (the test-layout guard), `PNAJ6D0` (bbprs takes its configuration) and **`VTJVHMY`** (the skynet window bounds, reopened and re-Done 2026-10-22 for the extra-room follow-up, merged as `eaac0d1`); `0AFZHPW`, `14VP9PT`, `86CDJV2`, `E2HSR7A`, `JD9DWVN`, `RX5H4P3`, `VQKH390` and `W4QP4GK` are the rest. **The older Done tickets the 2026-10-21 snapshot listed — `SNXBR23`, `A7DGZYZ`, `TAQ74SC`, `48GH7NW`, `XP56NNC`, `YFJZRYC`, `MY4ZS5D`, `DW94JXN`, `PHF9QZQ`, `2X3PZT3` — are in the Closed archive now**, because closing is the human's call at release and the snapshot is a day old. **Fourteen tickets closed on this board without being merged**, in one session: seven whose commits are on master (`ZRTSZMB`, `7Z7DE78`, `NJ529TQ`, `GADE1PY`, `W06YDEQ`, `2X0B2XW`, `VC9QWYY`), four pybundle tickets closed as ruled-and-landed or verified (`F7KHKM8`, `S1G5037`, `EZAVYNM`, `YEBP3QB`), **`R9H4PVD` closed as superseded rather than executed** — its repair would now reintroduce the error it was written to prevent — and two filed from the Traveller run (`86CDJV2`, `JD9DWVN`). **Every one was verified against the tree, not against the ticket's own account of itself**; that check is what separated the fourteen from four that only looked closable. An empty In progress lane is a reading, not a fact about the work: the work is happening on a branch, which the lane does not track. The 2026-09-30 reshuffle put every ticket on the board of the repo its change lands in; this repo also carries a readonly `Closed` archive board | both boards |
 | **pybundle acceptance** | secretary | **PASSES 2026-10-21: the bundled Traveller runs, and is byte-identical to the unbundled one.** 143 files, ~10 600 lines in, 400 KB out; parses and compiles clean; **332 diagnostics, all R1.6 "a second reference is dropped"**, none an error; **zero indentation warnings** on a real tab-indented project, which is D23's calibration measured outside XLib. **The bundle is xlint-clean**, which D32 requires of it — it was not, until the double-blank defect was fixed. **Measured against the unbundled server on the same tree: the startup output is byte-identical across 86 lines, and five HTTP requests return byte-identical responses, status codes and lengths.** **Five defects came out of the run, and every one of them produced a bundle that compiled clean and then failed** — the shape a text-level test cannot see: `JD9DWVN` (a module reached through a package attribute reached the package's globals — 141 names, one `NameError` each; **the ruling is alias**, ruled by the human), `VQKH390` (a name after a dot renamed when the base was a module alias), `RX5H4P3` (a def's own parameter renamed while the body's use of it was not), `14VP9PT` (**the bundler tracked indent blocks where python tracks scopes** — a name assigned in a nested block was not the function's own, and a class body's names shadowed the methods defined in it), `86CDJV2` (a removed import that was the file's last statement left a blank behind). **Six commits on `fix/JD9DWVN-bundle-traveller`, PR #76, one per ticket ref, plus the spec's D38–D43. Nine new tests in `tools/pybundle/test/test_acceptance.py`, in xtest's idiom, each checked to fail against the code before its fix.** **The artefact is not committed** — 400 KB of generated code, and it belongs to the run rather than to the repository. | `Space-Traveller/server.py`, epiq `86CDJV2`, `JD9DWVN`, `VQKH390`, `RX5H4P3`, `14VP9PT`, PR #76 |
-| **xlint: html rules** | secretary | **IMPLEMENTED AND MERGED 2026-10-19 — PR #42, on master as `5c1865e`.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + Mallesne's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md`. **The human merged it on their own instruction so they could run it over Traveller** — `xlint` over Space-Traveller's `html/` folder gives 783 findings (774 depth, 7 trailing whitespace, 2 double blank), and Mallesne's one html file is clean | epiq `YFJZRYC`, taskview `#139` |
+| **xlint: html rules** | secretary | **IMPLEMENTED AND MERGED 2026-10-19 — PR #42, on master as `5c1865e`.** The three rules as ruled: **unclosed tags (strict)**, **closing tags that shouldn't be** (void closer, stray closer, mis-nesting) and **bad indentation** (depth mismatch + spaces-not-tabs, depth in the file's own unit). **Code in `tools/xlint/_html.py`** — a tokenizer, one walk over the tags, the depth rule — imported by `xlint.py`; `.html` in `_ALL_SUFFIXES`; a `--no-html-*` flag family (7 flags). **23 new tests; the suite is 90 green.** **Measured on Traveller's 27 html files + a private project's: unclosed 0, stray 0, depth 774 — 589 the one systematic off-by-one, and the single -1 is `main.html:134` as the earlier measurement said** (it said 773/588; the one-finding difference is a detail of a script that was never kept). **Trailing whitespace reads 7 under xlint's own generic rule, not the 3 that script found — the difference is four lines ending in a tab.** The rules are stated in `doc/style/html.md`. **The human merged it on their own instruction so they could run it over Traveller** — `xlint` over Space-Traveller's `html/` folder gives 783 findings (774 depth, 7 trailing whitespace, 2 double blank), and a private project's one html file is clean | epiq `YFJZRYC`, taskview `#139` |
 | **xlint: the worktree blind spot** | secretary | **FIXED 2026-10-19 — PR #44, merged as `36b20c5`, two tickets: `XP56NNC` (the linter) and `2X3PZT3` (the hooks).** The linter excluded every file in a `.work/` worktree and said `clean`; the hook that runs it never ran in a worktree at all, so the style gate and the ticket-ref check were both open there. Both fixed, both measured; the gate's output at the repository root is unchanged. | epiq `XP56NNC`, `2X3PZT3`, taskview `#144` |
 | **xlint: the watch never reloaded the rules** | secretary | **MERGED 2026-10-21 — PR #68, on master as `dd2f27b`, by rebase, on the human's authorisation.** The watch read `.xlintignore` once, at startup, and kept it for the life of the process, so a rule edited mid-session changed nothing until the tool was restarted — and restarting is the workaround watch mode exists to avoid. **Not only a reload**: the inotify watch set was built once from the same stale rules, so a directory excluded at startup had no watch at all, and re-reading the file would not have produced events from it. **The rules are now part of what is watched** — an ignore file edited, added or removed is noticed; the watch set is rebuilt over the new scope in both directions; a rules change re-reads the whole scope and redraws silently, so a newly ignored file leaves the report and a newly un-ignored one enters it. **The other half of the ticket**: `main()` built the rules from `args.paths[0]` alone, so a run over two repositories was governed by the first one's chain — each path is now governed by its own, and the deepest watched path wins for a file under two of them. **13 new tests, all 13 failing against the old code**, and mutation-checked. | epiq `62624K9` (Done), taskview `#121` |
 | **the epiq sync rule** | secretary | **MERGED 2026-10-21 — PR #69, on master as `c7f9269`**, on the human's instruction: *"There should be a rule of doing an extra epiq sync. Add one if there isn't. Perhaps make the tool say explicitly that another sync is needed."* **The rule is now written down** — `doc/epiq-workflow.md` has a **"Sync twice"** section: the first `epiq_sync` after a write can return `skipped: true` with the events still only in the actor's pending log, because the pending log has to be finalised before it is flushed into the committed log and the flush is what commits it. Measured twice on 2026-10-20. **The rule: write, sync, check, sync again while the check says so.** `AGENTS.md` names it in the pointer table, so a change to it is announced by `news`. **The tool says it too** — `epiq-pending.py` reported "8 events in flight, not yet synced" and stopped there, which reads like a status rather than an instruction; it now says *"these writes are not durable: run epiq_sync again until this line is gone"*, and only when something is in flight. **The rest of `9FJ358V` is still open**: naming the ticket for stranded referencing events, and the divergence report. | epiq `9FJ358V` (In progress), taskview — |
@@ -428,12 +428,12 @@ Also standing, from the abandoned single-pass attempt:
 
 ## Blocked / needs attention
 
-- **Mallesne's tunnel silently discards a request when the backend connection
+- **a private project's tunnel silently discards a request when the backend connection
 	dies, and the client waits forever. The human's own reproduction.** *"I
 	restart the traveller server, but not the frontend."* Measured 2026-10-22:
 	**7 of 30 trials stall** — the client gets nothing at all, forever — which
 	is exactly *"stalls less often, but still sometimes does"*. **The mechanism,
-	proven by instrumentation.** Mallesne's `forward` opens a backend connection
+	proven by instrumentation.** a private project's `forward` opens a backend connection
 	for the client's first request and then hands the rest of the client
 	connection to `ws_sender`, a thread that tunnels client→backend on *that*
 	socket. When the backend dies, `forward`'s `recv` gets EOF, `forward`
@@ -450,10 +450,10 @@ Also standing, from the abandoned single-pass attempt:
 	which is why it is intermittent. **The fix, measured**: as now (discard
 	the request) **7/30**; close the client when the backend ends **0/30**;
 	close the client when a request is discarded **8/30**. **The winner is
-	one line in Mallesne's `forward`** — in the `finally`, after `sock.close()`,
+	one line in a private project's `forward`** — in the `finally`, after `sock.close()`,
 	also `client.close()`, so the client sees its connection closed and the
 	browser reconnects instead of waiting on a request that will never be
-	answered. **Mallesne's `server.py` is the human's code**, so it is theirs
+	answered. **a private project's `server.py` is the human's code**, so it is theirs
 	to make. **This is NOT the pipelining bug** (`7VFKBXT`): that is two
 	requests in one segment, and its fix is xhttp's `buffer = req["leftover"]`,
 	which the human has already restored in `dev/xhttp/_/server.py`. **Both
@@ -495,13 +495,13 @@ Also standing, from the abandoned single-pass attempt:
 	hypothesis — "I initially wrote a working version and later broke it" — is
 	exactly right.** The spec's line reference (`xhttp.py:63`) is stale; it
 	points at `send_not_found` now.
-	**Reproduced through the real tunnel** — Mallesne's `forward` copied
+	**Reproduced through the real tunnel** — a private project's `forward` copied
 	verbatim, the real released `xhttp_1_0_1`, a real client: **one write →
 	1 response and then silence forever**; two writes → 2 responses; and with
 	the line restored → 2 responses either way. **Two findings that change
 	where the fix goes.** **The fix belongs in the BACKEND, and the proxy does
 	not need fixing**: a broken proxy in front of a fixed backend works,
-	because Mallesne's `forward` already does `sock.sendall(leftover)`, so the
+	because a private project's `forward` already does `sock.sendall(leftover)`, so the
 	surplus reaches the backend either way. And **the trigger is specifically
 	two requests in ONE segment** — "the second request sent before the first
 	answer is read" is fine in every combination. **What I could not confirm:**
@@ -534,8 +534,8 @@ Also standing, from the abandoned single-pass attempt:
 	client by walking this process's ancestry and assumed the client is an
 	ancestor of the tool shell; under opencode 2 it is not, so the walk finds
 	the shared service, whose cwd is the home directory, and the session
-	resolves to `/home/xonok` again — measured live on 2026-10-20, with `news`
-	printing `no rule files found in /home/xonok — nothing checked`. **So the
+	resolves to `~` again — measured live on 2026-10-20, with `news`
+	printing `no rule files found in ~ — nothing checked`. **So the
 	rule changes still do not arrive for a session of this shape, and the
 	`git checkout` ban is one of them.** PR #50 finds the client by what it says
 	about itself — the session id in its own arguments, and the directory it
