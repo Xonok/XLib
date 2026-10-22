@@ -606,9 +606,9 @@ class TestShowCommand(unittest.TestCase):
 	def test_show_on_known_id_prints_every_field(self):
 		self.write_rows(
 			"// tasks.csv\nid,status,title,due_ts,chg_ts,category,tags,importance\n"
-			"1,open,part switching,1791277200,1790746026,work,mms-frontend,medium\n")
+			"1,open,part switching,1791277200,1790746026,work,my-app,medium\n")
 		out, _, _ = self.run_cli("show", "1", expect_exit=0)
-		for expected in ("#1", "open", "part switching", "work", "mms-frontend", "medium"):
+		for expected in ("#1", "open", "part switching", "work", "my-app", "medium"):
 			self.assertIn(expected, out, f"show must report {expected!r}, got {out!r}")
 
 	def test_show_on_unknown_id_exits_nonzero_with_clear_message(self):
@@ -642,7 +642,7 @@ class TestShowCommand(unittest.TestCase):
 	def test_show_field_prints_one_value_only(self):
 		self.write_rows(
 			"id,status,title,due_ts,chg_ts,category,tags,importance\n"
-			"1,open,part switching,1791277200,1790746026,work,mms-frontend,medium\n")
+			"1,open,part switching,1791277200,1790746026,work,my-app,medium\n")
 		out, _, _ = self.run_cli("show", "1", "--field", "category", expect_exit=0)
 		self.assertEqual(out.strip(), "work", "--field must print just that value")
 

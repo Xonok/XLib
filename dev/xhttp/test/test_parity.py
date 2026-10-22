@@ -329,7 +329,7 @@ class ParityTest(unittest.TestCase):
 			"No read-exactly-n helper. websocket.py reads 1, 2, 4 and 8 bytes "
 			"at a time and needs every one of them to block until filled. recv "
 			"short-reads, so this is a loop that has to be written. "
-			"Whitepage's read_exact is the model."
+			"A private project's read_exact is the model."
 		)
 
 	def test_handler_can_be_given_the_parsed_request(self):
@@ -352,7 +352,7 @@ class ParityTest(unittest.TestCase):
 		"""
 		Config shape is validated by config_valid (helper.py).
 		The library does NOT read config files; callers provide the config dict.
-		Traveller/Mallesne files.json are examples of the shape callers must provide.
+		files.json are examples of the shape callers must provide.
 		config_valid accepts the 4-key dict (folder, mime, compress, cache).
 		"""
 		import json as _json,os

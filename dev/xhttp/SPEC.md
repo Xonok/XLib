@@ -24,7 +24,7 @@ Four goals, as given:
 - "Previous features must not be lost."
 
 Written by hand on purpose. A class-free version already existed
-(`Whitepage/lib/dumb_http_funcs.py`, committed 2026-08-07 as `641ecc8`) and was
+(`<project>/lib/dumb_http_funcs.py`, committed 2026-08-07 as `641ecc8`) and was
 **not** used as a starting point — the point of the rework is a hand-written,
 maximally simple thing, and a port is not that. Do not "helpfully" port it in
 later.

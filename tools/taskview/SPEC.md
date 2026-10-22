@@ -14,17 +14,17 @@
 The tmux task pane must show a person the tasks of the project they are sitting
 in, not one global list sorted by due date across everything they are doing. Today
 a single append-only CSV holds all 37 open tasks from every project, and the pane
-headlines whichever is most overdue — so an XLib session currently presents an
-mms-frontend task as "now", which is the concrete failure this change exists to
-fix. Each project carries its own filter file so a taskview started inside it
-shows local work; the filter lives in the project folder so it is versioned and
-shareable, while the invocation decides which one applies so the tool is not tied
-to one person's directory layout. One task keeps exactly one category, because a
-system where everything must be classified pushes most tasks into a few common
-categories while creating many categories for rare things — so the design gives
-the major things their own category, lets everything unclassified fall into a
-bucket list, and subdivides the large categories with tags rather than splitting
-them.
+headlines whichever is most overdue — so an XLib session currently presents a
+task from another project as "now", which is the concrete failure this change
+exists to fix. Each project carries its own filter file so a taskview started
+inside it shows local work; the filter lives in the project folder so it is
+versioned and shareable, while the invocation decides which one applies so the
+tool is not tied to one person's directory layout. One task keeps exactly one
+category, because a system where everything must be classified pushes most
+tasks into a few common categories while creating many categories for rare
+things — so the design gives the major things their own category, lets
+everything unclassified fall into a bucket list, and subdivides the large
+categories with tags rather than splitting them.
 
 ## Data model
 
@@ -358,10 +358,10 @@ Numbered, each with what was rejected.
 	a guessed category hides the task from every view).
 2. **Category = what the work is about, not which repo you are sitting in.**
 	Settles the two live ambiguities: a task planned from the Agents workspace
-	about an mms-frontend change is an mms-frontend task; an XLib tool change is
-	an XLib task even if its plan document lives in Agents. *Rejected:* category =
-	current workspace (would move a task every time the person changed where they
-	were sitting).
+	about a change in another project is a task for that project; an XLib tool
+	change is an XLib task even if its plan document lives in Agents. *Rejected:*
+	category = current workspace (would move a task every time the person changed
+	where they were sitting).
 3. **Reuse the `category` column; add no column.** It is already single-valued,
 	so the whole design is a vocabulary plus a cleanup of the 9 open tasks that use
 	it. *Rejected:* a new `project` column (the SPEC's own "reschema support in
@@ -443,10 +443,9 @@ Numbered, each with what was rejected.
 	category names from git roots, which couples the taxonomy to the filesystem.
 18. **Category granularity is set by the tracker, not by how many tasks a group
 	has** (human, 2026-09-27). The unit is the set of tasks that would share one
-	tracker. Worked example, the human's: `note_viewer` (a library for
-	mms-frontend), `mms` (the backend) and `mms-frontend` itself are **one**
-	category — `work` — separated by the tags `note-viewer`, `mms-server`,
-	`mms-frontend`, not three categories. Symmetrically, hobby programming is
+	tracker. Worked example, the human's: a helper library, the service it talks
+	to and the app itself are **one** category — `work` — separated by a tag
+	for each of them, not three categories. Symmetrically, hobby programming is
 	`XLib` (libraries shared by all of them), `Traveller` (a major project using
 	XLib), and a bucket for the rest, until another project becomes major enough
 	to warrant its own tracker. *This overrides the reasoning earlier in this
@@ -490,8 +489,8 @@ after the vocabulary had grown by accretion to eighteen:
 	`personal_development`, `Traveller` became `traveller`. The rule applies to
 	the tags as well, for the same reason: the two levels are one vocabulary.
 - **There are two levels of filter.** The category generally matches where the
-	work happens; the tag is more specific than that. The mms-frontend slice of
-	`work` is one category narrowed by a tag (Decision 18).
+	work happens; the tag is more specific than that. The slice of `work` that
+	belongs to one project is one category narrowed by a tag (Decision 18).
 - **Work that is clearly XLib work is scoped to `xlib` *and* to whatever part of
 	XLib it is about** — the second level is the tag: `xlint`, `pybundle`,
 	`xhttp`, `marduk`, `skynet`, `taskview`, `release`, `agent_coord`,
@@ -501,40 +500,31 @@ after the vocabulary had grown by accretion to eighteen:
 	vocabulary expanding again: the second level is always set, and the set of
 	words does not grow with the work.
 
-| Category | Tasks | What it is |
-|---|---|---|
-| `xlib` | 49 | the shared library tooling; the tag says which part |
-| `work` | 25 | employment; repos separated by tag (Decision 18) |
-| `maintenance` | 14 | the machine and self-hosted infrastructure (Decision 16) |
-| `models` | 13 | the model-benchmark and provider work |
-| `agents` | 9 | the agent workspace restructure |
-| `hobby` | 8 | hobby projects without their own tracker |
-| `personal_development` | 6 | learning and skills |
-| `business_career` | 3 | marketing, networking, gamedev community |
-| `mistlands` | 3 | the Mistlands project |
-| `traveller` | 2 | Space-Traveller (Decision 17) |
-| `projects` | 1 | a project without a tracker of its own |
-| `research` | 1 | research that is not any of the above |
+**The values are the user's, and they are not listed here.** The vocabulary is
+thirteen values in three kinds: the tool's own, the user's life areas, and the
+user's projects — one per project. The values live in the task store, which is
+per user and outside the repository, and a spec that listed them would publish
+a private organisation of work for no gain. **What this spec fixes is the shape
+and the rules**, because those are what the tool implements: the levels, the
+spelling, and the decisions below.
 
-Counts are all tasks as at 2026-10-20 and move as work does. **The bucket is
-the twenty uncategorised tasks, all of them closed** — a bucket is no longer
-needed for anything open.
+**The bucket is the twenty uncategorised tasks, all of them closed** — a
+bucket is no longer needed for anything open.
 
 **What changed from the 2026-09-27 vocabulary:** `XLib` → `xlib`, and the
 `pybundle` and `xhttp` categories folded into it with their part as a tag;
 `Agents` and `agents` (the same category in two cases) → `agents`; `Models` →
 `models`; `Traveller` → `traveller`; `Hobby` → `hobby`; `Maintenance` →
-`maintenance`; `Mistlands` → `mistlands`; `Personal Development` →
-`personal_development`; `Business / Career` → `business_career`; `Projects` →
-`projects`; and `dev` and `testcat` — one cancelled scratch task each, and the
-only two categories that named nothing — left the vocabulary.
+`maintenance`; `Personal Development` → `personal_development`;
+`Business / Career` → `business_career`; `Projects` → `projects`; and `dev`
+and `testcat` — one cancelled scratch task each, and the only two categories
+that named nothing — left the vocabulary.
 
 **Decision 19's consequence is now a rule of spelling rather than of
 meaning.** The vocabulary still comes from `TASKS.md`'s sections, so
 `Personal Development` is still the word; the house style decides how it is
-written. Within `work`, the tags are
-`note-viewer`, `mms-frontend` and `career`; within `Hobby` and `Maintenance`
-they are the project or subsystem name.
+written. Within `work`, the tags are the user's own project names; within
+`Hobby` and `Maintenance` they are the project or subsystem name.
 
 ## What the human will notice, and should not be surprised by
 
@@ -575,13 +565,13 @@ conversation:
 	Bucket list empty. Vocabulary recorded in Decisions 18–20.
 - ~~**The remaining category names.**~~ **Ruled and applied** — see the
 	vocabulary table above. Two names remain unconfirmed: `Hobby` (invented by the
-	secretary; `Projects` was the alternative) and whether `Mistlands` should be
-	its own category rather than a tag inside `Hobby`.
+	secretary; `Projects` was the alternative) and whether a project of the
+	user's should be its own category rather than a tag inside `Hobby`.
 
 **Still open:**
 
 - **`/storage/Agents/.taskview.yaml` documents three categories that do not
-	exist** (`mms-frontend`, `Mistlands`, `MaFE` are in zero rows) and omits three
+	exist** (three project names are in zero rows) and omits three
 	that do (`research`, `ai-docs`, `personal`). The human has left the file alone
 	for now. Tracked as epiq `QKRW2Z0`.
 - ~~**Task ids are not shown in the pane.**~~ **Ruled and implemented
