@@ -114,6 +114,40 @@ needed when there is no due date.
 	opens the README; a rule in `doc/development.md` binds an agent that never
 	opens it, and `AGENTS.md` would announce a change to it through `news`.
 	Also open: `dev/xprod` has no SPEC.md and no VERSIONS.md (`DCF9EHW`).
+- [ ] **#192 — Mallesne's tunnel discards a request when the backend
+	connection dies — the client waits forever** (by 2026-10-24, high) — board:
+	epiq `GA6MVE9` (In progress). **The human's own reproduction, 2026-10-22:**
+	*"I restart the traveller server, but not the frontend."* Measured **7 of
+	30 trials stall** — the client gets nothing at all, forever — which is
+	exactly *"stalls less often, but still sometimes does"*. **The mechanism,
+	proven by instrumentation.** Mallesne's `forward` opens a backend connection
+	for the client's first request, then hands the rest of the client connection
+	to `ws_sender`, a thread tunnelling client→backend on *that* socket. When
+	the backend dies, `forward`'s `recv` gets EOF, `forward` returns and closes
+	the backend socket — **but `ws_sender` is still alive**, still reading the
+	client socket, now holding a dead backend socket. The proxy's `wrap_handler`
+	goes back to `read_request(client)`, so **two threads read the same client
+	socket**. The client's next request goes to whichever wins; **if the stale
+	`ws_sender` wins, its backend socket is closed, so `if not sock._closed:` is
+	false and the request is silently discarded** — not forwarded, not refused,
+	no answer. The log says it: `ws_sender: took 40 bytes from the client` /
+	`ws_sender: backend socket is closed -- REQUEST DISCARDED`. **13 of 40
+	trials showed the discard and 13 of 40 stalled** — a one-to-one match.
+	**It is a race**, which is why it is intermittent. **The fix, measured**:
+	as now (discard the request) **7/30**; close the client when the backend
+	ends **0/30**; close the client when a request is discarded **8/30**.
+	**The winner is one line in Mallesne's `forward`** — in the `finally`,
+	after `sock.close()`, also `client.close()`, so the client sees its
+	connection closed and the browser reconnects instead of waiting on a
+	request that will never be answered. **Mallesne's `server.py` is the
+	human's code**, so it is theirs to make. **This is NOT the pipelining bug**
+	(`7VFKBXT`): that is two requests in one segment, and its fix is xhttp's
+	`buffer = req["leftover"]`, **which the human has already restored in
+	`dev/xhttp/_/server.py`**. **Both are real, and they are different** —
+	neither fix touches the other. **Why `ws_sender` exists at all is the
+	design question underneath**: it tunnels the rest of the client connection
+	to a backend connection while `wrap_handler` also reads the client socket,
+	so as long as both read it, the race exists.
 - [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
 	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
 	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)

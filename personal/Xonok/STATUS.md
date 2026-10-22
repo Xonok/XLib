@@ -421,6 +421,37 @@ Also standing, from the abandoned single-pass attempt:
 
 ## Blocked / needs attention
 
+- **Mallesne's tunnel silently discards a request when the backend connection
+	dies, and the client waits forever. The human's own reproduction.** *"I
+	restart the traveller server, but not the frontend."* Measured 2026-10-22:
+	**7 of 30 trials stall** — the client gets nothing at all, forever — which
+	is exactly *"stalls less often, but still sometimes does"*. **The mechanism,
+	proven by instrumentation.** Mallesne's `forward` opens a backend connection
+	for the client's first request and then hands the rest of the client
+	connection to `ws_sender`, a thread that tunnels client→backend on *that*
+	socket. When the backend dies, `forward`'s `recv` gets EOF, `forward`
+	returns and closes the backend socket — **but `ws_sender` is still alive**,
+	still reading the client socket, now holding a dead backend socket. The
+	proxy's `wrap_handler` goes back to `read_request(client)`, so **two
+	threads read the same client socket**. The client's next request goes to
+	whichever wins; **if the stale `ws_sender` wins, its backend socket is
+	closed, so `if not sock._closed:` is false and the request is silently
+	discarded** — not forwarded, not refused, no answer. The event log says
+	it: `ws_sender: took 40 bytes from the client` / `ws_sender: backend
+	socket is closed -- REQUEST DISCARDED`. **13 of 40 trials showed the
+	discard, and 13 of 40 stalled** — a one-to-one match. **It is a race**,
+	which is why it is intermittent. **The fix, measured**: as now (discard
+	the request) **7/30**; close the client when the backend ends **0/30**;
+	close the client when a request is discarded **8/30**. **The winner is
+	one line in Mallesne's `forward`** — in the `finally`, after `sock.close()`,
+	also `client.close()`, so the client sees its connection closed and the
+	browser reconnects instead of waiting on a request that will never be
+	answered. **Mallesne's `server.py` is the human's code**, so it is theirs
+	to make. **This is NOT the pipelining bug** (`7VFKBXT`): that is two
+	requests in one segment, and its fix is xhttp's `buffer = req["leftover"]`,
+	which the human has already restored in `dev/xhttp/_/server.py`. **Both
+	are real, and they are different** — neither fix touches the other. Board:
+	epiq `GA6MVE9`, taskview `#192`.
 - **xhttp: two requests in one segment hang the connection and leak the
 	thread. The spec says this is implemented, and it is not.** Measured
 	2026-10-21, on xhttp's own code path: **two requests in separate segments
