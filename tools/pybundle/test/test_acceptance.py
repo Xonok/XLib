@@ -132,5 +132,16 @@ def test_a_removed_last_import_leaves_no_double_blank_line():
 	})
 	xtest.not_equal("\n\n\n" in bundle, True)
 
+def test_an_attribute_of_an_imported_module_keeps_the_base_modules_prefix():
+	# Two modules share a function name; one calls the other's. The attribute
+	# must take the base module's prefix, not the importing module's — the
+	# bundle must run, not raise NameError on a name that is never defined.
+	value = _run({
+		"main.py": "import response\n\ndef run():\n\treturn response.mark(1)\n",
+		"helper.py": "def accepts_gzip(value):\n\treturn value + 1\n",
+		"response.py": "import helper\n\ndef accepts_gzip():\n\treturn 2\n\ndef mark(value):\n\treturn helper.accepts_gzip(value)\n",
+	})
+	xtest.equal(value, 2)
+
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
