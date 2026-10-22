@@ -179,6 +179,38 @@ needed when there is no due date.
 	design question underneath**: it tunnels the rest of the client connection
 	to a backend connection while `wrap_handler` also reads the client socket,
 	so as long as both read it, the race exists.
+- [ ] **#198 — xhttp: the content-coding negotiation — +68 lines measured, and the
+	bundler breaks on it** (by 2026-10-27, high) — board: epiq `BFNRBG7` and
+	`BDHZNY6` (both In progress). **The human asked what the failing tests would
+	take, and the answer is a prototype rather than an estimate.**
+	**Their own one line already fixed one of the eight**: restoring
+	`buffer = req["leftover"]` took the suite from **8 failed to 7** — the
+	pipelining test now passes. **The seven that remain are all the
+	negotiation.** The prototype is **+68 −1 across three files, no public
+	signature change**: `_/helper.py` gains the Accept-Encoding parser (+40),
+	`_/response.py` gains the thread-local, the filter at the send site
+	(`if compress and accepts_gzip():`) and the clear (+26 −1), `_/server.py`
+	marks the request's header before the handler and clears it after (+2).
+	**Measured: `dev/xhttp/test` is 243 passed, 0 failed, 1 skipped** — the
+	whole suite, against the prototype. **Two things the prototype found, and
+	they are the real cost.** **(1) The state has to be CLEARED, not just
+	set** — the first version inherited the last request's answer on a direct
+	call to `send_response_full`, and the guard test caught it. **(2) THE
+	BUNDLE BREAKS, and it is a bundler defect rather than a naming slip**:
+	`helper.accepts_gzip` and `response.accepts_gzip` are the same bare name in
+	two modules, and the bundler emitted `_helper___response__accepts_gzip` — a
+	name that is never defined. **The bundle compiled clean, was xlint-clean,
+	and 500'd every request.** Same shape as `VQKH390` (*"a name after a dot
+	belongs to whatever holds it"*) but a different trigger: that one was the
+	**alias** path, this is the **plain** path, and the trigger is a **name
+	collision between two modules**. Filed as `BDHZNY6` with a minimal
+	two-module reproduction. **Renaming the helper function makes the bundle
+	correct**, and then it behaves right: no header → no gzip, `gzip` → gzip,
+	`gzip;q=0` → no gzip. **The choice is the human's: the rename and a working
+	bundle today, or the bundler fix first and keep the names. Nothing in the
+	repository hits the bundler defect today**, so it is latent rather than a
+	regression. **The prototype is in `/tmp/opencode/proto/xhttp` — it is not
+	in the repository, because xhttp's code is the human's.**
 - [ ] **#180 — Rename dev test folders `tests/` → `test/` — the blocker is gone,
 	it is a pure rename now** (by 2026-10-27, medium) — board: epiq `2VD2XZC`
 	(Todo). The human's ruling of 2026-09-30 (`doc/development.md:140-142`)
