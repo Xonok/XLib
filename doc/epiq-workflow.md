@@ -38,6 +38,13 @@ can skip while the events are still only in the pending file. Measured twice on
 events still pending, and a later call drained and pushed them; on another
 occasion it skipped twice in a row before draining.
 
+**A board write is a published file.** The board is committed to a branch in
+this public repository, so a ticket description and a comment are published
+text, and `doc/personal-data.md` is the rule for what they may carry. Check
+the text before writing it — `python3 tools/check-personal.py --text` reads it
+on stdin — and the check above reports any identifier in the pending writes,
+which are the ones not yet published.
+
 **So the rule is: write to the board, sync, check, and sync again while the
 check still says so.** The check is `python3 tools/epiq-pending.py`, and the
 line that matters is:
