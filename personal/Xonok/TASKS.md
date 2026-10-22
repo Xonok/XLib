@@ -326,7 +326,7 @@ needed when there is no due date.
 	table ends with `… +N more`.
 	- **Measured**: the display fits every pane height from 1 to 49 lines,
 		checked through a pty at each height. At 30 lines it is exactly 30.
-	- **The suite is 26 tests**, 19 of them new, in xtest's idiom. `xlint` is
+	- **The suite was 26 tests, 19 of them new**, in xtest's idiom. `xlint` is
 		clean, and the repository's runner is unchanged (the same six known
 		`ContentNegotiationTest` failures, epi `BFNRBG7`).
 	- **The human's review, 2026-10-20, in two parts.** *"The current version
@@ -341,6 +341,22 @@ needed when there is no due date.
 		lines, and the one-line summary of counts (*"makes sense"*) stands.
 	- **One thing the requirement forced**: the watch loop watches the
 		terminal's size as well as the database's, so a resized pane redraws.
+	- **The follow-up, 2026-10-22: the room goes where there is something to
+		show** — **MERGED, PR #82 on master as `eaac0d1`.** The human:
+		*"Right now the Models(Today) section has one model, which leaves way
+		more room for Models(Window). Make it so whenever this situation
+		happens, Models(Window) accepts the extra room instead of trying to
+		conserve it despite not needing to."* The even split is now the
+		starting point, not the rule: a section that shows everything it has
+		gets only the lines it needs, and the other takes the rest. Today is
+		the smaller of the two by construction (the window holds everything the
+		day holds and more), so the spare room reaches the window. The odd line
+		still goes to Today when both sections want the room.
+		**Measured on the real database** (28-day window, 54 models, one from
+		today): at height 30 the window shows 22 rows and the display is 30
+		lines, where it showed 11 rows and drew 19 lines; at height 24, 16 rows
+		and 24 lines where it was 8 and 16. **Suite: 30 tests, 4 new; `xlint`
+		clean; fits every height 1-60.**
 - [x] **#156 — Agents workspace: commit the `.taskview.yaml` category rename**
 	(done 2026-10-20, low) — **committed: `cd7900e` on the Agents repo's master.**
 	Board: epiq `YQK582P` (Agents board, Done). The panel's comment now names
