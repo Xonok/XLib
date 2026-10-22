@@ -1,5 +1,9 @@
 import argparse,glob,json,os,time,sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from xlint._personal import find,load_tokens
+
 EPIQ_HOME = os.environ.get("EPIQ_HOME_OVERRIDE") or os.path.expanduser("~/.epiq-global")
 
 DEFAULT_STALE_SECONDS = 300
@@ -94,6 +98,30 @@ def _scan_project(events_dir):
 				referenced.add(_target(event))
 	return committed, created, referenced, pending
 
+def _personal_hits(events_dir: str) -> list:
+	"""The personal identifiers in the pending writes of this project.
+
+	A pending file is an actor's own unsynced writes, and the file it is
+	drained into is the branch the board is committed to — a branch in this
+	public repository. So this is the one place where a personal identifier
+	can still be caught before it is published, and the check is worth
+	carrying here: this script is the one the workflow already says to run
+	after every board write.
+	"""
+	tokens = load_tokens()
+	if not tokens:
+		return []
+	hits = []
+	for path in sorted(glob.glob(os.path.join(events_dir, "*~pending*.jsonl"))):
+		try:
+			with open(path, encoding="utf-8") as fh:
+				lines = fh.read().splitlines()
+		except OSError:
+			continue
+		for index, token in find(lines, tokens):
+			hits.append((path, index, token))
+	return hits
+
 def _age_seconds(path: str) -> int:
 	return max(0, int(time.time() - os.path.getmtime(path)))
 
@@ -156,7 +184,16 @@ def cmd_epiq_pending(args: argparse.Namespace) -> None:
 		committed, created, referenced, pending = _scan_project(events_dir)
 		stranded, inflight = _pending_report(events_dir, committed, args.stale_seconds)
 		orphans = sorted(referenced - created)
-		if not stranded and not orphans:
+		personal = _personal_hits(events_dir)
+		if personal:
+			problems += 1
+			print("epiq project %s  (%s)" % (pid, events_dir))
+			for path, index, token in personal:
+				print("  PERSONAL IDENTIFIER: %s:%d — %s" % (path, index, token))
+			print("    these writes are not published yet: edit them before they are synced")
+			print("    the board is committed to a branch in this public repository")
+			print("")
+		if not stranded and not orphans and not personal:
 			if inflight:
 				print("epiq project %s: no stranded events (%d events in flight, not yet synced)"
 					% (pid, sum(r["stranded"] for r in inflight)))

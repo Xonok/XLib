@@ -44,6 +44,7 @@ The following rules live in dedicated docs files and are also linked from the ta
 | `doc/epiq-workflow.md` | Epiq board mechanics: per-actor writes, **sync twice — a sync that reports `skipped` has not drained anything**, stranded events |
 | `doc/working-tree.md` | Check-clean before editing, don't touch others' uncommitted changes; **a worktree per ticket is the boundary, and the file-claim mechanism is gone**; **`git checkout` is banned** — use `git switch` / `git restore`, and prefer a worktree to switching at all. **`git reset --hard` and `git reset --merge` are banned**; plain `git reset` is allowed but it resets the index, so it silently unstages another agent's work |
 | `doc/paths-in-tracked-files.md` | No machine-specific paths in tracked files; use repo-relative or `.agents/machine-info.md` |
+| `doc/personal-data.md` | No personal identifiers in tracked files or board text — no private projects, no other people's names, nothing that only makes sense on this machine; the values live outside the repository, and xlint checks the tracked files against the list there |
 | `doc/state-files-history.md` | STATUS.md vs HISTORY.md; append-only history policy; **who writes them, and when — the secretary, at merge time** |
 | `doc/versioning.md` | Library versioning scheme: revision/minor/major bumps, deprecation timeline |
 | `doc/development-approach.md` | Dev folders, versioned imports, VERSIONS.md |

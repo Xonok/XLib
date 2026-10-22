@@ -3,8 +3,10 @@ from pathlib import Path
 
 try:
 	from . import _html
+	from . import _personal
 except ImportError:
 	import _html
+	import _personal
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
@@ -211,7 +213,11 @@ def excluded_paths(paths, exclusions=None):
 _JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
 _PY_MD_SUFFIXES = (".py", ".md")
 _HTML_SUFFIXES = (".html",)
-_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES
+# Shell scripts carry no style rules, but they are files a value can be pasted
+# into — `tools/tmux-xlib.sh` named a private project in a comment — so they are
+# visited for the personal-identifier check alone.
+_SH_SUFFIXES = (".sh",)
+_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES + _SH_SUFFIXES
 
 def lint_files(paths, exclusions=None):
 	"""The files in scope, each path judged by the rules that govern it.
@@ -1254,6 +1260,10 @@ def check_file(path, args):
 			problems.extend(html_problems["bad_closer"])
 		if not args.no_html_depth:
 			problems.extend(html_problems["depth"])
+	if not args.no_personal and _is_tracked_file(path):
+		# A tracked file is published with the repository, and this repository is
+		# public. The check asks for the personal identifiers to stay out of it.
+		problems.extend((line, msg) for line, msg in _personal.check(text_lines, path))
 	return problems
 
 class _InotifyWatcher:
@@ -1472,6 +1482,7 @@ def main():
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
 	parser.add_argument("--no-absolute-paths", action="store_true", help="disable absolute system path check in Markdown")
+	parser.add_argument("--no-personal", action="store_true", help="disable the personal identifier check in tracked files")
 	parser.add_argument("--no-js-double-blank", action="store_true", help="disable JS/TS double blank line check")
 	parser.add_argument("--no-js-space-indent", action="store_true", help="disable JS/TS space indentation check")
 	parser.add_argument("--no-js-trailing", action="store_true", help="disable JS/TS trailing whitespace check")
