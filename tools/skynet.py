@@ -5,7 +5,8 @@ Reads opencode's message log read-only (no API calls, so this never adds usage)
 and prints per-model stats including messages, tokens, refusals, and finish reasons.
 
 The display fits the room it is given: the caps on the two tables come from the
-terminal's own height, and a table that had to leave rows out says how many.
+terminal's own height, a table that had to leave rows out says how many, and
+the room a section does not need goes to the section that has more to show.
 """
 import argparse,datetime,os,shutil,sqlite3,sys,time
 from collections import defaultdict
@@ -176,15 +177,32 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 		lines.append(overflow_note(more))
 	return "\n".join(lines)
 
-def section_allowances(height):
+def section_allowances(height, today_count, window_count):
 	"""The lines each section may use for its rows and its overflow note.
 
 	Six lines are spoken for before the first row, so what is left is split
 	evenly between the two sections, and an odd line goes to Today — the view
 	that comes first, and the one about now.
+
+	The even split is the starting point, not the rule. A section with less
+	to show than its share has room to spare, and the other section takes
+	it: the room goes where there is something to show. Today is the smaller
+	of the two by construction — the window holds everything the day holds
+	and more — so in practice the spare room goes to the window.
 	"""
 	budget = max(height - _OVERHEAD, 0)
-	return budget // 2 + budget % 2, budget // 2
+	today = budget // 2 + budget % 2
+	window = budget // 2
+	if today_count <= today and window_count > window:
+		# Today shows everything it has, and Window has more to show: the
+		# room Today does not need is Window's.
+		today = today_count
+		window = budget - today_count
+	elif window_count <= window and today_count > today:
+		# The other way round, for a window that holds less than the day.
+		window = window_count
+		today = budget - window_count
+	return today, window
 
 def row_cap(model_count, allowance):
 	"""How many rows a section may show, given the lines it may use.
@@ -241,7 +259,7 @@ def render(rows, now, height=None):
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
 	col_w = max([len(m) for m in all_models] + [len(today_title), len(window_title)])
-	today_allowance, window_allowance = section_allowances(height)
+	today_allowance, window_allowance = section_allowances(height, today_count, window_count)
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
 	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title)

@@ -1,9 +1,10 @@
 """The display fits the room it is given, and says what it left out.
 
 The caps on the two tables come from the terminal's height, what is left of
-the room is split evenly between them, and a table that had to drop rows says
-how many it dropped — a truncated table must never be mistaken for the whole
-truth.
+the room is split evenly between them, a table that had to drop rows says how
+many it dropped — a truncated table must never be mistaken for the whole truth
+— and the room a section does not need goes to the section that has more to
+show.
 """
 import os,sys,time
 
@@ -24,6 +25,11 @@ def _rows(count):
 	return [("model-%02d" % i, NOW, 100, 100, 1000 - i, 0, 0, 0, None, None, "stop", "session")
 		for i in range(count)]
 
+def _older_rows(count):
+	"""`count` models used before today, so the window holds them and Today does not."""
+	return [("older-%02d" % i, NOW - 3 * 86400, 100, 100, 1000 - i, 0, 0, 0, None, None, "stop", "session")
+		for i in range(count)]
+
 class _NotATerminal:
 	"""A stdout that is a file rather than a terminal."""
 
@@ -31,12 +37,21 @@ class _NotATerminal:
 		return False
 
 def test_the_room_left_is_split_evenly():
-	today, window = skynet.section_allowances(26)
+	today, window = skynet.section_allowances(26, 100, 100)
 	xtest.equal((today, window), (10, 10), "an even budget splits evenly")
 
 def test_an_odd_line_goes_to_today():
-	today, window = skynet.section_allowances(25)
+	today, window = skynet.section_allowances(25, 100, 100)
 	xtest.equal((today, window), (10, 9), "the odd line goes to Today")
+
+def test_a_section_that_has_more_to_show_takes_the_room_the_other_leaves():
+	today, window = skynet.section_allowances(30, 1, 100)
+	xtest.equal(today, 1, "Today takes the one line it needs, and no more")
+	xtest.equal(window, 23, "Window takes the rest: the room goes where there is something to show")
+
+def test_a_section_that_has_more_to_show_keeps_the_even_split_when_both_need_it():
+	today, window = skynet.section_allowances(30, 100, 100)
+	xtest.equal((today, window), (12, 12), "both sections want the room, so the split stands")
 
 def test_the_note_costs_a_row_of_its_own():
 	xtest.equal(skynet.row_cap(5, 4), 3, "four lines of room show three rows and a note")
@@ -75,6 +90,22 @@ def test_the_today_section_gets_a_row_limit():
 	today = out.split("=== Models (Window) ===")[0]
 	rows = [line for line in today.splitlines() if line.startswith("model-")]
 	xtest.equal(len(rows), 8, "Today shows eight rows, and a note for the rest")
+
+def test_the_window_section_takes_the_room_that_today_leaves():
+	rows = _rows(1) + _older_rows(30)
+	out = skynet.render(rows, NOW, height=30)
+	window = out.split("=== Models (Window) ===")[1]
+	shown = [line for line in window.splitlines()
+		if line.startswith("model-") or line.startswith("older-")]
+	xtest.equal(len(shown), 22, "Window shows every row the room allows, not the half it was given")
+	xtest.equal(len(out.splitlines()), 30, "and the display fills the room it was given")
+
+def test_the_display_never_exceeds_the_room_when_one_section_is_small():
+	rows = _rows(1) + _older_rows(30)
+	for height in range(1, 61):
+		out = skynet.render(rows, NOW, height=height)
+		xtest.true(len(out.splitlines()) <= height,
+			f"a display of {height} lines must not run past {height}")
 
 def test_the_title_carries_the_column_labels():
 	out = skynet.render(_rows(3), NOW, height=24)
