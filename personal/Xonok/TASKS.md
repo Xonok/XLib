@@ -472,6 +472,27 @@ needed when there is no due date.
 	`buffer` — **and it is the human's**. **The test is landed** (`9632a53`,
 	PR #81), red on purpose: the server runs on a daemon thread and the test
 	asserts the thread *finished*, so a test for a hang cannot hang the suite.
+	**THE HISTORY, found 2026-10-22: the line existed, and the 1_0_1 release
+	removed it.** The original hand-written xhttp had `buffer =
+	req["leftover"]` (`6a9faa1`, 2026-10-10); it survived every commit until
+	**`8a15f00`, the 1_0_1 release of 2026-10-18**, where it was **replaced**
+	by the keep-alive/closing logic — *while that release was fixing a
+	different bug* (`serve_forever` not passing `max_requests`, which had lost
+	378 of 384 requests). **So this is the code drifting from the spec, not a
+	missing feature**, and the human's own hypothesis — *"I initially wrote a
+	working version and later broke it"* — is exactly right. `SPEC.md:135`
+	still describes the working behaviour, because the spec was written when it
+	worked; its line reference is stale.
+	**Reproduced through the real tunnel** — Mallesne's `forward` verbatim, the
+	real released `xhttp_1_0_1`: **one write → 1 response and then silence
+	forever**; two writes → 2 responses; with the line restored → 2 either
+	way. **The fix belongs in the BACKEND** — a broken proxy in front of a
+	fixed backend works, because Mallesne's `forward` already does
+	`sock.sendall(leftover)`. **The trigger is specifically two requests in ONE
+	segment**; "the second request sent before the first answer is read" is
+	fine in every combination. **Not confirmed:** the human's *"specifically
+	after server start"* — the obvious reading, a backend restart while the
+	client holds its connection, gives a **prompt 500**, not a hang.
 - [x] **#144 — xlint: reports clean inside a `.work/` worktree, checking nothing**
 	(done 2026-10-19, medium) — category: XLib. **Found 2026-10-19 while adding
 	html support to xlint.** The root repo's `.xlintignore` lists `.work/`, and

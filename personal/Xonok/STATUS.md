@@ -445,6 +445,33 @@ Also standing, from the abandoned single-pass attempt:
 	landed** (`9632a53`, PR #81) and is red on purpose; it runs the server on
 	a daemon thread and asserts the thread *finished*, so a test for a hang
 	cannot hang the suite. Board: epiq `7VFKBXT`.
+	**THE HISTORY, found 2026-10-22: the line existed, and the 1_0_1 release
+	removed it.** The original hand-written xhttp had `buffer =
+	req["leftover"]` (`6a9faa1`, 2026-10-10), and it survived every commit
+	until **`8a15f00`, the 1_0_1 release of 2026-10-18**, where it was
+	**replaced** by the keep-alive/closing logic — *while that release was
+	fixing a different bug* (`serve_forever` not passing `max_requests`, which
+	had lost 378 of 384 requests). **So this is the code drifting from the
+	spec, not a missing feature**: `SPEC.md:135` still describes the working
+	behaviour, because the spec was written when it worked. **The human's own
+	hypothesis — "I initially wrote a working version and later broke it" — is
+	exactly right.** The spec's line reference (`xhttp.py:63`) is stale; it
+	points at `send_not_found` now.
+	**Reproduced through the real tunnel** — Mallesne's `forward` copied
+	verbatim, the real released `xhttp_1_0_1`, a real client: **one write →
+	1 response and then silence forever**; two writes → 2 responses; and with
+	the line restored → 2 responses either way. **Two findings that change
+	where the fix goes.** **The fix belongs in the BACKEND, and the proxy does
+	not need fixing**: a broken proxy in front of a fixed backend works,
+	because Mallesne's `forward` already does `sock.sendall(leftover)`, so the
+	surplus reaches the backend either way. And **the trigger is specifically
+	two requests in ONE segment** — "the second request sent before the first
+	answer is read" is fine in every combination. **What I could not confirm:**
+	the human reported hangs *"specifically after server start"*, and the
+	obvious reading — the backend restarts while the client holds its
+	connection — gives a **prompt 500**, not a hang. **That reading is not
+	this bug**, and I am not going to guess at the rest. Board: epiq
+	`7VFKBXT`.
 - **The secretary switched XLib's working tree onto a stray branch named `other`
 	this session, minutes before shutdown — caused, caught and reverted.** Two
 	`shell` calls issued in one block raced: the first began `rm -rf
