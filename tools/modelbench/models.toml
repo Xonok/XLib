@@ -69,6 +69,7 @@ provider = "openrouter"
 transport = "http"
 gating = "upstream"
 endpoint = "https://openrouter.ai/api/v1"
+note = "TO BE REPINNED to Google's own route (id = \"gemma-4-31b-it\", provider = \"google\", endpoint = \"https://generativelanguage.googleapis.com/v1beta/openai\") - that is where the workers and the corpus's records are. The repin waits for the transport to have a Google route (XLib SBEA654); until then this entry is the only way the instrument can reach the model."
 
 ["gemma-4-26b"]
 id = "google/gemma-4-26b-a4b-it:free"
@@ -76,7 +77,7 @@ provider = "openrouter"
 transport = "http"
 gating = "upstream"
 endpoint = "https://openrouter.ai/api/v1"
-note = "429 from Google AI Studio upstream, which shared-notes records as a persistent failure mode for this model."
+note = "TO BE REPINNED to Google's own route (id = \"gemma-4-26b-a4b-it\", provider = \"google\", endpoint = \"https://generativelanguage.googleapis.com/v1beta/openai\") - that is where the workers and the corpus's records are, and the repin waits for the transport to have a Google route (XLib SBEA654). The 'persistent upstream failure' this note used to carry was measured wrong: the 429 is a 15-requests-per-minute quota on Google's own route (GenerateRequestsPerMinutePerProjectPerModel-FreeTier, measured 2026-10-22), not the provider rationing us."
 
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"
