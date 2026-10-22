@@ -751,10 +751,24 @@ WORKER_MAP = {
 	"coding": "worker-north-mini-code",
 	"reasoning": "worker-nemotron-ultra",
 	"bulk": "worker-nemotron-lightning",
-	# provisional 2026-10-01: ling-3.0-flash-fin-free fails upstream ("Upstream request
-	# failed") while longcat-2.5-preview-free answers; both are console models, so this
-	# costs no extra pool budget. Revert to worker-ling once it recovers.
-	"general": "worker-longcat",
+	# 2026-10-22: the previous target, worker-longcat, was WITHDRAWN —
+	# longcat-2.5-preview-free is no longer in the Zen catalogue and opencode answers
+	# `provider.no-route: Model unavailable` — and the fallback it named,
+	# worker-ling, is withdrawn too. A dispatch to a dead model fails every time.
+	#
+	# worker-minimax is the best free model the benchmark has measured on trust:
+	# 9 `autonomy` of 12 admissible runs on the OpenRouter route, G2 on 12 of 12
+	# (Agents repo, `library/ai/models/minimax-openrouter.md`). It sits on OpenRouter's
+	# shared `:free` pool, which is the pool the workspace can spend, and it is a
+	# different pin from worker-nemotron-ultra, so the dispatch tiers stay separate.
+	#
+	# `dispatch` is a static lookup and cannot notice a dead model, so this will rot
+	# again. When it does: probe the target with
+	# `opencode run --model <route> "Reply with exactly: OK"` before repointing, and
+	# repoint to a model the corpus has measured rather than to whichever console
+	# preview answers — the console's free tier refuses per model, and its preview
+	# models are withdrawn without notice.
+	"general": "worker-minimax",
 }
 
 def cmd_dispatch(args):
