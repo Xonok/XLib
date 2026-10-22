@@ -35,7 +35,7 @@ git_root() {
 }
 
 # Shell-quote a path for the pane's shell: repo directories hold spaces and
-# parentheses (there is a "mms-frontend (copy 1)" on this box).
+# parentheses (there is a "my-app (copy 1)" on this box).
 q() {
 	printf '%q' "$1"
 }
@@ -49,8 +49,8 @@ slug() {
 
 # /storage/GitHub/<group>/<repo> names the session <group>-<repo>; a repo
 # outside that tree has no group, so it slugs its whole path instead. The
-# group is what keeps two repos sharing a basename — mms-frontend and
-# mms-frontend (copy 1) — off one session name, where a bare launch would
+# group is what keeps two repos sharing a basename — my-app and
+# my-app (copy 1) — off one session name, where a bare launch would
 # silently kill the other's panel. A worktree has its own path and so its own
 # session name, which is what keeps two agents' worktrees off one panel.
 session_name() {

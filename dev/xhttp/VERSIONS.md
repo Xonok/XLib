@@ -5,7 +5,7 @@
 ## 1_0_1 [VC9QWYY]
 
 Keep-alive, and percent-decoding of the request target. Both found by
-migrating Mallesne and Space-Traveller's frontends to xhttp and refreshing
+migrating two projects' frontends to xhttp and refreshing
 traveller: the page load stalled partway, which looked like one bad image and
 was not.
 
@@ -14,7 +14,7 @@ default of 1. Every connection served one request and closed, while responses
 were `HTTP/1.1` and never said `Connection: close` - so browsers reused the
 connection, the server closed without reading the request already in flight,
 and that file was silently lost. 384 requests over 6 keep-alive connections
-gave 6 answered and 378 lost. Through the Mallesne proxy it arrived as an RST
+gave 6 answered and 378 lost. Through the proxy it arrived as an RST
 rather than a clean close. The `max_requests=120` in the public wrapper was
 dead code; nothing reached it.
 

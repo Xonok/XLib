@@ -1,6 +1,6 @@
 **Where am I?**  
-This is the repository for shared libraries in the mallesne project.  
-Our main project is Traveller, but there are also numerous smaller projects that will eventually find their way into the Playground repository.  
+This is the repository for shared libraries used across projects.  
+There is a main project, and numerous smaller projects that will eventually find their way into this repository.  
 The shared libraries from this repo are in the xlib folder.  
 Run install.sh to make them available, then in python do 'from xlib import blah' to import whichever one.  
 
@@ -39,10 +39,10 @@ Export script - same as the release script, but also folds in any xlib libraries
 
 **Legacy**  
 Due to the large number of legacy projects, it's not reasonable to migrate them all at once.  
-At first, it's enough to put all the loose ones into playground and their libraries(if any) into xlib_legacy.  
+At first, it's enough to put all the loose ones into a legacy repository and their libraries(if any) into xlib_legacy.  
 Keep projects runnable if they were runnable before migration.  
 Over time the development of all libraries can be moved into this project and versioned copies can be made. Once there's no legacy libraries left, just delete the xlib_legacy folder. Note that git won't remove folders automatically, since it doesn't track folders, only files.  
 
 **Other projects**
 A version of XLib for C or JS.
-For JS, the distribution mechanism is a question. lib.mallesne.ee?
+For JS, the distribution mechanism is a question.

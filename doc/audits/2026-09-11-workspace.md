@@ -110,7 +110,7 @@ Committed `HEAD:tools/agent-coord.py` already implements role-N ids, the
 old-format upgrade (`:156`); my `id`/`note` outputs confirm it — so `:47`
 is wrong as written. **Update (human confirm, 09-11): the last dependency,
 `OPENCODE_AGENT_ROLE`, is wired too** — `oc-agent`
-(`/home/xonok/.local/bin/oc-agent` → `/storage/Scripts/oc-agent:27`) exports
+(`~/.local/bin/oc-agent` → `/storage/Scripts/oc-agent:27`) exports
 `OPENCODE_AGENT_ROLE="$AGENT"` before spawning each agent. The redesign is
 therefore done end-to-end; `STATUS.md:101` ("OPENCODE_AGENT_ROLE not set by
 anything yet") is stale and the `:47` row should move from In progress to

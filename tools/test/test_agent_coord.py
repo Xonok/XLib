@@ -284,12 +284,12 @@ class TestLeftoverIdentity(CoordTestCase):
 		self.tool.recycle_dead_slots = lambda: None
 		self.tool.migrate_ids = lambda: None
 		self.tool.session_key = lambda: "pid-100"
-		self.tool.service_keyed_ids = lambda ids: {"pid-200": "xonok/secretary-1"}
+		self.tool.service_keyed_ids = lambda ids: {"pid-200": "oldhome/secretary-1"}
 
 	def test_the_leftover_identity_and_its_claims_move_to_the_new_key(self):
-		self.write_json("ids.json", {"pid-200": "xonok/secretary-1"})
-		self.write_json("claims.json", {"xonok/secretary-1": ["/tmp/a.py"]})
-		self.write_json("rule-cursor.json", {"xonok/secretary-1": {"/tmp/AGENTS.md": "abc"}})
+		self.write_json("ids.json", {"pid-200": "oldhome/secretary-1"})
+		self.write_json("claims.json", {"oldhome/secretary-1": ["/tmp/a.py"]})
+		self.write_json("rule-cursor.json", {"oldhome/secretary-1": {"/tmp/AGENTS.md": "abc"}})
 		agent = self.tool.my_id()
 		self.assertEqual(agent, "ws/secretary-1")
 		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-1"})
@@ -297,18 +297,18 @@ class TestLeftoverIdentity(CoordTestCase):
 		self.assertEqual(self.read_json("rule-cursor.json"), {"ws/secretary-1": {"/tmp/AGENTS.md": "abc"}})
 
 	def test_a_leftover_of_another_role_is_not_carried_over(self):
-		self.tool.service_keyed_ids = lambda ids: {"pid-200": "xonok/programmer-1"}
-		self.write_json("ids.json", {"pid-200": "xonok/programmer-1"})
-		self.write_json("claims.json", {"xonok/programmer-1": ["/tmp/a.py"]})
+		self.tool.service_keyed_ids = lambda ids: {"pid-200": "oldhome/programmer-1"}
+		self.write_json("ids.json", {"pid-200": "oldhome/programmer-1"})
+		self.write_json("claims.json", {"oldhome/programmer-1": ["/tmp/a.py"]})
 		agent = self.tool.my_id()
 		self.assertNotEqual(agent, "ws/programmer-1")
-		self.assertEqual(self.read_json("claims.json"), {"xonok/programmer-1": ["/tmp/a.py"]})
+		self.assertEqual(self.read_json("claims.json"), {"oldhome/programmer-1": ["/tmp/a.py"]})
 
 	def test_a_leftover_left_after_the_transition_is_absorbed_not_kept(self):
 		# The session already has an id, and the leftover is still there. The
 		# leftover is taken over once, so it goes and its claims merge in.
-		self.write_json("ids.json", {"pid-200": "xonok/secretary-1", "pid-100": "ws/secretary-1"})
-		self.write_json("claims.json", {"xonok/secretary-1": ["/tmp/a.py"], "ws/secretary-1": ["/tmp/b.py"]})
+		self.write_json("ids.json", {"pid-200": "oldhome/secretary-1", "pid-100": "ws/secretary-1"})
+		self.write_json("claims.json", {"oldhome/secretary-1": ["/tmp/a.py"], "ws/secretary-1": ["/tmp/b.py"]})
 		agent = self.tool.my_id()
 		self.assertEqual(agent, "ws/secretary-1")
 		self.assertEqual(self.read_json("ids.json"), {"pid-100": "ws/secretary-1"})

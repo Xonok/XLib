@@ -190,7 +190,7 @@ tagged as 'rewrite to xtest if it gets in the way' and 'always write new tests
 with xtest'. This way the dogfooding works and won't turn into two parallel
 systems."*
 
-Example of the gap discipline in practice: `test-design-2d-space-game.md` in the
+Example of the gap discipline in practice: a design note for a game in the
 Agents workspace (`plans/done/`).
 
 ## Review passes
