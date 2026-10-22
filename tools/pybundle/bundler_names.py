@@ -26,6 +26,7 @@ _WALRUS = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*:=")
 _CLAUSE = re.compile(r":\s*(import\b|from\b)\s")
 _IMPORT = re.compile(r"^(?:import\s+(?P<module>.+)|from\s+(?P<source>[.\w]+)\s+import\s+(?P<names>.+))$")
 _DEF_NAME = re.compile(r"^(?:async\s+)?def\s+([A-Za-z_]\w*)")
+_SELF_ASSIGNMENT = re.compile(r"^([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$")
 
 def renamed(name: str, prefix: str) -> str:
 	"""The name this one is called in the bundle, under `prefix`.
@@ -55,16 +56,27 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 	"""
 	entries = {id(entry["statement"]): entry for entry in resolved}
 	aliases = _aliases(resolved)
-	blocks = [[set(), set()]]
-	waiting = set()
+	blocks = [0]
+	scopes = [{"bound": set(), "global": set(), "parent": -1, "kind": "module", "depth": 0}]
+	waiting = None
+	kind = None
 	out = []
 	pending = False
 	for depth, index, statement in _scanned(statements):
 		while len(blocks) > depth + 1:
 			blocks.pop()
+		while len(scopes) > 1 and scopes[-1]["depth"] >= len(blocks):
+			scopes.pop()
 		while len(blocks) < depth + 1:
-			blocks.append([set(waiting), set()])
-			waiting = set()
+			if waiting is None:
+				blocks.append(blocks[-1])
+				continue
+			scopes.append({"bound": set(waiting), "global": set(),
+				"parent": _parent_scope(scopes, blocks[-1], kind), "kind": kind,
+				"depth": len(blocks)})
+			blocks.append(len(scopes) - 1)
+			waiting = None
+			kind = None
 		entry = entries.get(id(statement))
 		if entry is not None:
 			kept = _imported(statement, entry, renames)
@@ -78,19 +90,31 @@ def translate(statements: list, renames: dict, resolved: list) -> str:
 				# wrote twice is carried and stays that library's own finding.
 				pending = bool(out) and out[-1] == "" and _blank_at(statements, index)
 			continue
+		if _names_the_module_it_already_names(statement["text"], aliases):
+			# D38: `query = query` in a package's `__init__.py` says the package's
+			# namespace carries the module — and the alias already says it, so the
+			# statement has nothing left to do.
+			pending = bool(out) and out[-1] == "" and _blank_at(statements, index)
+			continue
 		if pending and not statement["text"].strip():
 			pending = False
 			continue
 		pending = False
 		body = statement["text"].strip()
 		if _GLOBAL.match(body):
-			blocks[-1][1].update(_NAMED.findall(body))
+			waiting = None
+			kind = None
+			scopes[-1]["global"].update(_NAMED.findall(body))
 		elif _NONLOCAL.match(body):
-			blocks[-1][0].update(_NAMED.findall(body))
+			waiting = None
+			kind = None
+			scopes[-1]["bound"].update(_NAMED.findall(body))
 		else:
-			own, waiting = _bindings(body)
-			blocks[-1][0].update(own)
-		out.extend(_rewritten(statement["text"], renames, aliases, _shadowed(blocks)))
+			own, parameters = _bindings(body)
+			kind = _scope_kind(body)
+			waiting = set(parameters) if kind is not None else None
+			scopes[-1]["bound"].update(own)
+		out.extend(_rewritten(statement["text"], renames, aliases, _shadowed(scopes)))
 	if not out:
 		return ""
 	return "\n".join(out)
@@ -111,16 +135,61 @@ def defined(statements: list) -> list:
 		found.extend(_bindings(body)[0])
 	return found
 
-def _shadowed(blocks: list) -> set:
+def _scope_kind(body: str):
+	"""What kind of scope this statement opens, or None when it opens none.
+
+	A function body and a class body are scopes, and the two are told apart
+	from an `if` or a `for` because python binds a name in the scope around
+	them and not in the block they sit in. So a name assigned inside an `if`
+	inside a function is the function's own, and a name assigned inside a `for`
+	inside a class body is the class body's own (R4).
+
+	**The two are not the same scope, though.** A class body is not an
+	enclosing scope for the methods defined in it, so a name the class body
+	binds is not visible in them — while a function's names are visible in a
+	function nested in it. That is what `_parent_scope` is for.
+	"""
+	if body.startswith("def ") or body.startswith("async def "):
+		return "function"
+	if body.startswith("class "):
+		return "class"
+	return None
+
+def _parent_scope(scopes: list, scope_id: int, kind: str) -> int:
+	"""The scope a new scope sees.
+
+	**A function's parent is the nearest enclosing scope that is not a class
+	body.** A class body is not an enclosing scope for the methods defined in
+	it — python reads a method's names from the module and the function around
+	it, never from the class the method was written in — so a name the class
+	body binds is not visible in the method, and a name the module binds is
+	renamed there rather than shadowed.
+
+	A class body's parent is the scope around it, whatever that is.
+	"""
+	if kind != "function":
+		return scope_id
+	parent = scope_id
+	while scopes[parent]["kind"] == "class":
+		parent = scopes[parent]["parent"]
+	return parent
+
+def _shadowed(scopes: list) -> set:
 	"""The names a use here cannot touch (R4).
 
-	Only blocks below the module count. A module-level name is one this file
-	*defines*, which is exactly what gets renamed; a name bound inside a function
-	or class is that block's own. A name a block declared `global` is module-level
-	however deep it is declared, so it is taken back out.
+	The module's own names are not among them: a module-level name is one
+	this file *defines*, which is exactly what gets renamed. A name bound in a
+	scope is that scope's own, and a name a scope declared `global` is
+	module-level however deep it is declared, so it is taken back out.
 	"""
-	hidden = set().union(*(block[0] for block in blocks[1:])) if len(blocks) > 1 else set()
-	return hidden - set().union(*(block[1] for block in blocks))
+	hidden = set()
+	global_names = set()
+	scope = scopes[-1]
+	while scope["parent"] >= 0:
+		hidden |= scope["bound"]
+		global_names |= scope["global"]
+		scope = scopes[scope["parent"]]
+	return hidden - global_names
 
 def _scanned(statements: list):
 	"""Each statement with the depth the tokenizer puts it at, in order.
@@ -163,6 +232,12 @@ def _aliases(resolved: list) -> dict:
 	A use of such a name is the callee's prefix followed by the attribute, so
 	`helper.run` becomes `helper__run`. Only a local module import gets this; a
 	non-local one is an ordinary rename (D20), because its attribute stays.
+
+	**A package's namespace comes with it.** A package's own name reaches the
+	package's `__init__.py` globals, but `pkg.sub` reaches the submodule's, and
+	those are two different places. So each module the package's folder carries
+	is an alias of its own, keyed by the path as it is written after the
+	package's name — `pkg.sub` is the key `sub`.
 	"""
 	found = {}
 	for entry in resolved:
@@ -174,6 +249,8 @@ def _aliases(resolved: list) -> dict:
 			found[target["written"] if target["dotted"] else target["binds"]] = target["prefix"]
 			if target["alias"] is None and not target["dotted"]:
 				found[target["name"]] = target["prefix"]
+			for name, prefix in target.get("namespace", {}).items():
+				found[f"{target['binds']}.{name}"] = prefix
 	return found
 
 def _imported(statement: dict, entry: dict, renames: dict):
@@ -264,10 +341,16 @@ def _header(statement: dict) -> str:
 
 def _emptied(statement: dict, statements: list, index: int) -> list:
 	"""What is left of a removed import — D22's `pass`, where the removal was the
-	only statement of its block, and nothing at all otherwise."""
+	only statement of its block, and nothing at all otherwise.
+
+	**A module-level import that was the file's last statement leaves nothing
+	behind.** D32's third rule says removing a statement must not leave a double
+	blank line, and a blank line left where the import was is one half of that
+	pair — the other half is the blank the source wrote above it.
+	"""
 	indent = statement["indent"]
 	if not indent or (index + 1 < len(statements) and statements[index + 1]["indent"] == indent):
-		return [] if index + 1 < len(statements) else ["pass" if indent else ""]
+		return [] if index + 1 < len(statements) or not indent else ["pass"]
 	return [f"{indent}pass"]
 
 def _blank_at(statements: list, index: int) -> bool:
@@ -280,6 +363,11 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	A name an enclosing block has bound is that block's own and stays. A name
 	after a dot belongs to whatever holds it, not to this file. A name a local
 	module binds is its prefix instead, and the dot goes with it (D28).
+
+	**A def's own parameter names stay too** — a parameter is a name the
+	function binds, so R4 makes it the function's own. The body already knew
+	that; the def line did not, and a parameter renamed there while the body
+	kept the old name produced a `NameError` at the first call.
 
 	Names are spliced in by position rather than rebuilt from tokens, because R7
 	requires everything that is not a name to reach the bundle untouched and a
@@ -296,6 +384,7 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 		walked += len(line)
 	edits = []
 	after_dot = False
+	own = _parameters_of(tokens)
 	index = 0
 	while index < len(tokens):
 		token = tokens[index]
@@ -307,12 +396,17 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 			continue
 		name = token.string
 		start = offsets[token[2][0] - 1] + token[2][1]
-		if after_dot:
+		if after_dot or index - 1 in own:
 			continue
 		if (run := _dotted(name, tokens, index, aliases)) is not None:
 			last = tokens[run[1] - 1]
 			edits.append((start, offsets[last[3][0] - 1] + last[3][1], aliases[run[0]]))
 			index = run[1]
+			# The alias replaced the base *and* the dot, so the name that
+			# follows is an attribute of whatever holds it — the same rule
+			# the plain path already applies, and the one this path used
+			# to skip past.
+			after_dot = True
 			continue
 		if name in shadowed or name not in renames:
 			continue
@@ -320,6 +414,75 @@ def _rewritten(text: str, renames: dict, aliases: dict, shadowed: set) -> list:
 	for start, end, replacement in reversed(edits):
 		text = text[:start] + replacement + text[end:]
 	return text.split("\n")
+
+def _names_the_module_it_already_names(text: str, aliases: dict) -> bool:
+	"""Whether this statement binds a name to the module that name already is.
+
+	`query = query`, in a package's `__init__.py`, says the package's namespace
+	carries the module `query`. **The alias already says it** — D28's alias
+	makes a use of `query` reach the module's globals — so in the bundle the
+	statement has nothing left to do, and the module itself has no value to
+	bind (D17).
+
+	Only the name that names the module qualifies. Any other assignment of a
+	module is left alone, and still fails at run time as D17 says it does.
+	"""
+	match = _SELF_ASSIGNMENT.match(text.strip())
+	return match is not None and match.group(1) == match.group(2) and match.group(1) in aliases
+
+def _parameters_of(tokens: list) -> set:
+	"""Where a def's own parameter names are, among its tokens.
+
+	A parameter is a name the function binds, so it is the function's own and
+	is not translated (R4). **A default value and an annotation are not
+	parameters**: they are read in the scope around the def, and are translated
+	like any name there. So the parameter list is walked and a name counts only
+	where a parameter can stand — right after the list's own `(` or a `,` at the
+	list's level, or after a `*`.
+
+	Nothing is returned for a statement that is not a def, and the positions are
+	the token indices, so a caller can ask about a token it is holding.
+	"""
+	found = set()
+	open_at = _parameters_open(tokens)
+	if open_at is None:
+		return found
+	depth = 0
+	previous = ""
+	for at in range(open_at, len(tokens)):
+		token = tokens[at]
+		if token[0] == tokenize.OP:
+			if token.string in "([{":
+				depth += 1
+			elif token.string in ")]}":
+				depth -= 1
+				if depth == 0:
+					break
+			previous = token.string if depth == 1 else ""
+			continue
+		if token[0] == tokenize.NAME and depth == 1 and previous in (",", "(", "*", "**"):
+			found.add(at)
+		previous = ""
+	return found
+
+def _parameters_open(tokens: list):
+	"""The token index of the `(` that opens a def's parameter list, or None.
+
+	The def's own name sits between the keyword and the bracket, so the bracket
+	is found by walking past it rather than by counting.
+	"""
+	at = None
+	for index, token in enumerate(tokens):
+		if token[0] == tokenize.NAME and token.string == "def":
+			at = index
+			break
+	if at is None:
+		return None
+	while at + 1 < len(tokens) and tokens[at + 1][0] != tokenize.OP:
+		at += 1
+	if at + 1 >= len(tokens) or tokens[at + 1][1] != "(":
+		return None
+	return at + 1
 
 def _dotted(name: str, tokens: list, index: int, aliases: dict):
 	"""The longest dotted run from here that a local module alias covers.

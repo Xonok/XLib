@@ -42,6 +42,7 @@ def inline(modpath: str, root: str, out, seen: set, entry: str) -> list:
 	for item in resolved:
 		for target in item["targets"]:
 			target["prefix"] = None if not target["local"] or target["modpath"] == entry else _prefix(target["modpath"])
+			target["namespace"] = _namespaces(target)
 	imported = _inlined(resolved, modpath, root, out, seen, entry, prefix)
 	own = {name: renamed(name, prefix) for name in defined(found)}
 	path = _path_of(modpath)
@@ -90,6 +91,18 @@ def _prefix(modpath: str) -> str:
 	other; the one test pinning the emitted name is what fixes the shape.
 	"""
 	return "".join(part if part.startswith("_") else part + "__" for part in modpath.split("."))
+
+def _namespaces(target: dict) -> dict:
+	"""The prefixes of the modules a package's namespace carries.
+
+	A use of `pkg.sub` reaches `sub`'s globals, so the name after the package's
+	own name has to reach that module's prefix and not the package's. The
+	package's own `__init__.py` is not in here: its globals are the package's
+	own name, and D28's alias already reaches them.
+	"""
+	if not target["local"] or not target.get("namespace"):
+		return {}
+	return {name: _prefix(modpath) for name, modpath in target["namespace"].items()}
 
 def _path_of(modpath: str) -> str:
 	"""Where R2 says a block's comments point: a directory component carries a

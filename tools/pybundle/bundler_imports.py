@@ -12,6 +12,7 @@ know — it is handed the root *folder*, never the entry (D15).
 
 import re
 from pathlib import Path
+from tools.pybundle.bundler_source import statements
 
 class IMPORT_FILE_NOT_FOUND(Exception):
 	"""A file an import named is not there, and a relative import cannot be a
@@ -19,6 +20,7 @@ class IMPORT_FILE_NOT_FOUND(Exception):
 
 _CLAUSE = re.compile(r":\s*((?:import|from)\s)")
 _HEAD = re.compile(r"^(import|from)\s+(.*)$", re.DOTALL)
+_ASSIGN = re.compile(r"^([A-Za-z_]\w*)\s*(?::[^=]*?)?(?:[-+*/%@&|^]|//|\*\*|<<|>>)?=(?!=)")
 
 def imports(statements: list, modpath: str, root: str) -> list:
 	"""One entry per import statement, in the order the statements are in.
@@ -119,13 +121,73 @@ def _target(candidate: str, name: str, alias, modpath: str, root: str, dotted: b
 	detecting that out of scope. A missing relative one cannot be, so it raises.
 	"""
 	found = _here(candidate, root, relative, candidate)
+	namespace = {}
 	if found is not None and found.name == "__init__.py":
 		# D6: importing a folder imports its `__init__.py`, and that contributes
 		# `__init__` as an ordinary path component rather than being a special case.
+		namespace = _namespace(candidate, root)
 		candidate = f"{candidate}.__init__"
 	return {"modpath": candidate if found is not None else None, "name": name, "alias": alias,
 		"binds": alias or name, "written": candidate, "dotted": dotted,
-		"local": found is not None, "prefix": None, "kind": "module"}
+		"local": found is not None, "prefix": None, "kind": "module", "namespace": namespace}
+
+def _namespace(package: str, root: str) -> dict:
+	"""The names a package's folder carries, and the module each one is.
+
+	A package's namespace is its own `__init__.py` plus every module beside it
+	and every package below it, so a use of `pkg.sub` reaches `sub`'s globals.
+	**The folder is read here, where the package is named, rather than where
+	the package is inlined** — the file that uses the package may well be
+	translated before the package itself is reached.
+
+	**A module the package's own `__init__.py` overwrites is not in here.**
+	`init = init.init` in a package's `__init__.py` makes `pkg.init` the
+	function, not the module beside it, and the package's own name reaches the
+	function. So the names the package gives a value of its own are left out,
+	and the package's own name covers them.
+
+	The keys are the paths as they are written after the package's own name, so
+	`pkg.sub` is the key `sub` and `pkg.sub.deeper` is `sub.deeper`.
+	"""
+	found = {}
+	folder = Path(root) / package.replace(".", "/")
+	for path in sorted(folder.glob("*.py")):
+		if path.stem != "__init__":
+			found[path.stem] = f"{package}.{path.stem}"
+	for path in sorted(folder.iterdir()):
+		if not path.is_dir() or not (path / "__init__.py").is_file():
+			continue
+		child = f"{package}.{path.name}"
+		found[path.name] = f"{child}.__init__"
+		for name, modpath in _namespace(child, root).items():
+			found[f"{path.name}.{name}"] = modpath
+	overwritten = _overwritten(package, root)
+	return {name: modpath for name, modpath in found.items() if name not in overwritten}
+
+def _overwritten(package: str, root: str) -> set:
+	"""The names a package's `__init__.py` gives a value of its own.
+
+	`init = init.init` makes the package's `init` the function and not the
+	module beside it. **A name assigned to itself is not one of these** — that
+	is still the module, and the package's own name does not stand for it.
+	"""
+	found = set()
+	path = Path(root) / package.replace(".", "/") / "__init__.py"
+	try:
+		text = path.read_text(encoding="utf-8")
+	except OSError:
+		return found
+	for statement in statements(text):
+		if statement["indent"]:
+			continue
+		body = statement["text"].strip()
+		match = _ASSIGN.match(body)
+		if match is None:
+			continue
+		name = match.group(1)
+		if body[match.end():].strip() != name:
+			found.add(name)
+	return found
 
 def _here(candidate: str, root: str, relative: bool, what: str):
 	"""The file a modpath names, raising when a relative import found nothing."""
