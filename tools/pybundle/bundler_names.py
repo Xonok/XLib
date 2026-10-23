@@ -458,7 +458,16 @@ def _parameters_of(tokens: list) -> set:
 				depth -= 1
 				if depth == 0:
 					break
-			previous = token.string if depth == 1 else ""
+			if depth == 1:
+				if token.string in (",", "("):
+					previous = token.string
+				elif token.string in ("*", "**") and previous in (",", "("):
+					# unpacking, not multiplication
+					previous = token.string
+				else:
+					previous = ""
+			else:
+				previous = ""
 			continue
 		if token[0] == tokenize.NAME and depth == 1 and previous in (",", "(", "*", "**"):
 			found.add(at)
