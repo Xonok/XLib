@@ -143,5 +143,14 @@ def test_an_attribute_of_an_imported_module_keeps_the_base_modules_prefix():
 	})
 	xtest.equal(value, 2)
 
+def test_a_name_in_a_default_following_multiplication_is_translated():
+	# A `*` in a default value is multiplication, not unpacking, so the name
+	# after it must be translated like any other name in the default.
+	bundle = _bundle({
+		"main.py": "import helper\n\ndef run():\n\treturn helper.compute()\n",
+		"helper.py": "SCALE = 10\n\ndef compute(limit = 100 * SCALE):\n\treturn limit\n",
+	})
+	xtest.contains("def helper__compute(limit = 100 * helper__SCALE)", bundle)
+
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
