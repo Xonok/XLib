@@ -535,7 +535,9 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	# QUEUE (2) — 8 in total.  (The previous code subtracted a second 2 for
 	# the UPCOMING header, which was already counted in len(lines), leaving
 	# two lines unaccounted for on every render; this fixes that.)
-	reserved_after_upcoming = 8  # blank(1) + PACE(5) + QUEUE(2)
+	reserved_after_upcoming = 8 # blank(1) + PACE(5) + QUEUE(2)
+	# R29: the UPCOMING header itself is already in len(lines), so no extra
+	# subtraction for it (the old code double-counted 2 lines).
 	available_for_upcoming = height - len(lines) - reserved_after_upcoming
 	upcoming_limit = max(0, available_for_upcoming)
 

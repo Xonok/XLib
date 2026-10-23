@@ -1054,7 +1054,7 @@ def test_describe_lines_max_lines_zero_returns_empty():
 	xtest.equal(describe_lines("hello", 76, 0), [])
 
 def test_describe_lines_truncates_with_ellipsis():
-	long_text = " ".join(["word"] * 100)  # 499 chars, wraps to many lines at 76
+	long_text = " ".join(["word"] * 100) # 499 chars, wraps to many lines at 76
 	lines = describe_lines(long_text, 76, 2)
 	xtest.equal(len(lines), 2)
 	xtest.true(lines[-1].endswith("..."),
@@ -1081,7 +1081,7 @@ def test_short_description_not_truncated_at_full_height():
 	xtest.true("short description here" in view)
 
 def test_long_description_truncated_at_medium_height():
-	long_desc = " ".join(["word"] * 50)  # ~249 chars → ~4 wrapped lines at width 76
+	long_desc = " ".join(["word"] * 50) # ~249 chars, wraps to ~4 lines at width 76
 	view = _make_view([_make_task(1, 'Task 1', long_desc)], 80, 16)
 	# budget at height 16: 16 - 12 - 2 = 2 → 2 desc lines, truncated with '...'
 	lines = view.splitlines()
