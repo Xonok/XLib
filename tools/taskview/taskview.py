@@ -29,6 +29,20 @@ _NEVER_SHOW_TAGS = {"cancelled", "archived"}
 # Built-in always-show tags (Rule 3) — bypass tag rule only, not category
 _ALWAYS_SHOW_TAGS = {"critical", "emergency"}
 
+# R28: height thresholds that select how many detail tasks are shown.
+# Full height (>= _FULL_HEIGHT lines): 2 most urgent tasks in full detail.
+# Medium height (>= _MEDIUM_HEIGHT): 1 most urgent task in full detail.
+# Below _MEDIUM_HEIGHT: still 1 detail task, but build_view truncates its
+# description to the lines that remain (R30a).
+_FULL_HEIGHT = 22
+_MEDIUM_HEIGHT = 14
+# R28: fixed lines the layout spends regardless of detail content —
+# header(2) + blank after detail(1) + UPCOMING header(1) + blank after UPCOMING(1)
+# + PACE(5) + QUEUE(2) = 12.  The detail body minimum (2 lines per task:
+# title + due, plus 1 between tasks) and the UPCOMING rows are the variable
+# parts that shrink or grow with the terminal height.
+_FIXED_OVERHEAD = 12
+
 class FilterError(Exception):
 	"""Raised by load_filter on unreadable or malformed YAML."""
 	pass
@@ -389,15 +403,52 @@ def pick_current(open_tasks: list) -> dict | None:
 		return None
 	return open_tasks[0]
 
-def pick_detail_tasks(open_tasks: list, count: int = 2) -> list:
-	"""Pick the N most urgent open tasks for full detail view."""
-	return open_tasks[:count]
+def pick_detail_tasks(open_tasks: list, height: int) -> list:
+	"""Pick the most urgent open tasks for the detail view, adapting to height.
+
+	R28: returns the 2 most urgent tasks at full height (height >= _FULL_HEIGHT),
+	1 at medium height (height >= _MEDIUM_HEIGHT), and 0 at very limited
+	height (all open tasks go to the condensed UPCOMING list instead).
+	Returns an empty list when there are no open tasks, or when the pane is
+	too short for any detail block.
+	"""
+	if not open_tasks:
+		return []
+	if height >= _FULL_HEIGHT:
+		return open_tasks[:2]
+	if height >= _MEDIUM_HEIGHT:
+		return open_tasks[:1]
+	# Very limited: no room for a detail block — every task appears in UPCOMING.
+	return []
+
+def describe_lines(text: str, width: int, max_lines: int) -> list[str]:
+	"""Wrap *text* to *width* and return at most *max_lines* lines.
+
+	When the wrapped text exceeds *max_lines*, the last visible line is cut to
+	make room for an ellipsis (``...``), signalling that content follows which
+	did not fit.  R30a.
+	"""
+	if max_lines <= 0:
+		return []
+	all_lines = wrap_text(text, width)
+	if len(all_lines) <= max_lines:
+		return all_lines
+	# Keep the first max_lines-1 lines unchanged; the last gets a marker.
+	kept = list(all_lines[:max_lines - 1])
+	last = all_lines[max_lines - 1]
+	if width <= 3:
+		kept.append("..."[:max(0, width)])
+	else:
+		kept.append(last[:width - 3] + "...")
+	return kept
 
 def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str:
 	"""
-	R24, R26, R26a, R27: Pure render function.
-	Header chosen by source: explicit/discovered → label, none → "no filter found", flag → "no filter".
-	Shows 2 most urgent tasks in full detail; remaining height for condensed UPCOMING list.
+	R24, R26, R26a, R27, R28, R29, R30, R30a: Pure render function.
+	Header chosen by source: explicit/discovered → label, none → "no filter found",
+	flag → "no filter".  Detail tasks, their description line budgets, the
+	truncation of descriptions that do not fit (R30a), and the UPCOMING row
+	count all adapt to the terminal height.
 	"""
 	lines = []
 
@@ -416,9 +467,42 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 
 	open_tasks = metrics["open_tasks"]
 
-	# Detail tasks: 2 most urgent
-	detail_tasks = pick_detail_tasks(open_tasks, 2)
-	detail_line_count = 0
+	# R28: detail tasks adapt to terminal height — 2 at full height, 1 at
+	# medium height, 0 at very limited (all open tasks go to UPCOMING).
+	detail_tasks = pick_detail_tasks(open_tasks, height)
+	detail_count = len(detail_tasks)
+
+	# R28, R30a: work out how many description lines each detail task may use
+	# before the UPCOMING / PACE / QUEUE sections are squeezed.  The fixed
+	# lines (header + blank-after-detail + UPCOMING header + blank-after-
+	# UPCOMING + PACE + QUEUE) total _FIXED_OVERHEAD; the detail body minimum
+	# is 2 lines per task (title + due) plus 1 between consecutive tasks.
+	# What is left of the height is the budget shared between description
+	# lines and UPCOMING rows.
+	detail_body_min = detail_count * 2 + max(0, detail_count - 1)
+	budget = height - _FIXED_OVERHEAD - detail_body_min
+
+	# Full description line counts (wrapped to the detail indent width).
+	desc_counts = []
+	for task in detail_tasks:
+		if task.get("description"):
+			desc_counts.append(len(wrap_text(task["description"], width - 4)))
+		else:
+			desc_counts.append(0)
+	total_desc = sum(desc_counts)
+
+	if budget >= total_desc:
+		# Everything fits: full descriptions, excess goes to UPCOMING.
+		desc_budgets = desc_counts
+	else:
+		# Not enough room: truncate descriptions first (greedy, first task
+		# gets priority), no UPCOMING rows.  R30a.
+		desc_budgets = []
+		remaining = max(0, budget)
+		for count in desc_counts:
+			alloc = min(count, remaining)
+			desc_budgets.append(alloc)
+			remaining -= alloc
 
 	for i, task in enumerate(detail_tasks):
 		if i > 0:
@@ -428,26 +512,31 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 		chg_str = fmt_time(task["chg_ts"])
 		lines.append(f"  {chg_str}  ·  due: {due_str}")
 		if task.get("description"):
-			# Show description, wrapped to width - 4 (indent)
-			desc_lines = wrap_text(task["description"], width - 4)
-			for dl in desc_lines:
-				lines.append(f"  {dl}")
-		detail_line_count += 4 + (len(desc_lines) if task.get("description") else 0) + (1 if i > 0 else 0)
+			# R30a: show as many description lines as the budget allows;
+			# describe_lines marks the cut with '...' when truncated.
+			allowance = desc_budgets[i]
+			if allowance > 0:
+				show = describe_lines(task["description"], width - 4, allowance)
+				for dl in show:
+					lines.append(f"  {dl}")
 
 	if not detail_tasks:
-		lines.append("▸ (no open tasks)")
-		lines.append("")
-		detail_line_count = 2
+		if not open_tasks:
+			lines.append("▸ (no open tasks)")
+			lines.append("")
+		# else: open tasks exist but the pane is too short for a detail
+		# block; every open task appears in UPCOMING instead.
 	else:
 		# Blank line after detail tasks before UPCOMING
 		lines.append("")
 
-	# Calculate remaining height for UPCOMING list
-	# Reserve lines for: PACE (5 lines), QUEUE (2-3 lines), header (2 lines already counted)
-	# and 1 blank line before UPCOMING
-	reserved_after_upcoming = 8 # PACE (4) + blank + QUEUE (2-3) ≈ 8
-	upcoming_header_lines = 2 # "UPCOMING" + blank line after
-	available_for_upcoming = height - len(lines) - reserved_after_upcoming - upcoming_header_lines
+	# R29: size UPCOMING to whatever height the detail blocks left.  The fixed
+	# lines after the UPCOMING header are the blank after it (1), PACE (5) and
+	# QUEUE (2) — 8 in total.  (The previous code subtracted a second 2 for
+	# the UPCOMING header, which was already counted in len(lines), leaving
+	# two lines unaccounted for on every render; this fixes that.)
+	reserved_after_upcoming = 8  # blank(1) + PACE(5) + QUEUE(2)
+	available_for_upcoming = height - len(lines) - reserved_after_upcoming
 	upcoming_limit = max(0, available_for_upcoming)
 
 	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}

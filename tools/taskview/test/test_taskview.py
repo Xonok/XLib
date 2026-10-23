@@ -6,6 +6,8 @@ from io import StringIO
 # Import convention: add repo root to path, then import from tools.taskview.taskview
 ROOT = os.path.join(os.path.dirname(__file__), '..', '..', '..')
 sys.path.insert(0, ROOT)
+# xtest lives in dev/xtest/
+sys.path.insert(0, os.path.join(ROOT, 'dev', 'xtest'))
 from tools.taskview.taskview import (
 	load_filter,
 	discover_filter,
@@ -20,7 +22,10 @@ from tools.taskview.taskview import (
 	watch_targets,
 	truncate,
 	task_label,
+	pick_detail_tasks,
+	describe_lines,
 )
+import xtest
 
 # Module-level test isolation: redirect XDG_DATA_HOME to a unique temp directory
 # so no test can ever touch the real ~/.local/share/taskview (R17, R19).
@@ -954,5 +959,171 @@ class TestIsolationGuard(unittest.TestCase):
 		self.assertNotEqual(data_dir, real_default)
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME))
 
+def _make_view(tasks, width=80, height=24):
+	"""Build a view with the given tasks as open tasks."""
+	selected = {t['id']: t for t in tasks}
+	metrics = {
+		'done_day': 0, 'done_week': 0, 'done_month': 0,
+		'active': len(tasks), 'this_week': 0, 'this_month': 0, 'later': len(tasks),
+		'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0,
+	}
+	filter_data = {
+		'label': 'T', 'categories': set(), 'tags': set(),
+		'include_bucket': True,
+		'limits': {'upcoming': 5, 'queue_breakdown': True},
+	}
+	return build_view(selected, metrics, filter_data, width, height, 'explicit')
+
+# === R28, R29, R30, R30a: height-adaptive layout tests (xtest idiom) ===
+
+def _make_task(task_id, title='T', description=''):
+	return {'id': task_id, 'status': 'open', 'title': title, 'due_ts': None,
+		'chg_ts': 1000 + task_id, 'category': 'X', 'tags': set(),
+		'importance': '', 'description': description}
+
+def _tasks(n, description=''):
+	return [_make_task(i, f'Task {i}', description) for i in range(1, n + 1)]
+
+def _make_view(tasks, width=80, height=24):
+	"""Build a view with the given tasks as open tasks."""
+	selected = {t['id']: t for t in tasks}
+	metrics = {
+		'done_day': 0, 'done_week': 0, 'done_month': 0,
+		'active': len(tasks), 'this_week': 0, 'this_month': 0, 'later': len(tasks),
+		'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0,
+	}
+	filter_data = {
+		'label': 'T', 'categories': set(), 'tags': set(),
+		'include_bucket': True,
+		'limits': {'upcoming': 5, 'queue_breakdown': True},
+	}
+	return build_view(selected, metrics, filter_data, width, height, 'explicit')
+
+def _detail_lines(view):
+	"""Lines starting with ▸ that are not the '(no open tasks)' placeholder."""
+	return [l for l in view.splitlines()
+		if l.startswith('▸') and '(no open' not in l]
+
+def _upcoming_lines(view):
+	"""Lines starting with ' · ' that are not '(none)'."""
+	return [l for l in view.splitlines()
+		if l.startswith(' · ') and '(none)' not in l]
+
+# --- pick_detail_tasks (R28) ---
+
+def test_pick_two_at_full_height():
+	xtest.equal(pick_detail_tasks(_tasks(5), 24), _tasks(5)[:2])
+
+def test_pick_one_at_medium_height():
+	xtest.equal(pick_detail_tasks(_tasks(5), 16), _tasks(5)[:1])
+
+def test_pick_none_at_very_limited_height():
+	xtest.equal(pick_detail_tasks(_tasks(5), 10), [])
+
+def test_pick_none_when_no_open_tasks():
+	xtest.equal(pick_detail_tasks([], 24), [])
+
+def test_pick_all_when_not_enough_for_two():
+	xtest.equal(len(pick_detail_tasks(_tasks(1), 24)), 1)
+
+# --- build_view detail count (R28) ---
+
+def test_full_height_shows_two_detail_tasks():
+	view = _make_view(_tasks(4), 80, 24)
+	xtest.equal(len(_detail_lines(view)), 2)
+
+def test_medium_height_shows_one_detail_task():
+	view = _make_view(_tasks(4), 80, 16)
+	xtest.equal(len(_detail_lines(view)), 1)
+
+def test_very_limited_height_shows_no_detail_tasks():
+	view = _make_view(_tasks(4), 80, 10)
+	xtest.equal(len(_detail_lines(view)), 0)
+
+def test_three_tasks_at_full_height_has_two_detail_one_upcoming():
+	view = _make_view(_tasks(3), 80, 24)
+	xtest.equal(len(_detail_lines(view)), 2)
+	xtest.equal(len(_upcoming_lines(view)), 1)
+
+# --- describe_lines (R30a) ---
+
+def test_describe_lines_short_text_untruncated():
+	xtest.equal(describe_lines("short text", 76, 5), ["short text"])
+
+def test_describe_lines_max_lines_zero_returns_empty():
+	xtest.equal(describe_lines("hello", 76, 0), [])
+
+def test_describe_lines_truncates_with_ellipsis():
+	long_text = " ".join(["word"] * 100)  # 499 chars, wraps to many lines at 76
+	lines = describe_lines(long_text, 76, 2)
+	xtest.equal(len(lines), 2)
+	xtest.true(lines[-1].endswith("..."),
+		f"last line should end with '…': {lines[-1]!r}")
+
+def test_describe_lines_keeps_first_line_intact():
+	long_text = " ".join(["word"] * 100)
+	lines = describe_lines(long_text, 76, 2)
+	xtest.true("..." not in lines[0],
+		f"first line should not be truncated: {lines[0]!r}")
+
+def test_describe_lines_one_line_truncated():
+	# A single word longer than width, max_lines=1 → one line with '...'
+	lines = describe_lines("abcdefghijklmnopqrstuvwxyz" * 10, 20, 1)
+	xtest.equal(len(lines), 1)
+	xtest.true(lines[-1].endswith("..."))
+
+# --- description truncation in build_view (R30a) ---
+
+def test_short_description_not_truncated_at_full_height():
+	desc = "short description here"
+	tasks = [_make_task(1, 'Task 1', desc), _make_task(2, 'Task 2', desc)]
+	view = _make_view(tasks, 80, 24)
+	xtest.true("short description here" in view)
+
+def test_long_description_truncated_at_medium_height():
+	long_desc = " ".join(["word"] * 50)  # ~249 chars → ~4 wrapped lines at width 76
+	view = _make_view([_make_task(1, 'Task 1', long_desc)], 80, 16)
+	# budget at height 16: 16 - 12 - 2 = 2 → 2 desc lines, truncated with '...'
+	lines = view.splitlines()
+	desc_lines = [l for l in lines if l.startswith('  ') and 'due:' not in l
+		and l.strip() and not l.strip().startswith('▸')]
+	xtest.true(any(l.endswith('...') for l in desc_lines),
+		f"description should be truncated at height 16: {view!r}")
+
+def test_no_description_at_very_limited_height():
+	long_desc = " ".join(["word"] * 50)
+	view = _make_view([_make_task(1, 'Task 1', long_desc)], 80, 10)
+	# 0 detail tasks → no description shown
+	xtest.equal(len(_detail_lines(view)), 0)
+
+# --- PACE and QUEUE always fit (R28, R29) ---
+
+def test_pace_and_queue_always_present():
+	for height in (10, 12, 14, 16, 20, 24, 30, 40):
+		view = _make_view(_tasks(3), 80, height)
+		lines = view.splitlines()
+		xtest.true('PACE' in lines, f"PACE missing at height {height}")
+		xtest.true(any(l.startswith('QUEUE') for l in lines),
+			f"QUEUE missing at height {height}")
+
+def test_pace_has_day_week_month():
+	view = _make_view(_tasks(1), 80, 24)
+	lines = view.splitlines()
+	xtest.true(any('Day:' in l for l in lines), "PACE Day missing")
+	xtest.true(any('Week:' in l for l in lines), "PACE Week missing")
+	xtest.true(any('Month:' in l for l in lines), "PACE Month missing")
+
+# --- UPCOMING adapts to height (R29) ---
+
+def test_upcoming_rows_increase_with_height():
+	tall = _make_view(_tasks(10), 80, 40)
+	short = _make_view(_tasks(10), 80, 16)
+	xtest.true(len(_upcoming_lines(tall)) >= len(_upcoming_lines(short)),
+		f"tall={len(_upcoming_lines(tall))}, short={len(_upcoming_lines(short))}")
+
+def test_upcoming_none_when_no_remaining_tasks():
+	view = _make_view(_tasks(1), 80, 24)
+	xtest.true(' · (none)' in view)
+
 if __name__ == '__main__':
-	unittest.main()
+	sys.exit(xtest.run(__file__))

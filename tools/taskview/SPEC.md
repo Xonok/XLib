@@ -227,20 +227,29 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R27** All rendering is pure: same (state, filter, width, height, source) in, same
 	text out. No clock reads, no environment reads, no filesystem access inside
 	the render path.
-- **R28** The detail view shows the **2 most urgent open tasks** (overdue first,
-	then current day, then upcoming, until 2 are found) in full detail. Each
-	detail block shows the task id, title, due date, last change time, and
-	description (if present). A blank line separates the two detail blocks.
+- **R28** The detail view adapts to terminal height. At full height (≥
+	`_FULL_HEIGHT` = 22 lines): the **2 most urgent open tasks** (overdue first,
+	then current day, then upcoming) in full detail. At medium height (≥
+	`_MEDIUM_HEIGHT` = 14): the **1 most urgent open task** in full detail.
+	Below 14 lines: no detail block — every open task goes to the condensed
+	UPCOMING list instead. Each detail block shows the task id, title, due
+	date, last change time, and description (if present). A blank line separates
+	the two detail blocks. `pick_detail_tasks(open_tasks, height)` selects them.
 - **R29** The UPCOMING list is condensed and sized to fit the **remaining terminal
-	height** after the detail blocks, header, PACE, and QUEUE sections. The
-	`limits.upcoming` value from the filter file acts as a ceiling; the actual
-	number shown is `min(limits.upcoming, available_height)`. When remaining
-	height is insufficient, the UPCOMING section shows only its header and
-	` · (none)`.
+	height** after the header, detail blocks (adapted to height per R28), PACE,
+	and QUEUE sections. The `limits.upcoming` value from the filter file acts as a
+	ceiling; the actual number shown is `min(limits.upcoming, available_height)`.
+	When descriptions are truncated to make room (R30a), the UPCOMING section
+	may show only its header and ` · (none)`.
 - **R30** Terminal height is read at render time (via `shutil.get_terminal_size()`),
 	and `--width N` overrides width only. Height has no CLI override. A test must
 	be able to obtain deterministic output without a tty by passing explicit
 	width/height to the render function.
+- **R30a** When a detail task's description wraps to more lines than the available
+	height budget allows, the description is truncated to fit and the last visible
+	line ends with `...` (an ellipsis), signalling that content follows.
+	`describe_lines(text, width, max_lines)` wraps to `width` and returns at most
+	`max_lines` lines, appending `...` to the last line when truncation occurs.
 
 ### Writer
 
@@ -623,7 +632,7 @@ def compute_metrics(state: dict, selected: dict, filter_data: dict | None) -> di
 	# argument was); `shown` and `filtered_total` count OPEN tasks only.
 
 def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str
-	# R24, R26, R26a, R27, R28, R29. Pure.
+	# R24, R26, R26a, R27, R28, R29, R30, R30a. Pure.
 
 def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]
 	# R22. The CSV plus the resolved filter file if there is one, de-duplicated.
@@ -643,6 +652,15 @@ def task_label(task: dict, budget: int) -> str
 
 def wrap_text(text: str, width: int) -> list[str]
 	# Helper for description wrapping in detail view.
+
+def pick_detail_tasks(open_tasks: list, height: int) -> list
+	# R28. Returns the 2 most urgent open tasks at full height (>= 22 lines),
+	# 1 at medium height (>= 14), or [] at very limited height (< 14) or
+	# when no open tasks exist.
+
+def describe_lines(text: str, width: int, max_lines: int) -> list[str]
+	# R30a. Wraps text to width and truncates to at most max_lines lines,
+	# marking the cut with '...' on the last visible line.
 
 def read_csv(path: Path) -> dict
 	# R36, R37. Returns 9-key dict per task (id, status, title, due_ts, chg_ts, category, tags, importance, description).
