@@ -282,3 +282,27 @@ class FileServingEdgeTest(TempDirCase):
 		self.assertIn(result, (True, False))
 if __name__ == "__main__":
 	unittest.main()
+
+class SendFileTraversalEdgeTest(TempDirCase):
+	"""Traversal guard weaknesses beyond the literal '..' token."""
+
+	def setUp(self):
+		super().setUp()
+		os.mkdir("outside")
+		with open("outside/secret.txt", "w") as f:
+			f.write("secret")
+		os.mkdir("www")
+		os.symlink("../outside/secret.txt", "www/link.txt")
+		self.CONFIG = {".txt": {"folder": "www", "mime": "text/plain", "compress": False}}
+
+	def test_send_file_does_not_follow_symlink_outside_root(self):
+		"""
+		A symlink inside the served folder that points outside must not be
+		followed. The current guard only checks for the literal '..' token in
+		path_tokens, so a symlink bypasses it entirely and serves the target.
+		"""
+		s = harness.ScriptedSocket(b"")
+		result = xhttp.send_file(s, 200, "link.txt", self.CONFIG)
+		# Should be blocked (False), not served (True)
+		self.assertIs(result, False,
+			"send_file followed a symlink that escapes the served folder")

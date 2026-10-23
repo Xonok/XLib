@@ -42,8 +42,10 @@ def send_response(client,code,**headers):
 #Sends a full response, including payload.
 def send_response_full(client,code,payload,compress=True,**headers):
 	headers = {helper.header_format(k):v for k,v in list(headers.items())}
+	accept_encodings = get_accept_encodings()
+	gzip_accepted = helper.accept_gzip(accept_encodings)
 	size = len(payload)
-	if compress:
+	if compress and gzip_accepted:
 		payload2 = gzip.compress(payload)
 		size2 = len(payload2)
 		if size2 < size:
@@ -76,12 +78,18 @@ def send_file(client,code,path,config,**headers):
 	folder = fconfig["folder"]
 	mime = fconfig["mime"]
 	compress = fconfig.get("compress")
-	path_tokens = [folder] if folder else []
-	path_tokens += path.split("/")
-	path_final = os.path.join(os.getcwd(),*path_tokens)
-	if not os.path.exists(path_final) or ".." in path_tokens:
+	path_root = os.path.realpath(os.getcwd())
+	if folder:
+		path_root = os.path.realpath(os.path.join(os.getcwd(),folder))
+	path_full = os.path.realpath(os.path.join(path_root,*path.split("/")))
+	if os.path.commonpath([path_root,path_full]) != path_root:
 		return False
-	payload = open(path_final,"rb").read()
+	if not os.path.isfile(path_full):
+		return False
+	if ".." in path.split("/"):
+		return False
+	with open(path_full,"rb") as f:
+		payload = f.read()
 	return send_response_full(client,code,payload,compress=compress,content_type=mime,**headers)
 def send_not_found(client,config,**headers):
 	if send_file(client,404,"404.html",config,**headers) == False:
@@ -91,3 +99,6 @@ def send_not_found(client,config,**headers):
 _state = threading.local()
 def mark_closing(): _state.closing = True
 def is_closing(): return getattr(_state,"closing",False)
+def set_accept_encodings(accepted): _state.accept_encodings = accepted
+def get_accept_encodings(): return getattr(_state,"accept_encodings",None)
+def clear_accept_encodings(): return delattr(_state,"accept_encodings")

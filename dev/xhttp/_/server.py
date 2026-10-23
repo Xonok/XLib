@@ -45,10 +45,14 @@ def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests):
 			client = ssl_context.wrap_socket(client,server_side=True)
 		for req_nr in range(max_requests):
 			req = request.read_request(client,client_addr,buffer=buffer)
+			buffer = req["leftover"]
+			accepted = helper.accept_encodings(req["headers"].get("accept-encoding"))
+			response.set_accept_encodings(accepted)
 			keepalive = helper.has_keepalive(req)
 			if req_nr == max_requests-1 or not keepalive:
 				response.mark_closing()
 			func(req,*func_args)
+			response.clear_accept_encodings()
 			if not keepalive:
 				break
 	except err.HTTPHeaderInvalid:

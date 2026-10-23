@@ -1,4 +1,4 @@
-import time,sys
+import time,sys,re
 import email.utils
 
 def datetime_string():
@@ -22,6 +22,36 @@ def has_keepalive(req):
 	if req["protocol"] == "HTTP/1.0":
 		return "keep-alive" in tokens
 	return True
+def accept_encodings(accept_encoding):
+	accepts = {}
+	if accept_encoding == None:
+		return None
+	accept_encoding = accept_encoding.strip().lower()
+	encodings = accept_encoding.split(",")
+	for e in encodings:
+		e = e.strip()
+		if e == "": continue
+		parts = re.split("[;=]",e)
+		count = len(parts)
+		enc = parts[0].strip()
+		key = (parts[1] if count > 1 else "").strip()
+		try:
+			val = float((parts[2] if count > 2 else "1.0").strip())
+		except:
+			val = 1.0
+		if key == "q" and val == 0:
+			accepts[enc] = False
+		elif accepts.get(enc) != False:
+			accepts[enc] = True
+		else:
+			pass #specific beats general
+	return accepts
+def accept_gzip(encodings):
+	if encodings is None: return True
+	if encodings == {}: return False
+	if "gzip" in encodings: return encodings["gzip"]
+	if "*" in encodings: return encodings["*"]
+	return False
 def config_valid(config):
 	#TODO: support * as a fallback.
 	#use this once after loading config, don't use it on every request

@@ -353,8 +353,13 @@ class ContentNegotiationTest(unittest.TestCase):
 		)
 		self.assertEqual(gzip.decompress(body),self.PAYLOAD,"gzip body did not round-trip")
 
-	def test_absent_accept_encoding_is_not_gzipped(self):
-		self.assert_not_gzipped(None,"the client sent no Accept-Encoding at all")
+	def test_absent_accept_encoding_is_gzipped(self):
+		"""
+		The ruling, 2026-10-21: the negotiation filters the server's compress
+		decision. A client that sends no Accept-Encoding at all makes no
+		statement to filter against, so the server's own choice stands.
+		"""
+		self.assert_gzipped(None,"the client sent no Accept-Encoding at all")
 
 	def test_empty_accept_encoding_is_not_gzipped(self):
 		self.assert_not_gzipped("","the client sent an empty Accept-Encoding")
@@ -393,7 +398,7 @@ class ContentNegotiationTest(unittest.TestCase):
 		because the client then waits for bytes that never arrive - which is
 		the same stall shape as the keep-alive defect.
 		"""
-		for accept_encoding,wants_gzip in [(None,False),("gzip",True)]:
+		for accept_encoding,wants_gzip in [(None,True),("gzip",True)]:
 			raw,_ = self.negotiate(accept_encoding)
 			head,_,rest = raw.partition(b"\r\n\r\n")
 			declared = int(harness.header_value(raw,"content-length"))
