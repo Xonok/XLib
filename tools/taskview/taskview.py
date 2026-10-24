@@ -504,21 +504,8 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	if height <= 0:
 		return ""
 
-	# Detail count: switch to fewer whenever it makes sense
+	# Detail count: switch to fewer whenever it makes sense (use existing logic)
 	detail_tasks = pick_detail_tasks(open_tasks, height)
-	# Also try to be more aggressive about switching down if tight
-	if len(detail_tasks) == 2 and height < _FULL_HEIGHT + 5: # be flexible
-		# check if 1 would fit better
-		pass
-	# current logic is fine per request, but ensure we pick sensibly
-	if detail_tasks and len(detail_tasks) == 2 and height < 20: # try to drop to 1 if tight
-		# see if dropping to 1 helps - "whenever it makes sense"
-		alt = open_tasks[:1] if open_tasks else []
-		if alt:
-			detail_tasks = alt
-	elif detail_tasks and len(detail_tasks) == 1 and height < _MEDIUM_HEIGHT:
-		detail_tasks = pick_detail_tasks(open_tasks, height) # keep existing behavior
-
 	detail_count = len(detail_tasks)
 
 	# build detail section
