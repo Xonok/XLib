@@ -8,21 +8,100 @@ The display fits the room it is given: the caps on the two tables come from the
 terminal's own height, a table that had to leave rows out says how many, and
 the room a section does not need goes to the section that has more to show.
 """
-import argparse,datetime,os,shutil,sqlite3,sys,time
+import argparse,contextlib,ctypes,datetime,os,select,signal,shutil,sqlite3,struct,sys,time
 from collections import defaultdict
+from pathlib import Path
 
 NAME = "Skynet"
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 SHOW_EXTRA = False
 _CLEAR_SCREEN = "\033[2J\033[H"
+_ENTER_WATCH = "\033[?25l\033[?1049h"
+_LEAVE_WATCH = "\033[?25h\033[?1049l"
 _POLL_SECONDS = 1.0
 _FALLBACK_SIZE = (80, 24)
+_EVENT_HEADER = struct.Struct("=iIII")
+_IN_MODIFY = 0x00000002
+_IN_CLOSE_WRITE = 0x00000008
+_IN_MOVED_TO = 0x00000080
+_IN_CREATE = 0x00000100
+_IN_DELETE = 0x00000200
+_IN_DELETE_SELF = 0x00000400
+_IN_MOVE_SELF = 0x00000800
+_WATCH_MASK = _IN_MODIFY | _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_CREATE | _IN_DELETE | _IN_DELETE_SELF | _IN_MOVE_SELF
+try:
+	_libc = ctypes.CDLL(None, use_errno=True)
+	_libc.inotify_init.restype = ctypes.c_int
+	_libc.inotify_init.argtypes = []
+	_libc.inotify_add_watch.restype = ctypes.c_int
+	_libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+	HAS_INOTIFY = True
+except AttributeError:
+	_libc = None
+	HAS_INOTIFY = False
 # The lines the display spends before it shows a model: the Skynet header, two
 # section titles, two separators and the blank between the sections.
 _OVERHEAD = 6
 # The lines the two sections need before they can say anything at all: the
 # header, a title and a note for each of them, and the blank between.
 _MINIMUM_HEIGHT = 6
+
+@contextlib.contextmanager
+def _fullscreen():
+	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+	sys.stdout.write(_ENTER_WATCH)
+	sys.stdout.flush()
+	try:
+		yield
+	finally:
+		sys.stdout.write(_LEAVE_WATCH)
+		sys.stdout.flush()
+
+class _Inotify:
+	"""The file changes in one watched directory, read from inotify itself.
+
+	No third-party package: the syscall is the interface, and a missing one
+	is the only reason the caller falls back to polling.
+	"""
+
+	def __init__(self):
+		if _libc is None:
+			raise OSError("inotify is not available")
+		self.fd = _libc.inotify_init()
+		if self.fd == -1:
+			raise OSError(ctypes.get_errno(), "inotify_init failed")
+		self.dirs = {}
+
+	def add(self, path):
+		"""Watch one directory; a failure is the caller's cue to poll."""
+		wd = _libc.inotify_add_watch(self.fd, os.fsencode(path), _WATCH_MASK)
+		if wd == -1:
+			raise OSError(ctypes.get_errno(), "inotify_add_watch failed")
+		self.dirs[wd] = Path(path)
+
+	def read(self, timeout):
+		"""The (mask, path) changes in the next `timeout` seconds, if any."""
+		ready, _, _ = select.select([self.fd], [], [], timeout)
+		if not ready:
+			return []
+		raw = os.read(self.fd, 65536)
+		events = []
+		offset = 0
+		while offset < len(raw):
+			wd, mask, _, namelen = _EVENT_HEADER.unpack_from(raw, offset)
+			offset += _EVENT_HEADER.size
+			name = raw[offset:offset + namelen].split(b"\0", 1)[0]
+			offset += (namelen + 3) & ~3
+			base = self.dirs.get(wd)
+			if base is not None:
+				events.append((mask, base / os.fsdecode(name) if name else base))
+		return events
+
+	def close(self):
+		"""Release the descriptor and every watch on it."""
+		if self.fd != -1:
+			os.close(self.fd)
+			self.fd = -1
 
 def load_stats(limit_seconds):
 	conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
@@ -287,18 +366,51 @@ def draw(text):
 	print(_CLEAR_SCREEN, end="")
 	print(text, end="", flush=True)
 
+def _db_watcher():
+	"""An inotify watch on the database's directory, or None to poll.
+
+	The writes that matter are SQLite's own: the database file and its WAL.
+	The directory is what is watched, because the WAL appears beside the
+	database and is not there when the tool starts.
+	"""
+	if not HAS_INOTIFY:
+		return None
+	watcher = None
+	try:
+		watcher = _Inotify()
+		watcher.add(Path(DB_PATH).parent)
+	except OSError:
+		if watcher is not None:
+			watcher.close()
+		return None
+	return watcher
+
 def watch(window_hours):
-	draw(build_report(window_hours, time.time()))
-	# The terminal's size is part of what is watched: a pane that was resized
-	# has to redraw, or the old layout stays and runs off the edge.
-	stamp = (db_stamp(), terminal_size())
-	while True:
-		time.sleep(_POLL_SECONDS)
-		state = (db_stamp(), terminal_size())
-		if state == stamp:
-			continue
-		stamp = state
+	with _fullscreen():
 		draw(build_report(window_hours, time.time()))
+		# The terminal's size is part of what is watched: a pane that was resized
+		# has to redraw, or the old layout stays and runs off the edge.
+		size = terminal_size()
+		watcher = _db_watcher()
+		stamp = db_stamp()
+		try:
+			while True:
+				changed = False
+				if watcher is not None:
+					changed = any(path.name.startswith("opencode.db") for _, path in watcher.read(_POLL_SECONDS))
+				else:
+					time.sleep(_POLL_SECONDS)
+					current = db_stamp()
+					changed = current != stamp
+					stamp = current
+				current_size = terminal_size()
+				if not changed and current_size == size:
+					continue
+				size = current_size
+				draw(build_report(window_hours, time.time()))
+		finally:
+			if watcher is not None:
+				watcher.close()
 
 def main():
 	parser = argparse.ArgumentParser(description=f"{NAME}: per-model usage, refusals, finish reasons")
@@ -312,6 +424,7 @@ def main():
 		print(f"{NAME}: opencode db not found: {DB_PATH}")
 		return 1
 	if args.watch:
+		signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 		try:
 			watch(args.window_hours)
 		except KeyboardInterrupt:

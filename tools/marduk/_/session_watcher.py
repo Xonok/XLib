@@ -17,6 +17,7 @@ for role and workspace, since the service knows neither reliably.
 import json,time
 from pathlib import Path
 from . import service
+from .inotify import Inotify,available as inotify_available
 from .instance import INSTANCES_DIR,is_window,read_instances,window_session
 from .process import alive as _alive,start_ticks as _start_ticks
 
@@ -137,17 +138,41 @@ class SessionWatcher:
 		return self._scan()
 
 	def run_watch(self) -> None:
-		"""Poll until stopped."""
+		"""Scan until stopped, waking early when the registry changes.
+
+		The registry and the instance reports are files, so inotify is what
+		notices them; a missing inotify is the only case that falls back to
+		the plain poll interval. The service is still asked on each pass,
+		because a session running outside a window has no file to watch.
+		"""
 		self._running=True
-		while self._running:
+		watcher=None
+		if inotify_available():
 			try:
-				self._scan()
-			except Exception:
-				# A failed poll must not kill the panel; the next tick retries.
-				pass
-			deadline=time.time()+self.poll_seconds
-			while self._running and time.time()<deadline:
-				time.sleep(0.1)
+				watcher=Inotify()
+				for path in (self.registry_dir,self.instances_dir):
+					if path.exists():
+						watcher.add(path)
+			except OSError:
+				if watcher is not None:
+					watcher.close()
+				watcher=None
+		try:
+			while self._running:
+				try:
+					self._scan()
+				except Exception:
+					# A failed poll must not kill the panel; the next tick retries.
+					pass
+				if watcher is not None:
+					watcher.read(self.poll_seconds)
+					continue
+				deadline=time.time()+self.poll_seconds
+				while self._running and time.time()<deadline:
+					time.sleep(0.1)
+		finally:
+			if watcher is not None:
+				watcher.close()
 
 	def stop(self) -> None:
 		"""Stop the polling loop."""

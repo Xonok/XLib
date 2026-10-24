@@ -9,26 +9,98 @@ Pipeline: main → parse_args → resolve_data_dir → resolve_csv → render lo
 Watch modes: inotify (primary) → poll (fallback)
 """
 
-import argparse,csv,os,signal,sys,time,yaml
+import argparse,contextlib,csv,ctypes,os,select,signal,struct,sys,time,yaml
 from datetime import datetime,timedelta
 from pathlib import Path
 import shutil
 
-try:
-	import inotify.adapters
-	HAS_INOTIFY = True
-except ImportError:
-	HAS_INOTIFY = False
-
 POLL_INTERVAL = 1.0
 REFRESH_INTERVAL = 60.0
 _CLEAR_SCREEN = "\033[2J\033[H"
+_ENTER_WATCH = "\033[?25l\033[?1049h"
+_LEAVE_WATCH = "\033[?25h\033[?1049l"
+_EVENT_HEADER = struct.Struct("=iIII")
+_IN_MODIFY = 0x00000002
+_IN_CLOSE_WRITE = 0x00000008
+_IN_MOVED_TO = 0x00000080
+_IN_CREATE = 0x00000100
+_IN_DELETE = 0x00000200
+_IN_DELETE_SELF = 0x00000400
+_IN_MOVE_SELF = 0x00000800
+_WATCH_MASK = _IN_MODIFY | _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_CREATE | _IN_DELETE | _IN_DELETE_SELF | _IN_MOVE_SELF
+try:
+	_libc = ctypes.CDLL(None, use_errno=True)
+	_libc.inotify_init.restype = ctypes.c_int
+	_libc.inotify_init.argtypes = []
+	_libc.inotify_add_watch.restype = ctypes.c_int
+	_libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+	HAS_INOTIFY = True
+except AttributeError:
+	_libc = None
+	HAS_INOTIFY = False
 _resize_pending = False
 
 def _handle_sigwinch(signum, frame):
 	"""R50: redraw on terminal resize."""
 	global _resize_pending
 	_resize_pending = True
+
+@contextlib.contextmanager
+def _fullscreen():
+	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+	sys.stdout.write(_ENTER_WATCH)
+	sys.stdout.flush()
+	try:
+		yield
+	finally:
+		sys.stdout.write(_LEAVE_WATCH)
+		sys.stdout.flush()
+
+class _Inotify:
+	"""The file changes in the watched directories, read from inotify itself.
+
+	No third-party package: the syscall is the interface, and a missing one
+	is the only reason the caller falls back to polling.
+	"""
+
+	def __init__(self):
+		if _libc is None:
+			raise OSError("inotify is not available")
+		self.fd = _libc.inotify_init()
+		if self.fd == -1:
+			raise OSError(ctypes.get_errno(), "inotify_init failed")
+		self.dirs = {}
+
+	def add(self, path):
+		"""Watch one directory; a failure is the caller's cue to poll."""
+		wd = _libc.inotify_add_watch(self.fd, os.fsencode(path), _WATCH_MASK)
+		if wd == -1:
+			raise OSError(ctypes.get_errno(), "inotify_add_watch failed")
+		self.dirs[wd] = Path(path)
+
+	def read(self, timeout):
+		"""The (mask, path) changes in the next `timeout` seconds, if any."""
+		ready, _, _ = select.select([self.fd], [], [], timeout)
+		if not ready:
+			return []
+		raw = os.read(self.fd, 65536)
+		events = []
+		offset = 0
+		while offset < len(raw):
+			wd, mask, _, namelen = _EVENT_HEADER.unpack_from(raw, offset)
+			offset += _EVENT_HEADER.size
+			name = raw[offset:offset + namelen].split(b"\0", 1)[0]
+			offset += (namelen + 3) & ~3
+			base = self.dirs.get(wd)
+			if base is not None:
+				events.append((mask, base / os.fsdecode(name) if name else base))
+		return events
+
+	def close(self):
+		"""Release the descriptor and every watch on it."""
+		if self.fd != -1:
+			os.close(self.fd)
+			self.fd = -1
 
 # Built-in never-show tags (Rule 1)
 _NEVER_SHOW_TAGS = {"cancelled", "archived"}
@@ -815,18 +887,19 @@ def main() -> int:
 		view = build_view(selected, metrics, current_filter_data, width, height, current_source)
 		draw(view)
 
-	render()
-
 	if not args.watch:
+		render()
 		return 0
 
-	if HAS_INOTIFY:
-		try:
-			_watch_inotify(csv_path, current_filter_path, render)
-		except Exception:
+	with _fullscreen():
+		render()
+		if HAS_INOTIFY:
+			try:
+				_watch_inotify(csv_path, current_filter_path, render)
+			except Exception:
+				_watch_poll(csv_path, current_filter_path, render)
+		else:
 			_watch_poll(csv_path, current_filter_path, render)
-	else:
-		_watch_poll(csv_path, current_filter_path, render)
 
 	return 0
 
@@ -838,34 +911,34 @@ def draw(view: str):
 def _watch_inotify(csv_path: Path, filter_path: Path | None, callback):
 	"""Watch both CSV and filter file using inotify, call callback on change."""
 	csv_parent = csv_path.parent
-	csv_filename = csv_path.name
-
-	i = inotify.adapters.Inotify()
-	i.add_watch(str(csv_parent))
-
-	filter_watched = False
-	filter_filename = None
+	targets = [csv_path]
+	filter_parent = None
 	if filter_path is not None:
-		filter_parent = filter_path.parent
-		filter_filename = filter_path.name
-		if filter_parent != csv_parent:
-			i.add_watch(str(filter_parent))
-			filter_watched = True
+		targets.append(filter_path)
+		if filter_path.parent != csv_parent:
+			filter_parent = filter_path.parent
+
+	watcher = _Inotify()
+	try:
+		watcher.add(csv_parent)
+		if filter_parent is not None:
+			watcher.add(filter_parent)
+	except OSError:
+		watcher.close()
+		raise
 
 	last_refresh = time.monotonic()
 	try:
-		for event in i.event_gen(timeout_s=POLL_INTERVAL, yield_nones=False):
+		while True:
 			now = time.monotonic()
-			if event is not None:
-				_, type_names, _, fname = event
-				if fname == csv_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
-					callback()
-					last_refresh = now
-					continue
-				elif filter_filename is not None and fname == filter_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
-					callback()
-					last_refresh = now
-					continue
+			changed = False
+			for mask, path in watcher.read(POLL_INTERVAL):
+				if path in targets and mask & (_IN_MODIFY | _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_CREATE):
+					changed = True
+			if changed:
+				callback()
+				last_refresh = now
+				continue
 			if _resize_pending:
 				callback()
 				last_refresh = time.monotonic()
@@ -874,10 +947,7 @@ def _watch_inotify(csv_path: Path, filter_path: Path | None, callback):
 				callback()
 				last_refresh = now
 	finally:
-		i.remove_watch(str(csv_parent))
-		if filter_watched:
-			i.remove_watch(str(filter_path.parent))
-		i.close()
+		watcher.close()
 
 def _watch_poll(csv_path: Path, filter_path: Path | None, callback):
 	"""Fallback: poll both file size/mtime."""

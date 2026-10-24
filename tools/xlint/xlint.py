@@ -1,4 +1,4 @@
-import argparse,ast,ctypes,io,os,re,select,struct,sys,time,tokenize,subprocess
+import argparse,ast,contextlib,ctypes,io,os,re,select,signal,struct,sys,time,tokenize,subprocess
 from pathlib import Path
 
 try:
@@ -10,6 +10,8 @@ _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
 _ALIASED_NAME_RE = re.compile(r"\bas\b")
 _CLEAR_SCREEN = "\033[2J\033[H"
+_ENTER_WATCH = "\033[?25l\033[?1049h"
+_LEAVE_WATCH = "\033[?25h\033[?1049l"
 NAME = "xlint"
 _EVENT_HEADER = struct.Struct("=iIII")
 _IN_CLOSE_WRITE = 0x00000008
@@ -1399,6 +1401,17 @@ def make_watcher(rules):
 			pass
 	return _PollWatcher(rules)
 
+@contextlib.contextmanager
+def _fullscreen():
+	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+	sys.stdout.write(_ENTER_WATCH)
+	sys.stdout.flush()
+	try:
+		yield
+	finally:
+		sys.stdout.write(_LEAVE_WATCH)
+		sys.stdout.flush()
+
 def draw(snapshot, skipped=()):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
@@ -1423,41 +1436,42 @@ def watch(rules, args):
 	un-ignored one can enter it — and the reload prints nothing of its own, so
 	what the screen shows is the report and nothing else.
 	"""
-	snapshot = {path: check_file(path, args) for path in rules.files()}
-	skipped = rules.skipped()
-	watcher = make_watcher(rules)
-	draw(snapshot, skipped)
-	while True:
-		changed = {}
-		reloaded = False
-		for action, path in watcher.collect():
-			if action == "rules":
-				reloaded = True
-				break
-			if action == "modify":
-				changed[path] = "modify"
-			else:
-				changed.setdefault(path, action)
-		if reloaded:
-			snapshot = {path: check_file(path, args) for path in rules.files()}
-			skipped = rules.skipped()
-			draw(snapshot, skipped)
-			continue
-		dirty = False
-		for path, action in changed.items():
-			if action == "delete_file":
-				dirty |= path in snapshot
-				snapshot.pop(path, None)
-			elif action == "delete_dir":
-				for watched in list(snapshot):
-					if watched == path or path in watched.parents:
-						del snapshot[watched]
-						dirty = True
-			else:
-				dirty = True
-				snapshot[path] = check_file(path, args)
-		if dirty:
-			draw(snapshot, skipped)
+	with _fullscreen():
+		snapshot = {path: check_file(path, args) for path in rules.files()}
+		skipped = rules.skipped()
+		watcher = make_watcher(rules)
+		draw(snapshot, skipped)
+		while True:
+			changed = {}
+			reloaded = False
+			for action, path in watcher.collect():
+				if action == "rules":
+					reloaded = True
+					break
+				if action == "modify":
+					changed[path] = "modify"
+				else:
+					changed.setdefault(path, action)
+			if reloaded:
+				snapshot = {path: check_file(path, args) for path in rules.files()}
+				skipped = rules.skipped()
+				draw(snapshot, skipped)
+				continue
+			dirty = False
+			for path, action in changed.items():
+				if action == "delete_file":
+					dirty |= path in snapshot
+					snapshot.pop(path, None)
+				elif action == "delete_dir":
+					for watched in list(snapshot):
+						if watched == path or path in watched.parents:
+							del snapshot[watched]
+							dirty = True
+				else:
+					dirty = True
+					snapshot[path] = check_file(path, args)
+			if dirty:
+				draw(snapshot, skipped)
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
@@ -1493,6 +1507,7 @@ def main():
 	skipped = rules.skipped()
 
 	if args.watch:
+		signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 		try:
 			watch(rules, args)
 		except KeyboardInterrupt:
