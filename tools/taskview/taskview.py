@@ -21,8 +21,14 @@ except ImportError:
 	HAS_INOTIFY = False
 
 POLL_INTERVAL = 1.0
-
+REFRESH_INTERVAL = 60.0
 _CLEAR_SCREEN = "\033[2J\033[H"
+_resize_pending = False
+
+def _handle_sigwinch(signum, frame):
+	"""R50: redraw on terminal resize."""
+	global _resize_pending
+	_resize_pending = True
 
 # Built-in never-show tags (Rule 1)
 _NEVER_SHOW_TAGS = {"cancelled", "archived"}
@@ -741,8 +747,12 @@ def main() -> int:
 	current_filter_path = filter_path
 	current_source = source
 
+	signal.signal(signal.SIGWINCH, _handle_sigwinch)
+
 	def render():
+		global _resize_pending
 		nonlocal current_filter_data, current_filter_path, current_source
+		_resize_pending = False
 		state = read_csv(csv_path)
 
 		# Reload filter if mtime changed (for watch mode)
@@ -805,13 +815,27 @@ def _watch_inotify(csv_path: Path, filter_path: Path | None, callback):
 			i.add_watch(str(filter_parent))
 			filter_watched = True
 
+	last_refresh = time.monotonic()
 	try:
-		for event in i.event_gen(yield_nones=False):
-			_, type_names, _, fname = event
-			if fname == csv_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+		for event in i.event_gen(timeout_s=POLL_INTERVAL, yield_nones=False):
+			now = time.monotonic()
+			if event is not None:
+				_, type_names, _, fname = event
+				if fname == csv_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+					callback()
+					last_refresh = now
+					continue
+				elif filter_filename is not None and fname == filter_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+					callback()
+					last_refresh = now
+					continue
+			if _resize_pending:
 				callback()
-			elif filter_filename is not None and fname == filter_filename and ("IN_MODIFY" in type_names or "IN_CLOSE_WRITE" in type_names):
+				last_refresh = time.monotonic()
+				continue
+			if now - last_refresh >= REFRESH_INTERVAL:
 				callback()
+				last_refresh = now
 	finally:
 		i.remove_watch(str(csv_parent))
 		if filter_watched:
@@ -822,26 +846,32 @@ def _watch_poll(csv_path: Path, filter_path: Path | None, callback):
 	"""Fallback: poll both file size/mtime."""
 	last_csv_stat = (0, 0)
 	last_filter_stat = (0, 0)
+	last_refresh = time.monotonic()
 	while True:
+		now = time.monotonic()
+		changed = False
 		try:
 			csv_st = csv_path.stat()
 			cur_csv_stat = (csv_st.st_size, int(csv_st.st_mtime))
 			if cur_csv_stat != last_csv_stat:
 				last_csv_stat = cur_csv_stat
-				callback()
+				changed = True
 		except OSError as e:
 			sys.stderr.write(f"taskview: poll error on {csv_path}: {e}\n")
 
-		if filter_path is not None:
+		if not changed and filter_path is not None:
 			try:
 				filter_st = filter_path.stat()
 				cur_filter_stat = (filter_st.st_size, int(filter_st.st_mtime))
 				if cur_filter_stat != last_filter_stat:
 					last_filter_stat = cur_filter_stat
-					callback()
+					changed = True
 			except OSError as e:
 				sys.stderr.write(f"taskview: poll error on {filter_path}: {e}\n")
 
+		if changed or _resize_pending or now - last_refresh >= REFRESH_INTERVAL:
+			callback()
+			last_refresh = time.monotonic()
 		time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
