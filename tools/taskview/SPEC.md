@@ -239,8 +239,10 @@ passing suite does not validate anything the spec merely describes in prose.
 	height** after the header, detail blocks (adapted to height per R28), PACE,
 	and QUEUE sections. The `limits.upcoming` value from the filter file acts as a
 	ceiling; the actual number shown is `min(limits.upcoming, available_height)`.
-	When descriptions are truncated to make room (R30a), the UPCOMING section
-	may show only its header and ` · (none)`.
+	When no UPCOMING row fits — because the descriptions were truncated (R30a),
+	or the pane is too short — the section is omitted rather than rendered with a
+	header and no rows. ` · (none)` is shown only when there are no open tasks
+	left to list, and only if a row fits.
 - **R30** Terminal height is read at render time (via `shutil.get_terminal_size()`),
 	and `--width N` overrides width only. Height has no CLI override. A test must
 	be able to obtain deterministic output without a tty by passing explicit
@@ -354,6 +356,15 @@ R38-R44's preamble.
 	with a fixture whose ids and titles are long enough to force every branch. This
 	does not cover R24's header or the PACE / QUEUE blocks: those are not task
 	lines and their widths are unchanged by this work.
+- **R50** The rendered view never has more lines than the height it was given, at
+	any height, for any task set. The sections are laid out in priority order —
+	header, detail blocks, UPCOMING, PACE, QUEUE — and UPCOMING takes only the
+	rows left after the blank, PACE and QUEUE are reserved. Below
+	`_MINIMUM_HEIGHT` = 9 lines even that does not fit, so the renderer falls back
+	to the header and the queue total alone; from 9 lines up, PACE and QUEUE are
+	always present. This closes a double-count in the old reservation: UPCOMING
+	reserved 7 fixed lines but the layout spent 8, so the view overflowed the pane
+	below ~17 lines and the final truncation cut the QUEUE line.
 
 ## Decisions
 
@@ -632,7 +643,7 @@ def compute_metrics(state: dict, selected: dict, filter_data: dict | None) -> di
 	# argument was); `shown` and `filtered_total` count OPEN tasks only.
 
 def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str
-	# R24, R26, R26a, R27, R28, R29, R30, R30a. Pure.
+	# R24, R26, R26a, R27, R28, R29, R30, R30a, R50. Pure.
 
 def watch_targets(csv_path: Path, filter_path: Path | None) -> list[Path]
 	# R22. The CSV plus the resolved filter file if there is one, de-duplicated.

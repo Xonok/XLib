@@ -959,21 +959,6 @@ class TestIsolationGuard(unittest.TestCase):
 		self.assertNotEqual(data_dir, real_default)
 		self.assertTrue(str(data_dir).startswith(_TEST_XDG_DATA_HOME))
 
-def _make_view(tasks, width=80, height=24):
-	"""Build a view with the given tasks as open tasks."""
-	selected = {t['id']: t for t in tasks}
-	metrics = {
-		'done_day': 0, 'done_week': 0, 'done_month': 0,
-		'active': len(tasks), 'this_week': 0, 'this_month': 0, 'later': len(tasks),
-		'open_tasks': list(tasks), 'shown': len(tasks), 'filtered_total': 0,
-	}
-	filter_data = {
-		'label': 'T', 'categories': set(), 'tags': set(),
-		'include_bucket': True,
-		'limits': {'upcoming': 5, 'queue_breakdown': True},
-	}
-	return build_view(selected, metrics, filter_data, width, height, 'explicit')
-
 # === R28, R29, R30, R30a: height-adaptive layout tests (xtest idiom) ===
 
 def _make_task(task_id, title='T', description=''):
@@ -1099,12 +1084,32 @@ def test_no_description_at_very_limited_height():
 # --- PACE and QUEUE always fit (R28, R29) ---
 
 def test_pace_and_queue_always_present():
-	for height in (10, 12, 14, 16, 20, 24, 30, 40):
+	for height in (9, 10, 12, 14, 16, 20, 24, 30, 40):
 		view = _make_view(_tasks(3), 80, height)
 		lines = view.splitlines()
 		xtest.true('PACE' in lines, f"PACE missing at height {height}")
 		xtest.true(any(l.startswith('QUEUE') for l in lines),
 			f"QUEUE missing at height {height}")
+
+def test_view_never_exceeds_height():
+	"""R28a: no pane height may produce more lines than the pane has."""
+	long_desc = " ".join(["word"] * 40)
+	for height in range(1, 61):
+		for width in (20, 80):
+			view = _make_view(_tasks(10, long_desc), width, height)
+			count = len(view.splitlines())
+			xtest.true(count <= height,
+				f"height {height}, width {width}: {count} lines")
+
+def test_short_pane_floor_keeps_header_and_queue_total():
+	"""R28a: below the minimum, the header and the queue total still render."""
+	for height in (3, 4, 5, 8):
+		view = _make_view(_tasks(3), 80, height)
+		lines = view.splitlines()
+		xtest.true(any(l.startswith('===') for l in lines),
+			f"header missing at height {height}")
+		xtest.true(any('tasks remaining' in l for l in lines),
+			f"queue total missing at height {height}")
 
 def test_pace_has_day_week_month():
 	view = _make_view(_tasks(1), 80, 24)

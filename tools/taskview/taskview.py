@@ -32,16 +32,18 @@ _ALWAYS_SHOW_TAGS = {"critical", "emergency"}
 # R28: height thresholds that select how many detail tasks are shown.
 # Full height (>= _FULL_HEIGHT lines): 2 most urgent tasks in full detail.
 # Medium height (>= _MEDIUM_HEIGHT): 1 most urgent task in full detail.
-# Below _MEDIUM_HEIGHT: still 1 detail task, but build_view truncates its
-# description to the lines that remain (R30a).
+# Below _MEDIUM_HEIGHT: 0 detail tasks; every open task goes to UPCOMING.
 _FULL_HEIGHT = 22
 _MEDIUM_HEIGHT = 14
 # R28: fixed lines the layout spends regardless of detail content —
-# header(2) + blank after detail(1) + UPCOMING header(1) + blank after UPCOMING(1)
-# + PACE(5) + QUEUE(2) = 12.  The detail body minimum (2 lines per task:
-# title + due, plus 1 between tasks) and the UPCOMING rows are the variable
-# parts that shrink or grow with the terminal height.
+# header(2) + blank after detail(1) + UPCOMING header(1) + blank after
+# UPCOMING(1) + PACE(5) + QUEUE(2) = 12.  The detail body minimum (2 lines
+# per task: title + due, plus 1 between tasks) and the UPCOMING rows are the
+# variable parts that shrink or grow with the terminal height.
 _FIXED_OVERHEAD = 12
+# R50: below this, even the header + PACE + QUEUE do not fit together, so the
+# renderer falls back to the header and the queue total alone.
+_MINIMUM_HEIGHT = 9
 
 class FilterError(Exception):
 	"""Raised by load_filter on unreadable or malformed YAML."""
@@ -442,30 +444,65 @@ def describe_lines(text: str, width: int, max_lines: int) -> list[str]:
 		kept.append(last[:width - 3] + "...")
 	return kept
 
+def _fit(lines: list[str], height: int) -> list[str]:
+	"""R50: trim the view to the pane height. Last sections go first."""
+	return lines[:max(0, height)]
+
+def _header_lines(source: str, filter_data: dict | None) -> list[str]:
+	"""R24: header chosen by source, plus the blank line that follows it."""
+	if source in ("explicit", "discovered") and filter_data is not None:
+		header = f"=== Tasks ({filter_data['label']}) ==="
+	elif source == "none":
+		header = "=== Tasks (no filter found — showing all) ==="
+	elif source == "flag":
+		header = "=== Tasks (no filter) ==="
+	else:
+		header = "=== Tasks ==="
+	return [header, ""]
+
+def _pace_lines(metrics: dict) -> list[str]:
+	"""R27: the PACE block, including the blank line that follows it."""
+	return [
+		"PACE",
+		f" Day:  {metrics['done_day']} done, {metrics['active']} active",
+		f" Week: {metrics['done_week']} done",
+		f" Month: {metrics['done_month']} done",
+		"",
+	]
+
+def _queue_lines(metrics: dict, limits: dict) -> list[str]:
+	"""R27: the queue total, broken down by when it is due when the filter allows."""
+	total = metrics["this_week"] + metrics["this_month"] + metrics["later"]
+	shown = metrics["shown"]
+	filtered = metrics["filtered_total"]
+	if limits["queue_breakdown"]:
+		breakdown = (
+			f"({metrics['this_week']} this week, {metrics['this_month']} this month, "
+			f"{metrics['later']} later) "
+		)
+	else:
+		breakdown = ""
+	return ["QUEUE", f" {total} tasks remaining {breakdown}({shown} shown, {filtered} filtered)"]
+
 def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str:
 	"""
-	R24, R26, R26a, R27, R28, R29, R30, R30a: Pure render function.
+	R24, R26, R26a, R27, R28, R29, R30, R30a, R50: Pure render function.
 	Header chosen by source: explicit/discovered → label, none → "no filter found",
-	flag → "no filter".  Detail tasks, their description line budgets, the
-	truncation of descriptions that do not fit (R30a), and the UPCOMING row
-	count all adapt to the terminal height.
+	flag → "no filter".  Detail tasks, their description line budgets, and the
+	UPCOMING row count all adapt to the terminal height.  The result never has
+	more lines than *height*.
 	"""
-	lines = []
-
-	# R24: three distinguishable header states
-	if source in ("explicit", "discovered") and filter_data is not None:
-		label = filter_data["label"]
-		lines.append(f"=== Tasks ({label}) ===")
-	elif source == "none":
-		lines.append("=== Tasks (no filter found — showing all) ===")
-	elif source == "flag":
-		lines.append("=== Tasks (no filter) ===")
-	else:
-		# Should not happen, but fallback
-		lines.append("=== Tasks ===")
-	lines.append("")
-
+	lines = _header_lines(source, filter_data)
 	open_tasks = metrics["open_tasks"]
+	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}
+	pace = _pace_lines(metrics)
+	queue = _queue_lines(metrics, limits)
+
+	# R50: below the minimum the full structure cannot fit, so show the header
+	# and the queue total alone.
+	if height < _MINIMUM_HEIGHT:
+		lines.append(queue[1])
+		return "\n".join(_fit(lines, height))
 
 	# R28: detail tasks adapt to terminal height — 2 at full height, 1 at
 	# medium height, 0 at very limited (all open tasks go to UPCOMING).
@@ -473,30 +510,22 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	detail_count = len(detail_tasks)
 
 	# R28, R30a: work out how many description lines each detail task may use
-	# before the UPCOMING / PACE / QUEUE sections are squeezed.  The fixed
-	# lines (header + blank-after-detail + UPCOMING header + blank-after-
-	# UPCOMING + PACE + QUEUE) total _FIXED_OVERHEAD; the detail body minimum
-	# is 2 lines per task (title + due) plus 1 between consecutive tasks.
-	# What is left of the height is the budget shared between description
-	# lines and UPCOMING rows.
+	# before the UPCOMING / PACE / QUEUE sections are squeezed.  _FIXED_OVERHEAD
+	# covers everything that is not a description line or an UPCOMING row; the
+	# detail body minimum is 2 lines per task (title + due) plus 1 between tasks.
 	detail_body_min = detail_count * 2 + max(0, detail_count - 1)
 	budget = height - _FIXED_OVERHEAD - detail_body_min
 
-	# Full description line counts (wrapped to the detail indent width).
-	desc_counts = []
-	for task in detail_tasks:
-		if task.get("description"):
-			desc_counts.append(len(wrap_text(task["description"], width - 4)))
-		else:
-			desc_counts.append(0)
-	total_desc = sum(desc_counts)
-
-	if budget >= total_desc:
-		# Everything fits: full descriptions, excess goes to UPCOMING.
+	desc_counts = [
+		len(wrap_text(task["description"], width - 4)) if task.get("description") else 0
+		for task in detail_tasks
+	]
+	if budget >= sum(desc_counts):
+		# Everything fits: full descriptions, the excess goes to UPCOMING.
 		desc_budgets = desc_counts
 	else:
-		# Not enough room: truncate descriptions first (greedy, first task
-		# gets priority), no UPCOMING rows.  R30a.
+		# Not enough room: truncate descriptions first (greedy, first task gets
+		# priority), no UPCOMING rows.  R30a.
 		desc_budgets = []
 		remaining = max(0, budget)
 		for count in desc_counts:
@@ -511,87 +540,53 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 		due_str = fmt_due(task["due_ts"])
 		chg_str = fmt_time(task["chg_ts"])
 		lines.append(f"  {chg_str}  ·  due: {due_str}")
-		if task.get("description"):
+		if desc_budgets[i] > 0:
 			# R30a: show as many description lines as the budget allows;
 			# describe_lines marks the cut with '...' when truncated.
-			allowance = desc_budgets[i]
-			if allowance > 0:
-				show = describe_lines(task["description"], width - 4, allowance)
-				for dl in show:
-					lines.append(f"  {dl}")
+			for dl in describe_lines(task["description"], width - 4, desc_budgets[i]):
+				lines.append(f"  {dl}")
 
-	if not detail_tasks:
-		if not open_tasks:
-			lines.append("▸ (no open tasks)")
-			lines.append("")
-		# else: open tasks exist but the pane is too short for a detail
-		# block; every open task appears in UPCOMING instead.
-	else:
-		# Blank line after detail tasks before UPCOMING
+	if detail_tasks:
+		lines.append("") # blank line after the detail blocks
+	elif not open_tasks:
+		lines.append("▸ (no open tasks)")
+		lines.append("")
+	# else: open tasks exist but the pane is too short for a detail block;
+	# every open task appears in UPCOMING instead, after the header's blank.
+
+	# R29: UPCOMING takes whatever the detail blocks left, reserving the blank
+	# after it (1), PACE (4), the blank before QUEUE (1) and QUEUE (2) = 8.
+	remaining_tasks = [t for t in open_tasks if t not in detail_tasks]
+	upcoming_limit = height - len(lines) - 1 - 8
+	upcoming_limit = min(upcoming_limit, limits["upcoming"])
+	if upcoming_limit >= 1:
+		lines.append("UPCOMING")
+		if remaining_tasks:
+			for task in remaining_tasks[:upcoming_limit]:
+				due_str = fmt_due(task["due_ts"])
+				# R42: the " · " lead (3) and the "  (due)" tail (len + 4, the
+				# two spaces and two parentheses) come off the width, and the id
+				# comes off the title's share rather than the line's. When what
+				# is left cannot hold a label and a due together, the due is
+				# dropped rather than the line overflowing — a wrapped line in a
+				# narrow pane breaks the alignment of every line under it.
+				tail = len(due_str) + 4
+				with_due = width - 3 - tail
+				label = task_label(task, with_due)
+				if label.strip() and with_due >= len(f"#{task['id']}"):
+					lines.append(f" · {label}  ({due_str})")
+				else:
+					lines.append(f" · {task_label(task, width - 3)}")
+		else:
+			none_text = " · (none)"
+			if len(none_text) > width:
+				none_text = truncate(none_text, width)
+			lines.append(none_text)
 		lines.append("")
 
-	# R29: size UPCOMING to whatever height the detail blocks left.  The fixed
-	# lines after the UPCOMING header are the blank after it (1), PACE (5) and
-	# QUEUE (2) — 8 in total.  (The previous code subtracted a second 2 for
-	# the UPCOMING header, which was already counted in len(lines), leaving
-	# two lines unaccounted for on every render; this fixes that.)
-	reserved_after_upcoming = 8 # blank(1) + PACE(5) + QUEUE(2)
-	# R29: the UPCOMING header itself is already in len(lines), so no extra
-	# subtraction for it (the old code double-counted 2 lines).
-	available_for_upcoming = height - len(lines) - reserved_after_upcoming
-	upcoming_limit = max(0, available_for_upcoming)
-
-	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}
-	upcoming_limit = min(upcoming_limit, limits["upcoming"])
-
-	lines.append("UPCOMING")
-	remaining_tasks = [t for t in open_tasks if t not in detail_tasks]
-	if remaining_tasks:
-		for task in remaining_tasks[:upcoming_limit]:
-			due_str = fmt_due(task["due_ts"])
-			# R42: the " · " lead (3) and the "  (due)" tail (len + 4, the two
-			# spaces and two parentheses) come off the width, and the id comes off
-			# the title's share rather than the line's. When what is left cannot
-			# hold a label and a due together, the due is dropped rather than the
-			# line overflowing — a wrapped line in a narrow pane breaks the
-			# alignment of every line under it.
-			tail = len(due_str) + 4
-			with_due = width - 3 - tail
-			label = task_label(task, with_due)
-			if label.strip() and with_due >= len(f"#{task['id']}"):
-				lines.append(f" · {label}  ({due_str})")
-			else:
-				lines.append(f" · {task_label(task, width - 3)}")
-	else:
-		none_text = " · (none)"
-		if len(none_text) > width:
-			none_text = truncate(none_text, width)
-		lines.append(none_text)
-	lines.append("")
-
-	# PACE
-	lines.append("PACE")
-	lines.append(f" Day:  {metrics['done_day']} done, {metrics['active']} active")
-	lines.append(f" Week: {metrics['done_week']} done")
-	lines.append(f" Month: {metrics['done_month']} done")
-	lines.append("")
-
-	# Queue breakdown
-	total = metrics["this_week"] + metrics["this_month"] + metrics["later"]
-	shown = metrics["shown"]
-	filtered_count = metrics["filtered_total"]
-	if limits["queue_breakdown"]:
-		lines.append("QUEUE")
-		lines.append(
-			f" {total} tasks remaining "
-			f"({metrics['this_week']} this week, {metrics['this_month']} this month, {metrics['later']} later) "
-			f"({shown} shown, {filtered_count} filtered)"
-		)
-	else:
-		lines.append("QUEUE")
-		lines.append(f" {total} tasks remaining ({shown} shown, {filtered_count} filtered)")
-
-	return "\n".join(lines)
+	lines.extend(pace)
+	lines.extend(queue)
+	return "\n".join(_fit(lines, height))
 
 def wrap_text(text: str, width: int) -> list[str]:
 	"""Wrap text to fit within width, returning list of lines.
