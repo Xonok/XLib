@@ -455,25 +455,22 @@ def _fit(lines: list[str], height: int) -> list[str]:
 	return lines[:max(0, height)]
 
 def _header_lines(source: str, filter_data: dict | None) -> list[str]:
-	"""R24: header chosen by source, plus the blank line that follows it."""
+	"""R24: the header line chosen by source."""
 	if source in ("explicit", "discovered") and filter_data is not None:
-		header = f"=== Tasks ({filter_data['label']}) ==="
-	elif source == "none":
-		header = "=== Tasks (no filter found — showing all) ==="
-	elif source == "flag":
-		header = "=== Tasks (no filter) ==="
-	else:
-		header = "=== Tasks ==="
-	return [header, ""]
+		return [f"=== Tasks ({filter_data['label']}) ==="]
+	if source == "none":
+		return ["=== Tasks (no filter found — showing all) ==="]
+	if source == "flag":
+		return ["=== Tasks (no filter) ==="]
+	return ["=== Tasks ==="]
 
 def _pace_lines(metrics: dict) -> list[str]:
-	"""R27: the PACE block, including the blank line that follows it."""
+	"""R27: the PACE block."""
 	return [
 		"PACE",
 		f" Day: {metrics['done_day']} done, {metrics['active']} active",
 		f" Week: {metrics['done_week']} done",
 		f" Month: {metrics['done_month']} done",
-		"",
 	]
 
 def _queue_lines(metrics: dict, limits: dict) -> list[str]:
@@ -490,26 +487,45 @@ def _queue_lines(metrics: dict, limits: dict) -> list[str]:
 		breakdown = ""
 	return ["QUEUE", f" {total} tasks remaining {breakdown}({shown} shown, {filtered} filtered)"]
 
+def _upcoming_line(task: dict, width: int) -> str:
+	"""R42: one condensed UPCOMING row, never wider than *width*."""
+	due_str = fmt_due(task["due_ts"])
+	# R42: the " · " lead (3) and the "  (due)" tail (len + 4, the two spaces
+	# and two parentheses) come off the width, and the id comes off the title's
+	# share rather than the line's. When what is left cannot hold a label and a
+	# due together, the due is dropped rather than the line overflowing — a
+	# wrapped line in a narrow pane breaks the alignment of every line under it.
+	tail = len(due_str) + 4
+	with_due = width - 3 - tail
+	label = task_label(task, with_due)
+	if label.strip() and with_due >= len(f"#{task['id']}"):
+		return f" · {label}  ({due_str})"
+	return f" · {task_label(task, width - 3)}"
+
 def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: int, height: int, source: str) -> str:
 	"""
 	R24, R26, R26a, R27, R28, R29, R30, R30a, R50: Pure render function.
-	Drop order when tight: Pace first, Queue second, Upcoming third, header last.
-	Taskview aims to use all available lines.
-	"""
-	header_lines_list = _header_lines(source, filter_data)
-	open_tasks = metrics["open_tasks"]
-	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}
-	pace = _pace_lines(metrics)
-	queue = _queue_lines(metrics, limits)
+	Header chosen by source: explicit/discovered → label, none → "no filter found",
+	flag → "no filter".  The result never has more lines than *height*.
 
+	The view is built full, then sections are dropped while it overflows, in the
+	order the human asked for: PACE first, QUEUE second, UPCOMING third, the
+	header last.  UPCOMING gives up its rows from the bottom before its header
+	goes, so a short pane keeps as many tasks on screen as it has room for.
+	"""
 	if height <= 0:
 		return ""
+	open_tasks = metrics["open_tasks"]
+	limits = filter_data["limits"] if filter_data else {"upcoming": 5, "queue_breakdown": True}
 
+	# R28: detail tasks adapt to terminal height — 2 at full height, 1 at
+	# medium height, 0 at very limited (all open tasks go to UPCOMING).
 	detail_tasks = pick_detail_tasks(open_tasks, height)
 	detail_count = len(detail_tasks)
 
-	# build detail section
-	detail_lines_section = []
+	# R28, R30a: description line budgets.  _FIXED_OVERHEAD covers the lines the
+	# layout spends whatever the detail content is; the detail body minimum is
+	# 2 lines per task (title + due) plus 1 between tasks.
 	detail_body_min = detail_count * 2 + max(0, detail_count - 1)
 	budget = height - _FIXED_OVERHEAD - detail_body_min
 	desc_counts = [
@@ -519,6 +535,8 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 	if budget >= sum(desc_counts):
 		desc_budgets = desc_counts
 	else:
+		# Not enough room: truncate descriptions first (greedy, first task gets
+		# priority).  R30a.
 		desc_budgets = []
 		remaining = max(0, budget)
 		for count in desc_counts:
@@ -526,157 +544,93 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 			desc_budgets.append(alloc)
 			remaining -= alloc
 
+	detail_section = []
 	for i, task in enumerate(detail_tasks):
 		if i > 0:
-			detail_lines_section.append("")
-		detail_lines_section.append(f"▸ {task_label(task, width - 2)}")
+			detail_section.append("") # blank line between detail blocks
+		detail_section.append(f"▸ {task_label(task, width - 2)}")
 		due_str = fmt_due(task["due_ts"])
 		chg_str = fmt_time(task["chg_ts"])
-		detail_lines_section.append(f"  {chg_str}  ·  due: {due_str}")
-		if desc_budgets[i] > 0 and task.get("description"):
+		detail_section.append(f"  {chg_str}  ·  due: {due_str}")
+		if desc_budgets[i] > 0:
 			for dl in describe_lines(task["description"], width - 4, desc_budgets[i]):
-				detail_lines_section.append(f"  {dl}")
+				detail_section.append(f"  {dl}")
+	if not open_tasks:
+		detail_section.append("▸ (no open tasks)")
 
+	# R29: UPCOMING rows.  `limits.upcoming` is the number reserved for; spare
+	# lines at the end of the layout go to more rows (see the fill step below).
 	remaining_tasks = [t for t in open_tasks if t not in detail_tasks]
+	upcoming_rows = [_upcoming_line(task, width) for task in remaining_tasks[:limits["upcoming"]]]
+	if open_tasks and not upcoming_rows:
+		none_text = " · (none)"
+		if len(none_text) > width:
+			none_text = truncate(none_text, width)
+		upcoming_rows.append(none_text)
 
-	def build_upcoming_section(max_rows=None):
-		upcoming_section = []
-		if not remaining_tasks and not (open_tasks and not detail_tasks):
-			# check if all shown in detail
-			if detail_tasks and not remaining_tasks and open_tasks:
-				upcoming_section.append("UPCOMING")
-				none_text = " · (none)"
-				if len(none_text) > width:
-					none_text = truncate(none_text, width)
-				upcoming_section.append(none_text)
-				upcoming_section.append("")
-				return upcoming_section
-			return upcoming_section
-		if remaining_tasks:
-			upcoming_section.append("UPCOMING")
-			limit = len(remaining_tasks)
-			if max_rows is not None:
-				limit = min(limit, max_rows)
-			limit = min(limit, limits["upcoming"])
-			for task in remaining_tasks[:limit]:
-				due_str = fmt_due(task["due_ts"])
-				tail = len(due_str) + 4
-				with_due = width - 3 - tail
-				label = task_label(task, with_due)
-				if label.strip() and with_due >= len(f"#{task['id']}"):
-					upcoming_section.append(f" · {label} ({due_str})")
-				else:
-					upcoming_section.append(f" · {task_label(task, width - 3)}")
-			if limit == 0 and max_rows is not None and max_rows >= 1:
-				# if we have room for header+something but no rows allowed? try to show (none) only if no remaining tasks
-				pass
-			upcoming_section.append("")
-			return upcoming_section
-		elif open_tasks and not detail_tasks:
-			upcoming_section.append("UPCOMING")
-			none_text = " · (none)"
-			if len(none_text) > width:
-				none_text = truncate(none_text, width)
-			upcoming_section.append(none_text)
-			upcoming_section.append("")
-			return upcoming_section
-		return upcoming_section
+	# R50: the drop chain.  Each block knows its own lines; a block is dropped
+	# whole, and UPCOMING additionally loses rows from the bottom first.
+	keep_pace = True
+	keep_queue = True
+	keep_upcoming = bool(upcoming_rows)
+	keep_header = True
+	compact = False
+	header_lines = _header_lines(source, filter_data)
+	pace_lines = _pace_lines(metrics)
+	queue_lines = _queue_lines(metrics, limits)
 
-	def attempt(include_pace=True, include_queue=True, include_upcoming=True, include_header=True, upcoming_max_rows=None):
+	def render() -> list[str]:
+		blocks = []
+		if keep_header:
+			blocks.append(header_lines)
+		if detail_section:
+			blocks.append(detail_section)
+		if keep_upcoming and upcoming_rows:
+			blocks.append(["UPCOMING"] + upcoming_rows)
+		if keep_pace:
+			blocks.append(pace_lines)
+		if keep_queue:
+			blocks.append(queue_lines)
 		lines = []
-		if include_header:
-			lines.extend(header_lines_list)
-		if detail_tasks:
-			lines.extend(detail_lines_section)
-			if lines and lines[-1] != "":
+		for block in blocks:
+			if lines and not compact:
 				lines.append("")
-		elif not open_tasks:
-			lines.append("▸ (no open tasks)")
-			lines.append("")
-		if include_upcoming:
-			upcoming_section = build_upcoming_section(upcoming_max_rows)
-			if upcoming_section:
-				lines.extend(upcoming_section)
-			elif remaining_tasks and upcoming_max_rows is None:
-				# try to add at least some
-				upcoming_section = build_upcoming_section(limits["upcoming"])
-				if upcoming_section:
-					lines.extend(upcoming_section)
-		if include_pace:
-			lines.extend(pace)
-		if include_queue:
-			lines.extend(queue)
+			lines.extend(block)
 		return lines
 
-	# Try to use all available lines - be greedy about filling space
-	# Try with everything first, but if upcoming is cut short due to our fixed build, try to expand it
-	candidates = []
-	for inc_pace in [True, False]:
-		for inc_queue in [True, False]:
-			for inc_up in [True, False]:
-				for inc_head in [True, False]:
-					if not inc_up:
-						cands = attempt(inc_pace, inc_queue, False, inc_head)
-						if len(cands) <= height:
-							candidates.append((inc_pace, inc_queue, False, inc_head, cands, 'none'))
-					else:
-						# try to fill remaining space with upcoming
-						base = attempt(inc_pace, inc_queue, inc_up, inc_head, upcoming_max_rows=limits["upcoming"])
-						if len(base) <= height:
-							# can we add more upcoming rows?
-							# calculate space
-							space = height - len(base)
-							if space > 0 and remaining_tasks:
-								# try adding more rows
-								more_rows = limits["upcoming"] + space
-								cands = attempt(inc_pace, inc_queue, inc_up, inc_head, upcoming_max_rows=more_rows)
-								if len(cands) <= height: # should fit or be close
-									candidates.append((inc_pace, inc_queue, inc_up, inc_head, cands[:height] if len(cands) > height else cands, 'expanded'))
-								else:
-									candidates.append((inc_pace, inc_queue, inc_up, inc_head, cands[:height], 'expanded_trunc'))
-							else:
-								candidates.append((inc_pace, inc_queue, inc_up, inc_head, base, 'full'))
-						else:
-							# try to truncate upcoming to fit
-							# binary search for how many rows fit
-							for mr in range(limits["upcoming"], -1, -1):
-								cands = attempt(inc_pace, inc_queue, inc_up, inc_head, upcoming_max_rows=mr)
-								if len(cands) <= height:
-									candidates.append((inc_pace, inc_queue, inc_up, inc_head, cands, f'fit{mr}'))
-									break
-	if candidates:
-		def score(c):
-			inc_pace, inc_queue, inc_up, inc_head, cands, mode = c
-			s = 0
-			if inc_pace: s += 1
-			if inc_queue: s += 10
-			if inc_up: s += 100
-			if inc_head: s += 1000
-			s += len(cands) * 0.001 # prefer using more lines
-			return s
-		best = sorted(candidates, key=score, reverse=True)[0]
-		res = best[4]
-		if len(res) < height:
-			# try to pad if possible? no, don't add garbage lines
-			pass
-		return "\n".join(_fit(res, height))
+	view = render()
+	if len(view) > height:
+		keep_pace = False
+		view = render()
+	if len(view) > height:
+		keep_queue = False
+		view = render()
+	if len(view) > height:
+		# Blank separators are the cheapest thing to give up.
+		compact = True
+		view = render()
+	while len(view) > height and upcoming_rows:
+		upcoming_rows.pop()
+		view = render()
+	# R29: a section header with no rows under it says nothing.
+	if not upcoming_rows or len(view) > height:
+		keep_upcoming = False
+		view = render()
+	if len(view) > height:
+		keep_header = False
+		view = render()
 
-	# fallback
-	lines = attempt(False, True, True, True, upcoming_max_rows=limits["upcoming"]*10)
-	if len(lines) <= height:
-		return "\n".join(_fit(lines, height))
-	lines = attempt(False, False, True, True, upcoming_max_rows=limits["upcoming"]*10)
-	if len(lines) <= height:
-		return "\n".join(_fit(lines, height))
-	lines = attempt(False, False, False, True)
-	if len(lines) <= height:
-		return "\n".join(_fit(lines, height))
-	lines = attempt(False, False, False, False)
-	if len(lines) == 0 and open_tasks:
-		lines = [f"· {task_label(open_tasks[0], width-2)}"]
-	elif len(lines) == 0:
-		lines = ["==="]
-	return "\n".join(_fit(lines, height))
+	# R50: use the lines that are left.  Whatever the drop chain freed goes back
+	# to UPCOMING rows — the filter's `upcoming` count is the number the layout
+	# reserves, not a ceiling that leaves the pane half empty.
+	spare = height - len(view)
+	if spare > 0 and keep_upcoming and remaining_tasks:
+		shown = len(upcoming_rows)
+		for task in remaining_tasks[shown:shown + spare]:
+			upcoming_rows.append(_upcoming_line(task, width))
+		view = render()
+	return "\n".join(_fit(view, height))
+
 def wrap_text(text: str, width: int) -> list[str]:
 	"""Wrap text to fit within width, returning list of lines.
 	Preserves explicit newlines as paragraph breaks; wraps long lines.

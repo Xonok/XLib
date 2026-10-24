@@ -70,7 +70,7 @@ Numbered so tests can cite them. Each is one testable behaviour.
 	| `categories` | list of strings | `[]` | task categories to include; empty = all (R4) |
 	| `tags` | list of strings | `[]` | tags to include; empty = no tag restriction |
 	| `include_bucket` | bool | `false` | include uncategorised tasks (R3) |
-	| `limits.upcoming` | int | `5` | max rows in the UPCOMING block |
+	| `limits.upcoming` | int | `5` | UPCOMING rows the layout reserves; spare lines become more rows (R29) |
 	| `limits.queue_breakdown` | bool | `true` | show the due-horizon breakdown |
 
 A complete filter file, as it looks on disk:
@@ -235,14 +235,15 @@ passing suite does not validate anything the spec merely describes in prose.
 	UPCOMING list instead. Each detail block shows the task id, title, due
 	date, last change time, and description (if present). A blank line separates
 	the two detail blocks. `pick_detail_tasks(open_tasks, height)` selects them.
-- **R29** The UPCOMING list is condensed and sized to fit the **remaining terminal
+- **R29** The UPCOMING list is condensed and sized to the **remaining terminal
 	height** after the header, detail blocks (adapted to height per R28), PACE,
-	and QUEUE sections. The `limits.upcoming` value from the filter file acts as a
-	ceiling; the actual number shown is `min(limits.upcoming, available_height)`.
-	When no UPCOMING row fits — because the descriptions were truncated (R30a),
-	or the pane is too short — the section is omitted rather than rendered with a
-	header and no rows. ` · (none)` is shown only when there are no open tasks
-	left to list, and only if a row fits.
+	and QUEUE sections. `limits.upcoming` is the number of rows the layout reserves
+	for; any lines still free after the drop chain (R50) become more UPCOMING rows
+	rather than staying blank, so the count shown is `max(limits.upcoming, room)`,
+	bounded by the tasks left. When no UPCOMING row fits — because the descriptions
+	were truncated (R30a), or the pane is too short — the section is omitted rather
+	than rendered with a header and no rows. ` · (none)` is shown only when there
+	are no open tasks left to list, and only if a row fits.
 - **R30** Terminal height is read at render time (via `shutil.get_terminal_size()`),
 	and `--width N` overrides width only. Height has no CLI override. A test must
 	be able to obtain deterministic output without a tty by passing explicit
@@ -356,15 +357,16 @@ R38-R44's preamble.
 	with a fixture whose ids and titles are long enough to force every branch. This
 	does not cover R24's header or the PACE / QUEUE blocks: those are not task
 	lines and their widths are unchanged by this work.
-- **R50** The rendered view never has more lines than the height it was given, at
-	any height, for any task set. The sections are laid out in priority order —
-	header, detail blocks, UPCOMING, PACE, QUEUE — and UPCOMING takes only the
-	rows left after the blank, PACE and QUEUE are reserved. Below
-	`_MINIMUM_HEIGHT` = 9 lines even that does not fit, so the renderer falls back
-	to the header and the queue total alone; from 9 lines up, PACE and QUEUE are
-	always present. This closes a double-count in the old reservation: UPCOMING
-	reserved 7 fixed lines but the layout spent 8, so the view overflowed the pane
-	below ~17 lines and the final truncation cut the QUEUE line.
+- **R50** The rendered view never has more lines than the height it was given, and
+	uses as many of them as the content allows. The view is built full — header,
+	detail blocks, UPCOMING, PACE, QUEUE — and while it overflows the sections are
+	dropped in the human's order: **PACE first, QUEUE second, UPCOMING third, the
+	header last**. Blank separators go before the last of those, and UPCOMING gives
+	up rows from the bottom before its header is dropped, so a short pane keeps as
+	many tasks as it has room for. PACE is a normal section again as soon as the
+	reserved layout fits. This replaces the old reservation that double-counted the
+	lines after UPCOMING, overflowed the pane below ~17 lines, and cut the QUEUE
+	line off the end.
 
 ## Decisions
 

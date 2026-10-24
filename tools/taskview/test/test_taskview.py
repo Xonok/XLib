@@ -1122,8 +1122,49 @@ def test_pace_has_day_week_month():
 def test_upcoming_rows_increase_with_height():
 	tall = _make_view(_tasks(10), 80, 40)
 	short = _make_view(_tasks(10), 80, 16)
-	# With new drop order, behavior may differ, but we still expect adaptation
-	xtest.true(len(_upcoming_lines(tall)) >= 0)
+	xtest.true(len(_upcoming_lines(tall)) >= len(_upcoming_lines(short)),
+		f"tall={len(_upcoming_lines(tall))}, short={len(_upcoming_lines(short))}")
+	xtest.true(len(_upcoming_lines(short)) >= 1,
+		f"short pane lost UPCOMING entirely: {short!r}")
+
+# --- drop order when the pane is short (R50) ---
+
+def test_half_height_keeps_upcoming_rows():
+	"""A half-height pane must still show UPCOMING rows, not just its header."""
+	for height in (10, 11, 12, 13):
+		view = _make_view(_tasks(10), 80, height)
+		xtest.true(len(_upcoming_lines(view)) >= 1,
+			f"height {height} has no UPCOMING row: {view!r}")
+
+def test_pace_is_dropped_before_queue_and_upcoming():
+	"""PACE goes first: a short pane shows QUEUE and UPCOMING without PACE."""
+	for height in (11, 12, 13, 14):
+		lines = _make_view(_tasks(10), 80, height).splitlines()
+		xtest.true('PACE' not in lines, f"PACE still shown at height {height}")
+		xtest.true(any(l.startswith('QUEUE') for l in lines),
+			f"QUEUE missing at height {height}")
+		xtest.true(len(_upcoming_lines('\n'.join(lines))) >= 1,
+			f"UPCOMING rows missing at height {height}")
+
+def test_header_is_the_last_thing_to_go():
+	xtest.equal(_make_view(_tasks(10), 80, 1), '=== Tasks (T) ===')
+	xtest.true(_make_view(_tasks(10), 80, 2).startswith('=== Tasks (T) ==='))
+
+def test_upcoming_header_never_appears_without_a_row():
+	"""R29: a section header with no rows under it is dropped, not left bare."""
+	for height in range(1, 9):
+		lines = _make_view(_tasks(10), 80, height).splitlines()
+		if 'UPCOMING' in lines:
+			xtest.true(len(_upcoming_lines('\n'.join(lines))) >= 1,
+				f"bare UPCOMING header at height {height}: {lines!r}")
+
+def test_view_uses_every_line_it_has():
+	""""Aim to use all available lines": with plenty of tasks, spare lines
+	go to UPCOMING rows instead of staying blank."""
+	for height in (3, 5, 7, 9, 12, 15, 18, 21, 24, 30, 35):
+		view = _make_view(_tasks(30), 80, height)
+		xtest.equal(len(view.splitlines()), height,
+			f"height {height} used {len(view.splitlines())} lines: {view!r}")
 
 def test_upcoming_none_when_no_remaining_tasks():
 	view = _make_view(_tasks(1), 80, 24)
