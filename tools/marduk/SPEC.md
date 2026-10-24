@@ -189,7 +189,8 @@ python3 -m marduk.marduk --once
 9. Signal handling (SIGTERM → clean shutdown)
 
 ### Phase 3: Display & Integration
-10. Renderer (ANSI, narrow-pane aware)
+10. Renderer (ANSI, fit to the pane: height-capped body with `… +N more`,
+	auto-compact below 46 columns, long fields cut rather than wrapped)
 11. `--watch` loop with 1s redraw
 12. `tmux-xlib.sh` integration (4th pane or replace skynet-agents)
 13. Compact mode (< 35 cols)

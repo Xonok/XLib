@@ -140,6 +140,25 @@ def test_the_display_fits_the_terminal_it_runs_in():
 	xtest.true(len(out.splitlines()) <= skynet.terminal_size().lines,
 		"the display must fit the terminal it runs in")
 
+def test_the_display_never_exceeds_the_width_it_is_given():
+	rows = _rows(30)
+	for width in range(20, 121):
+		out = skynet.render(rows, NOW, height=24, width=width)
+		xtest.true(all(len(line) <= width for line in out.splitlines()),
+			f"a display of {width} columns must not run past {width}")
+
+def test_a_long_model_name_is_cut_to_the_model_column():
+	rows = [("a-model-name-that-is-far-too-long-for-a-pane", NOW, 100, 100, 1000, 0, 0, 0, None, None, "stop", "s")]
+	out = skynet.render(rows, NOW, height=24, width=60)
+	xtest.true(all(len(line) <= 60 for line in out.splitlines()), "the table fits sixty columns")
+	xtest.contains("…", out, "the cut name says it was cut")
+
+def test_a_narrow_pane_drops_columns_it_cannot_fit():
+	out = skynet.render(_rows(3), NOW, height=24, width=40)
+	header = out.splitlines()[1]
+	xtest.contains("Msgs", header, "the message count stays")
+	xtest.not_equal("Tot" in header, True, "Tot is the first column to go")
+
 def test_the_fallback_size_is_used_when_stdout_is_not_a_terminal():
 	saved = sys.stdout
 	sys.stdout = _NotATerminal()

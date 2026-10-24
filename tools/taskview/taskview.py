@@ -701,7 +701,7 @@ def build_view(selected: dict, metrics: dict, filter_data: dict | None, width: i
 		for task in remaining_tasks[shown:shown + spare]:
 			upcoming_rows.append(_upcoming_line(task, width))
 		view = render()
-	return "\n".join(_fit(view, height))
+	return "\n".join(truncate(line, width) for line in _fit(view, height))
 
 def wrap_text(text: str, width: int) -> list[str]:
 	"""Wrap text to fit within width, returning list of lines.

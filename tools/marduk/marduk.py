@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Marduk - Real-Time Agent Status Monitor."""
 
-import argparse,contextlib,signal,sys,threading,time
+import argparse,contextlib,shutil,signal,sys,threading,time
 from pathlib import Path
 from ._ import service
 from ._.sse_client import create_sse_client
@@ -124,6 +124,25 @@ class Marduk:
 			return status + " " * (width - vis)
 		return status
 
+	def _fit_visible(self, text: str, width: int) -> str:
+		"""Cut a line to the pane width, counting visible characters only."""
+		if self._visible_len(text) <= width:
+			return text
+		import re
+		out=[]
+		visible=0
+		index=0
+		while index<len(text) and visible<max(width-1,0):
+			match=re.match(r"\033\[[0-9;]*m",text[index:])
+			if match:
+				out.append(match.group(0))
+				index+=len(match.group(0))
+				continue
+			out.append(text[index])
+			visible+=1
+			index+=1
+		return "".join(out)+"…\033[0m"
+
 	def _status_color(self, status_text: str) -> str:
 		"""Return ANSI-colored status string."""
 		code = {
@@ -160,10 +179,24 @@ class Marduk:
 		for session_id in to_remove:
 			self._agents.pop(session_id,None)
 
-	def _render(self):
-		"""Render current state."""
+	def _render(self, height=None, width=None):
+		"""Render current state, using the rows the pane actually has.
+
+		The body is capped at the pane height: a list of agents that runs past
+		the bottom would push the header out of sight, so what is left over
+		becomes one `… +N more` line instead. The width does the same job for
+		the long fields: a narrow pane goes compact, and a line that still
+		does not fit is cut rather than wrapped.
+		"""
 		self._cleanup_disconnected()
 		self._check_warnings()
+		if height is None or width is None:
+			size=shutil.get_terminal_size((80,24))
+			if height is None:
+				height=size.lines
+			if width is None:
+				width=size.columns
+		compact=self.compact or width<46
 		workspaces:dict[str,list[AgentState]]={}
 		for agent in self._agents.values():
 			ws=getattr(agent,"workspace",None) or "XLib"
@@ -172,9 +205,10 @@ class Marduk:
 			workspaces[ws].append(agent)
 		for ws_agents in workspaces.values():
 			ws_agents.sort(key=lambda a:a.role)
-		lines=["=== Marduk (Live) ===",""]
+		header=["=== Marduk (Live) ===",""]
+		body=[]
 		for ws_name,ws_agents in sorted(workspaces.items()):
-			lines.append(ws_name)
+			body.append(("workspace",self._fit_visible(ws_name,width)))
 			for agent in ws_agents:
 				status=agent.status.value
 				if agent.warn_sse_silence:
@@ -182,16 +216,32 @@ class Marduk:
 				status=self._status_color(status)
 				detail=self._format_detail(agent)
 				age=format_age(time.time()-agent.last_event_ts) if agent.last_event_ts else "?"
-				if self.compact:
+				if compact:
 					status=self._pad_status(status, 7)
-					lines.append(f" {agent.role[:8]:8} {status} {detail[:10]:10} {age:>5}")
+					line=f" {agent.role[:8]:8} {status} {detail[:10]:10} {age:>5}"
 				else:
 					status=self._pad_status(status, 10)
-					lines.append(f"  {agent.role:<12} {status} {detail:<12} {age:>6}")
+					line=f"  {agent.role[:12]:12} {status} {detail[:12]:12} {age:>6}"
+				body.append(("agent",self._fit_visible(line,width)))
 		if not self._agents:
-			lines.append(self.error or "no agents connected")
+			body.append(("message",self.error or "no agents connected"))
+		if height <= len(header):
+			lines=header[:max(height,0)]
+		else:
+			room=height-len(header)
+			shown=body[:room]
+			if room>0 and any(kind=="agent" for kind,_ in body[room:]):
+				shown=body[:room-1]
+				hidden_agents=sum(1 for kind,_ in body[room-1:] if kind=="agent")
+				shown.append(("message",f"… +{hidden_agents} more"))
+			lines=header+[line for _,line in shown]
+		# A newline after a full frame would scroll the first line away; only
+		# a frame with room to spare gets one, so a shell prompt starts clean.
+		text="\n".join(lines)
+		if len(lines)<height:
+			text+="\n"
 		sys.stdout.write("\033[H\033[2J")
-		sys.stdout.write("\n".join(lines)+"\n")
+		sys.stdout.write(text)
 		sys.stdout.flush()
 
 	def run_once(self):

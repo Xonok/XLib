@@ -191,7 +191,9 @@ passing suite does not validate anything the spec merely describes in prose.
 	polling remains only for a machine where inotify is unavailable. The watch
 	owns the pane: the cursor is hidden and the frames are drawn in the
 	alternate screen, so old frames cannot accumulate in scrollback and the
-	normal screen is restored on exit. One-shot runs print normally.
+	normal screen is restored on exit. Every line is cut to the pane width, so
+	a narrow pane does not wrap a line into a second row. One-shot runs print
+	normally.
 - **R23** If the resolved filter file is deleted or becomes unreadable while
 	running, the render loop re-runs discovery, keeps displaying with whatever
 	filter it can resolve (including none), writes a warning to stderr, and does
