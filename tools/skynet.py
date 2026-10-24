@@ -213,19 +213,85 @@ def overflow_note(more):
 	"""The line that says how much a capped table left out."""
 	return f"… +{more} more"
 
-def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None, title=None):
+_COLUMNS = (("Msgs",5),("In",7),("Out",7),("Tot",7),("Ref",12))
+_EXTRA_COLUMNS = (("Len",4),("Tool",4),("Stop",4),("Unk",4))
+_MIN_MODEL_WIDTH = 8
+
+def fit_columns(width, show_extra=False, show_tokens=True):
+	"""The columns and model width that fit `width`, dropping the least first.
+
+	Tot repeats what In and Out already say, so it goes before either of
+	them; then the token columns, then Ref, then Msgs. The model column keeps
+	at least `_MIN_MODEL_WIDTH` until there is nothing left to drop.
+	"""
+	columns = list(_COLUMNS if show_tokens else (("Msgs",5),("Ref",12)))
+	if show_extra:
+		columns += list(_EXTRA_COLUMNS)
+	def fixed():
+		return sum(w for _,w in columns) + 2 * len(columns)
+	def drop(names):
+		nonlocal columns
+		columns = [column for column in columns if column[0] not in names]
+	while columns and width - fixed() < _MIN_MODEL_WIDTH:
+		extras = {name for name,_ in _EXTRA_COLUMNS}
+		if any(name in extras for name,_ in columns):
+			drop(extras)
+			continue
+		for name in ("Tot","In","Out","Ref","Msgs"):
+			if any(column == name for column,_ in columns):
+				drop({name})
+				break
+		else:
+			break
+	return columns, max(1, width - fixed())
+
+def fit_cell(text, width):
+	"""One cell, cut to the room it has."""
+	if len(text) <= width:
+		return text
+	if width <= 1:
+		return text[:width]
+	return text[:width - 1] + "…"
+
+def cell(stats, name, width, now):
+	"""One value from a model's stats, aligned to its column."""
+	if name == "Msgs":
+		return f"{stats['msgs']:>{width}}"
+	if name == "In":
+		return f"{human_tokens(stats['input']):>{width}}"
+	if name == "Out":
+		return f"{human_tokens(stats['output']):>{width}}"
+	if name == "Tot":
+		return f"{human_tokens(stats['total']):>{width}}"
+	if name == "Ref":
+		ref = str(stats["refusals"])
+		if stats["last_refusal"]:
+			ref += f"({human_age(now - stats['last_refusal'])})"
+		return f"{fit_cell(ref,width):>{width}}"
+	if name == "Len":
+		return f"{stats['finish_length']:>{width}}"
+	if name == "Tool":
+		return f"{stats['finish_tool_calls']:>{width}}"
+	if name == "Stop":
+		return f"{stats['finish_stop']:>{width}}"
+	return f"{stats['finish_unknown']:>{width}}"
+
+def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None, title=None, columns=None):
 	models = used_models(by_model)
 	shown = models if max_models is None else models[:max_models]
 	more = len(models) - len(shown)
 	label = title if title else "Model"
+	if columns is None:
+		columns = list(_COLUMNS if show_tokens else (("Msgs",5),("Ref",12)))
+		if show_extra:
+			columns += list(_EXTRA_COLUMNS)
 	if col_w is None:
 		col_w = max([len(m) for m in shown] + [len(label)])
-	ref_w = 12
-	hdr = f"{label:<{col_w}}  {'Msgs':>5}  {'In':>7}  {'Out':>7}  {'Tot':>7}  {'Ref':>{ref_w}}"
-	sep = f"{'─' * col_w}  {'─' * 5}  {'─' * 7}  {'─' * 7}  {'─' * 7}  {'─' * ref_w}"
-	if show_extra:
-		hdr += f"  {'Len':>4}  {'Tool':>4}  {'Stop':>4}  {'Unk':>4}"
-		sep += f"  {'─' * 4}  {'─' * 4}  {'─' * 4}  {'─' * 4}"
+	hdr = f"{fit_cell(label,col_w):<{col_w}}"
+	sep = "─" * col_w
+	for name,width in columns:
+		hdr += f"  {name:>{width}}"
+		sep += "  " + "─" * width
 	if not models:
 		return f"{hdr}\nno agents active" if title else "no agents active"
 	if not shown:
@@ -234,23 +300,9 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 		return f"{hdr}\n{overflow_note(more)}" if title else overflow_note(more)
 	lines = [hdr, sep]
 	for model in shown:
-		s = by_model[model]
-		ref = str(s["refusals"])
-		if s["last_refusal"]:
-			ref += f"({human_age(now - s['last_refusal'])})"
-		if show_tokens:
-			line = (f"{model:<{col_w}}"
-				f"  {s['msgs']:>5}"
-				f"  {human_tokens(s['input']):>7}"
-				f"  {human_tokens(s['output']):>7}"
-				f"  {human_tokens(s['total']):>7}"
-				f"  {ref:>{ref_w}}")
-		else:
-			line = (f"{model:<{col_w}}"
-				f"  {s['msgs']:>5}"
-				f"  {ref:>{ref_w}}")
-		if show_extra:
-			line += f"  {s['finish_length']:>4}  {s['finish_tool_calls']:>4}  {s['finish_stop']:>4}  {s['finish_unknown']:>4}"
+		line = f"{fit_cell(model,col_w):<{col_w}}"
+		for name,width in columns:
+			line += "  " + cell(by_model[model], name, width, now)
 		lines.append(line)
 	if more:
 		lines.append(overflow_note(more))
@@ -309,14 +361,19 @@ def plural(count, noun):
 	"""`count` and its noun, agreeing in number."""
 	return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
-def render(rows, now, height=None):
+def render(rows, now, height=None, width=None):
 	"""The whole display: the header, then the Today table and the Window table.
 
-	`height` is the number of lines the display may use, and the caps on the
-	tables come from it, so the render fits the room it has.
+	`height` is the number of lines the display may use, and `width` the
+	columns it may use; the caps on the rows come from the first, the columns
+	and the model names from the second, so the render fits the pane it has.
 	"""
-	if height is None:
-		height = terminal_size().lines
+	if height is None or width is None:
+		size = terminal_size()
+		if height is None:
+			height = size.lines
+		if width is None:
+			width = size.columns
 	all_stats = aggregate(rows, now)
 	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	today_cutoff = local_midnight.timestamp()
@@ -334,15 +391,20 @@ def render(rows, now, height=None):
 		return f"{NAME}: {plural(today_count, 'model')} today, {plural(window_count, 'model')} in window"
 	if not all_stats:
 		return f"=== {NAME} ===\n\nno agents active in window"
-	all_models = set(all_stats.keys()) | set(today_stats.keys())
+	columns, col_w = fit_columns(width, SHOW_EXTRA)
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
-	col_w = max([len(m) for m in all_models] + [len(today_title), len(window_title)])
+	# A title that no longer fits gives way to the short name; the column
+	# labels ride on the same line and are worth more than the brackets.
+	if len(today_title) > col_w:
+		today_title = "Today"
+	if len(window_title) > col_w:
+		window_title = "Window"
 	today_allowance, window_allowance = section_allowances(height, today_count, window_count)
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
-	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title)
-	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title)
+	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns)
+	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
 	return (
 		f"=== {NAME} ===\n"
 		f"{today_text}"
@@ -358,9 +420,9 @@ def db_stamp():
 			values.append(0)
 	return tuple(values)
 
-def build_report(window_hours, now, height=None):
+def build_report(window_hours, now, height=None, width=None):
 	rows = load_stats(window_hours * 3600)
-	return render(rows, now, height)
+	return render(rows, now, height, width)
 
 def draw(text):
 	print(_CLEAR_SCREEN, end="")

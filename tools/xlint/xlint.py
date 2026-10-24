@@ -10,8 +10,8 @@ _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
 _ALIASED_NAME_RE = re.compile(r"\bas\b")
 _CLEAR_SCREEN = "\033[2J\033[H"
-_ENTER_WATCH = "\033[?25l\033[?1049h"
-_LEAVE_WATCH = "\033[?25h\033[?1049l"
+_ENTER_WATCH = "\033[?25l"
+_LEAVE_WATCH = "\033[?25h"
 NAME = "xlint"
 _EVENT_HEADER = struct.Struct("=iIII")
 _IN_CLOSE_WRITE = 0x00000008
@@ -1402,8 +1402,14 @@ def make_watcher(rules):
 	return _PollWatcher(rules)
 
 @contextlib.contextmanager
-def _fullscreen():
-	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+def _watch_cursor():
+	"""Hide the cursor for the watch, and leave the scrollback where it is.
+
+	The report can be taller than the pane, and the error list is worth more
+	than a fixed layout: it stays on the normal screen, so the terminal's own
+	scrollback holds the lines above the fold and copy-mode keeps the reader's
+	place. The alternate screen would throw that away.
+	"""
 	sys.stdout.write(_ENTER_WATCH)
 	sys.stdout.flush()
 	try:
@@ -1436,7 +1442,7 @@ def watch(rules, args):
 	un-ignored one can enter it — and the reload prints nothing of its own, so
 	what the screen shows is the report and nothing else.
 	"""
-	with _fullscreen():
+	with _watch_cursor():
 		snapshot = {path: check_file(path, args) for path in rules.files()}
 		skipped = rules.skipped()
 		watcher = make_watcher(rules)

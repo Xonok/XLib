@@ -1170,5 +1170,11 @@ def test_upcoming_none_when_no_remaining_tasks():
 	view = _make_view(_tasks(1), 80, 24)
 	xtest.true(' · (none)' in view)
 
+def test_every_line_fits_the_width_it_is_given():
+	for width in (20,30,40,60,80):
+		view = _make_view(_tasks(5), width, 24)
+		xtest.true(all(len(line) <= width for line in view.splitlines()),
+			f"a view of {width} columns must not run past {width}: {view!r}")
+
 if __name__ == '__main__':
 	sys.exit(xtest.run(__file__))
