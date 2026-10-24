@@ -22,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `59628d4` (2026-10-22), **snapshot taken 2026-10-22**, **in
+Basis: `master` at `f8924c0` (2026-10-24), **snapshot taken 2026-10-24**, **in
 sync with `origin/master`** — **the repository no longer states the human's
 identity: the one history entry that quoted the reviewer's real name, the
 private workspace slug and the private repo names was redacted in place (PR
@@ -30,6 +30,13 @@ private workspace slug and the private repo names was redacted in place (PR
 **The skynet display now fits the pane it is in,
 says how much it left out (PR #58 and PR #59), and gives the room a section
 does not need to the section that has more to show (PR #82).**
+**The four panel tools share the terminal contract and the panel-size sweep
+now (PR #88, `D3G54BV`): taskview, skynet and marduk own the alternate screen
+with the cursor hidden, xlint keeps the normal screen so its scrollback holds
+the error list, all four read inotify through ctypes, and each fits the pane
+it is given — taskview cuts lines to width, skynet drops columns, marduk caps
+its body with `… +N more`, and xlint follows the end while holding a
+scrolled-up position.**
 **Herdr is the human's active workspace manager now, and tmux holds the passive
 panels** — the human's own split, 2026-10-21: *"I use herdr for actively doing
 stuff and tmux for passive panels… herdr has an extra panel for keeping track of
@@ -342,7 +349,10 @@ before the human reviews it**. Agents move finished tickets to Done themselves;
 after the human has approved a ticket an agent may merge it to master, delete
 the branch, and close the ticket (epiq `H2NC2A2`).
 
-**No pull request is open.** PR #50 (`K93Z39B`, the `news` command's workspace resolution) was
+**No pull request is open.** PR #88 (`D3G54BV`, the four panel tools' terminal
+contract and panel-size sweep) was merged on 2026-10-24 as `f8924c0` — by
+rebase, on the human's approval — and its branch and worktree are deleted.
+PR #50 (`K93Z39B`, the `news` command's workspace resolution) was
 merged on 2026-10-20 as `f12ebd5` — 36 tests and 11 mutations killed — and this
 line said it was still waiting for the human, which it had not been since the
 previous day. **PR #78** (`PNAJ6D0`, **bbprs stopped hardcoding one user's
