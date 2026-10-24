@@ -186,8 +186,12 @@ passing suite does not validate anything the spec merely describes in prose.
 ### Watch mode
 
 - **R22** In `--watch` the watch set is the CSV plus the **resolved** filter file,
-	which is generally in a different directory from the CSV. inotify remains
-	primary, 1-second polling the fallback, unchanged.
+	which is generally in a different directory from the CSV. inotify is the
+	file source, read through the syscall itself so no package is needed;
+	polling remains only for a machine where inotify is unavailable. The watch
+	owns the pane: the cursor is hidden and the frames are drawn in the
+	alternate screen, so old frames cannot accumulate in scrollback and the
+	normal screen is restored on exit. One-shot runs print normally.
 - **R23** If the resolved filter file is deleted or becomes unreadable while
 	running, the render loop re-runs discovery, keeps displaying with whatever
 	filter it can resolve (including none), writes a warning to stderr, and does

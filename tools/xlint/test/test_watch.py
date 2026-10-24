@@ -213,5 +213,18 @@ def test_the_reload_prints_nothing_of_its_own():
 		finally:
 			_stop_watch(proc)
 
+def test_the_watch_takes_the_screen_and_gives_it_back():
+	with tempfile.TemporaryDirectory() as folder:
+		root = _repo(folder)
+		proc, lines = _start_watch(root)
+		try:
+			xtest.true(_wait_for(lines, "=== xlint ==="), "the first report is drawn")
+		finally:
+			_stop_watch(proc)
+		time.sleep(0.2)
+		output = "".join(lines)
+		xtest.true("\033[?25l\033[?1049h" in output, "the cursor is hidden and the alternate screen entered")
+		xtest.true("\033[?25h\033[?1049l" in output, "the screen is given back on SIGTERM")
+
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))

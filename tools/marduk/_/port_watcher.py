@@ -3,12 +3,7 @@
 import json,os,socket,time
 from pathlib import Path
 from typing import Callable,Optional
-
-try:
-	from inotify_simple import INotify,flags
-	HAS_INOTIFY=True
-except ImportError:
-	HAS_INOTIFY=False
+from .inotify import IN_CLOSE_WRITE,IN_CREATE,IN_DELETE,IN_MODIFY,IN_MOVED_FROM,IN_MOVED_TO,Inotify,available as inotify_available
 
 class PortFile:
 	"""Represents a parsed port file."""
@@ -116,28 +111,33 @@ class PortWatcher:
 		"""Run continuous watching loop."""
 		self._running=True
 		self.scan_existing()
-		if HAS_INOTIFY:
-			self._run_inotify()
-		else:
-			self._run_poll()
+		if inotify_available():
+			try:
+				self._run_inotify()
+				return
+			except OSError:
+				pass
+		self._run_poll()
 
 	def _run_inotify(self):
 		"""Run using inotify."""
-		inotify=INotify()
-		watch_flags=flags.CREATE|flags.MODIFY|flags.DELETE|flags.MOVED_TO
-		inotify.add_watch(str(self.ports_dir),watch_flags)
+		watcher=Inotify()
+		try:
+			watcher.add(self.ports_dir)
+		except OSError:
+			watcher.close()
+			raise
 		try:
 			while self._running:
-				for event in inotify.read(timeout=int(self.poll_seconds*1000)):
+				for mask,path in watcher.read(self.poll_seconds):
 					if not self._running:
 						break
-					if event.mask&(flags.CREATE|flags.MODIFY|flags.MOVED_TO):
-						path=self.ports_dir/event.name
+					if mask&(IN_CREATE|IN_MODIFY|IN_CLOSE_WRITE|IN_MOVED_TO):
 						if path.suffix==".json":
 							self._check_port_file(path)
-					elif event.mask&flags.DELETE:
+					elif mask&(IN_DELETE|IN_MOVED_FROM):
 						try:
-							port=int(event.name.replace(".json",""))
+							port=int(path.stem)
 							if port in self._known_ports:
 								self._known_ports.pop(port)
 								self.on_removed(port)
@@ -145,7 +145,7 @@ class PortWatcher:
 							pass
 				self._cleanup_stale()
 		finally:
-			inotify.close()
+			watcher.close()
 
 	def _run_poll(self):
 		"""Run using polling fallback."""

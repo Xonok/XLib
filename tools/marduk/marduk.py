@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 """Marduk - Real-Time Agent Status Monitor."""
 
-import argparse,signal,sys,threading,time
+import argparse,contextlib,signal,sys,threading,time
 from pathlib import Path
 from ._ import service
 from ._.sse_client import create_sse_client
 from ._.session_watcher import REGISTRY_DIR,SessionWatcher
 from ._.state import AgentState,AgentStatus,parse_event,format_age
+
+_ENTER_WATCH="\033[?25l\033[?1049h"
+_LEAVE_WATCH="\033[?25h\033[?1049l"
+
+@contextlib.contextmanager
+def _fullscreen():
+	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+	sys.stdout.write(_ENTER_WATCH)
+	sys.stdout.flush()
+	try:
+		yield
+	finally:
+		sys.stdout.write(_LEAVE_WATCH)
+		sys.stdout.flush()
 
 class Marduk:
 	"""Main Marduk monitor."""
@@ -205,14 +219,15 @@ class Marduk:
 		watcher_thread=threading.Thread(target=watcher.run_watch,daemon=True)
 		watcher_thread.start()
 		self._start_events()
-		try:
-			while self._running:
-				self._render()
-				time.sleep(1.0)
-		finally:
-			watcher.stop()
-			if self._client:
-				self._client.stop()
+		with _fullscreen():
+			try:
+				while self._running:
+					self._render()
+					time.sleep(1.0)
+			finally:
+				watcher.stop()
+				if self._client:
+					self._client.stop()
 
 def main():
 	parser=argparse.ArgumentParser(description="Marduk - Real-Time Agent Status Monitor")

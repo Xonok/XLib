@@ -176,7 +176,7 @@ python3 -m marduk.marduk --once
 ## Implementation Plan
 
 ### Phase 1: Core
-1. Port file watcher (inotify via `inotify-simple` or poll fallback)
+1. Port file watcher (inotify read through `_.inotify`, or poll fallback)
 2. JSON parser with validation
 3. SSE client with reconnection logic
 4. Event parser → status inference
@@ -197,8 +197,9 @@ python3 -m marduk.marduk --once
 ---
 
 ## Dependencies
-- Python stdlib: `json`, `os`, `pathlib`, `time`, `signal`, `socket`, `select`
-- Optional: `inotify-simple` (for inotify; fallback to poll)
+- Python stdlib: `json`, `os`, `pathlib`, `time`, `signal`, `socket`, `select`, `ctypes`
+- inotify comes from the kernel through `_.inotify` (ctypes), so there is no
+	package to install; polling is the fallback when the kernel has none.
 - HTTP/SSE: `httpx` (if available) or `urllib.request` + manual SSE parsing
 
 ---
