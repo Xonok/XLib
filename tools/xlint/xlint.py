@@ -15,9 +15,11 @@ except ImportError:
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
 _ALIASED_NAME_RE = re.compile(r"\bas\b")
-# 3J erases the saved lines as well, so the scrollback holds this report and
-# not the previous ones. One-shot runs print directly and never clear.
-_CLEAR_SCREEN = "\033[3J\033[2J\033[H"
+# The screen is cleared before the saved lines, not after: tmux treats 2J as
+# "move the screen into history", so erasing history first (3J) lets the next
+# 2J put one screenful back, and the previous report survives. One-shot runs
+# print directly and never clear.
+_CLEAR_SCREEN = "\033[H\033[2J\033[3J"
 _ENTER_WATCH = "\033[?25l"
 _LEAVE_WATCH = "\033[?25h"
 NAME = "xlint"

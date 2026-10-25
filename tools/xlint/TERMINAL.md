@@ -7,9 +7,13 @@ report still prints.
 	every exit path — Ctrl-C, SIGTERM, an exception. One-shot runs leave it
 	alone.
 - **The scrollback holds the current report only.** Watch stays on the normal
-	screen (not the alternate screen) and starts every redraw with `ESC[3J`
-	(erase saved lines). Previous iterations are erased; the current report's
-	lines above the fold remain in scrollback, where they can be reached.
+	screen (not the alternate screen) and starts every redraw with
+	`ESC[H ESC[2J ESC[3J` — home, clear the screen, then erase the saved lines.
+	The order is part of the contract: tmux moves the cleared screen into
+	history on `2J`, so erasing the saved lines first leaves one screenful of
+	the previous report behind. Previous iterations are erased; the current
+	report's lines above the fold remain in scrollback, where they can be
+	reached.
 - **The reader's scroll position survives a redraw.** If the view is scrolled
 	up, the same line index is kept when the report changes; if it is at the
 	bottom, it stays at the bottom and follows the new end. This is why watch
@@ -24,4 +28,4 @@ report still prints.
 One-shot runs print directly: no clearing, no cursor sequences, no `ESC[3J`.
 
 Enforced by `test/test_watch.py` (process-level cursor, no alternate screen,
-`ESC[3J`, rule reload).
+`ESC[H ESC[2J ESC[3J]` in that order, rule reload).

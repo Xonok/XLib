@@ -13,7 +13,7 @@ both directions.
 The last tests drive the real process, because the loop that turns a changed
 rule into a changed report is the thing under test.
 """
-import os,subprocess,sys,tempfile,threading,time
+import os,signal,subprocess,sys,tempfile,threading,time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -226,7 +226,24 @@ def test_the_watch_hides_the_cursor_and_keeps_the_scrollback():
 		xtest.true("\033[?25l" in output, "the cursor is hidden")
 		xtest.true("\033[?25h" in output, "the cursor comes back on SIGTERM")
 		xtest.true("\033[?1049h" not in output, "the report is not put on the alternate screen")
-		xtest.true("\033[3J" in output, "the previous report's saved lines are erased")
+		# tmux moves the cleared screen into history on 2J, so erasing the saved
+		# lines first lets 2J put one screenful back — the previous report stays.
+		xtest.true("\033[H\033[2J\033[3J" in output,
+			"the screen is cleared before the saved lines")
+
+def test_the_watch_shows_the_cursor_after_ctrl_c():
+	"""Ctrl-C is the exit a reader actually uses; SIGTERM has its own test."""
+	with tempfile.TemporaryDirectory() as folder:
+		root = _repo(folder)
+		proc, lines = _start_watch(root)
+		try:
+			xtest.true(_wait_for(lines, "=== xlint ==="), "the first report is drawn")
+			proc.send_signal(signal.SIGINT)
+			xtest.equal(proc.wait(timeout=5), 0, "Ctrl-C ends the watch cleanly")
+		finally:
+			_stop_watch(proc)
+		time.sleep(0.2)
+		xtest.true("\033[?25h" in "".join(lines), "the cursor comes back on Ctrl-C")
 
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
