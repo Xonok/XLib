@@ -186,14 +186,9 @@ passing suite does not validate anything the spec merely describes in prose.
 ### Watch mode
 
 - **R22** In `--watch` the watch set is the CSV plus the **resolved** filter file,
-	which is generally in a different directory from the CSV. inotify is the
-	file source, read through the syscall itself so no package is needed;
-	polling remains only for a machine where inotify is unavailable. The watch
-	owns the pane: the cursor is hidden and the frames are drawn in the
-	alternate screen, so old frames cannot accumulate in scrollback and the
-	normal screen is restored on exit. Every line is cut to the pane width, so
-	a narrow pane does not wrap a line into a second row. One-shot runs print
-	normally.
+	which is generally in a different directory from the CSV. The terminal
+	contract — cursor, scrollback, inotify availability, height and width — is
+	recorded in `TERMINAL.md`.
 - **R23** If the resolved filter file is deleted or becomes unreadable while
 	running, the render loop re-runs discovery, keeps displaying with whatever
 	filter it can resolve (including none), writes a warning to stderr, and does

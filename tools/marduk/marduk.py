@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Marduk - Real-Time Agent Status Monitor."""
+"""Marduk - Real-Time Agent Status Monitor.
+
+Terminal contract: TERMINAL.md.
+"""
 
 import argparse,contextlib,shutil,signal,sys,threading,time
 from pathlib import Path
