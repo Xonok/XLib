@@ -67,6 +67,18 @@ class TestLeadingUnderscores(unittest.TestCase):
 	def test_underscore_inside_the_name_is_left_where_it_is(self):
 		self.assertEqual(renamed("foo_bar", "helper__"), "helper__foo_bar")
 
+class TestPrefixBeginningWithAnUnderscore(unittest.TestCase):
+	"""R3: a prefix that begins with an underscore already carries the private
+	marker, so the name keeps its own underscores behind it. Moving them in
+	front would produce `__types__foo`, which python reads as class-private
+	inside a class body and mangles."""
+
+	def test_private_name_keeps_its_underscore_behind_the_prefix(self):
+		self.assertEqual(renamed("_foo", "_types__"), "_types___foo")
+
+	def test_public_name_is_unchanged_by_the_rule(self):
+		self.assertEqual(renamed("foo", "_types__"), "_types__foo")
+
 class TestNonAsciiNames(unittest.TestCase):
 	"""A non-ASCII name is an ordinary python identifier, so it renames like
 	any other."""

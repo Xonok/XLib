@@ -40,8 +40,17 @@ def renamed(name: str, prefix: str) -> str:
 	all of theirs. The spec states this case as an example beside the others and
 	each of the three is pinned by a test, so the exception is written out rather
 	than left for the next reader to work out from the shape of the answer.
+
+	**A prefix that begins with an underscore keeps the name's own underscores
+	behind it**, because it already carries the private marker: a `_/` folder's
+	module has the prefix `_types__`, so `_foo` becomes `_types___foo`. Moving the
+	underscore in front there would give `__types__foo`, and python reads a
+	double-leading-underscore name inside a class body as class-private and
+	mangles it — the bundle would raise `NameError` on the first call.
 	"""
 	moved = len(name) - len(name.lstrip("_"))
+	if moved == 0 or prefix.startswith("_"):
+		return prefix + name
 	if moved == 2:
 		return "_" + prefix + name
 	return "_" * moved + prefix + name[moved:]

@@ -7,6 +7,26 @@
 
 **xschema** is a runtime type/schema system that validates Python values against type specifications. It provides a unified `parse()` funnel accepting two equivalent expression forms — a compact string notation (`"int"`, `"int_nat"`, `"list:int(0,5)"`, `"dict:str:int"`) and a Python/dict form (builtins, `Type` instances, composite dicts like `{"name": "str", "?email": "str"}`) — both producing `Type` instances with a shared `check(value, path)` contract. A global `Registry` maps type-id strings to `Type` classes, enabling user-defined types usable in the string notation. A `Schema` built from a function signature wraps the function (`@schema.validate`) so every call validates its arguments, binding positional/keyword args and raising `ValidationError` with a dotted-path locator on mismatch.
 
+## Module map
+
+```
+dev/xschema/
+	xschema.py        entry point: the public interface, and nothing else
+	_/
+		err.py        ValidationError, and the path formatter
+		types.py      the Type hierarchy, the parse funnel, Registry, validate
+		schema.py     Schema, SchemaDecorator, and signature-to-fields
+	tests/            test suite (the `test/` rename is epiq 2VD2XZC)
+	SPEC.md           this file
+	README.md         short overview
+	VERSIONS.md       release history
+```
+
+`xschema.py` binds every public class to its definition in `_/` and wraps the
+three public functions, so a caller imports the same names it always did and the
+bundler cannot prefix them out from under it. Nothing imports the entry: `types`
+depends on `err`, `schema` depends on both.
+
 ## Data Flow
 
 ```
@@ -57,7 +77,7 @@ Schema.from_function(fn)  ──► inspect.signature
 wrapped(*args, **kwargs)  bind() → argdict → check() → ValidationError or call
 ```
 
-*Internal helpers `_simple_from_annotation`, `_type_from_default`, `_fields_from_signature` are not public API.*
+*Internal helpers `_simple_from_annotation`, `_type_from_default`, `_fields_from_signature` are not public API; they live in `_/schema.py`.*
 
 ## Key Invariants / Design Decisions
 
@@ -83,7 +103,7 @@ wrapped(*args, **kwargs)  bind() → argdict → check() → ValidationError or 
 | `Schema.bind(args, kwargs)` | Positional + keyword → dict per parameter order |
 | `Schema.validate` / `SchemaDecorator` | Decorator: wrap function for per-call validation |
 
-*Internal (not public): `_simple_from_annotation`, `_type_from_default`, `_fields_from_signature`, `_composite_fields`, `_parse_string`, `_construct`, `_bounds*`, `_split*`, `_coerce`, `_bound_check`.*
+*Internal (not public): `_simple_from_annotation`, `_type_from_default`, `_fields_from_signature` in `_/schema.py`; `_composite_fields`, `_parse_string`, `_construct`, `_bounds*`, `_split*`, `_coerce`, `_bound_check` in `_/types.py`.*
 
 ## Data Structures
 
