@@ -17,11 +17,32 @@ if [ -z "$staged" ]; then
 	exit 0
 fi
 
-# Run xlint from the repo root, using the repo's xlint.
+# Find xlint without assuming this checkout holds it. A workspace that borrows
+# the tools reaches them through a symlinked tools/; one that installs them gets
+# the command on PATH, from XLib's install.sh. An explicit XLIB wins, then this
+# checkout's copy, then the installed command.
+xlint=""
+if [ -n "${XLIB:-}" ] && [ -f "$XLIB/tools/xlint/xlint.py" ]; then
+	xlint="$XLIB/tools/xlint/xlint.py"
+elif [ -f "$root/tools/xlint/xlint.py" ]; then
+	xlint="$root/tools/xlint/xlint.py"
+elif command -v xlint >/dev/null 2>&1; then
+	xlint=$(command -v xlint)
+fi
+
+if [ -z "$xlint" ]; then
+	echo "xlint-hook: xlint was not found, so the style gate cannot run." >&2
+	echo "xlint-hook: looked for \$XLIB/tools/xlint/xlint.py, $root/tools/xlint/xlint.py and 'xlint' on PATH." >&2
+	echo "xlint-hook: install the tools from XLib (bash install.sh links xlint into ~/.local/bin), or set XLIB to an XLib checkout." >&2
+	echo "xlint-hook: refusing the commit rather than passing it unchecked." >&2
+	exit 1
+fi
+
+# Run xlint from the repo root, so the staged paths resolve.
 cd "$root"
-if ! python3 tools/xlint/xlint.py $staged; then
+if ! python3 "$xlint" $staged; then
 	echo "xlint-hook: commit blocked by style violations above." >&2
-	echo "xlint-hook: run 'python3 tools/xlint/xlint.py <files>' to see details." >&2
+	echo "xlint-hook: run 'python3 $xlint <files>' to see details." >&2
 	echo "xlint-hook: bypass with 'git commit --no-verify' (not recommended)." >&2
 	exit 1
 fi

@@ -237,6 +237,12 @@ hook does not run and nothing says so), so the guard checks that every link in
 the hooks directory resolves, fails loudly with the fix if one does not, and
 then runs the style gate itself.
 
+The style gate does not assume `xlint` lives in the checkout it is guarding. It
+takes `$XLIB/tools/xlint/xlint.py` when `XLIB` is set, then this repository's
+`tools/xlint/xlint.py`, then the installed `xlint` on `PATH` (XLib's `install.sh`
+links it into `~/.local/bin`). If none exists it refuses the commit and says how
+to install the tools, rather than passing an unchecked commit as clean.
+
 So a hook change needs no step to become live. What it needs is for its link to
 resolve — and the guard is what says so when it does not:
 
