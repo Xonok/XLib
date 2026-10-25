@@ -226,6 +226,7 @@ def test_the_watch_hides_the_cursor_and_keeps_the_scrollback():
 		xtest.true("\033[?25l" in output, "the cursor is hidden")
 		xtest.true("\033[?25h" in output, "the cursor comes back on SIGTERM")
 		xtest.true("\033[?1049h" not in output, "the report is not put on the alternate screen")
+		xtest.true("\033[3J" in output, "the previous report's saved lines are erased")
 
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
