@@ -55,8 +55,9 @@ modules, the tests and the spec. No new features, no release.
 - `dev/xcsv/DRAFT.md` — this document; complete and awaiting decisions.
 - `dev/xcsv/SPEC.md` — the old AI-written 1_1_0 spec; untouched.
 - `dev/xcsv/xcsv.py` — the 1_1_0-shaped dev API; untouched.
-- Ticket `TSKP7D0`, branch `fix/TSKP7D0-xcsv-api`, worktree
-	`.work/TSKP7D0-xcsv-api`.
+- Ticket `TSKP7D0` (Todo, `human-input-needed`); this draft and the convention
+	merged as `ba34aad` (PR #98). No branch or worktree is open; the next work
+	starts from master.
 - Released `xlib/xcsv_1_1_0.py` — untouched.
 
 ## Intent
