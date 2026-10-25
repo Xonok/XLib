@@ -22,11 +22,18 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `a30b01c` (2026-10-25), **snapshot taken 2026-10-25**, **in
+Basis: `master` at `44619d7` (2026-10-25), **snapshot taken 2026-10-25**, **in
 sync with `origin/master`** — **the repository no longer states the human's
 identity: the one history entry that quoted the reviewer's real name, the
 private workspace slug and the private repo names was redacted in place (PR
 #84), and five board descriptions no longer carry the private project names.**
+**Two libraries now follow `xhttp`'s layout — the entry file is the public
+interface and the implementation is in `_/`: `xcsv` (PR #92, `a30b01c`) and
+`xschema` (PR #93, `44619d7`). The xschema reshape exposed a bundler defect
+worth knowing about: a private name in a `_/` module was prefixed to
+`__types__x`, which python reads as class-private inside a class body and
+mangles, so the bundle raised `NameError` on the first call (`SQF8FW4`, fixed
+in the same PR).**
 **The skynet display now fits the pane it is in,
 says how much it left out (PR #58 and PR #59), and gives the room a section
 does not need to the section that has more to show (PR #82).**
@@ -296,7 +303,9 @@ the human's call.
 
 - Libraries: `dev/` holds xconf, xcsv, xprod, xschema, xtest. `xlib/` holds
 	xconf `1_0_0`, xcsv `1_0_0`/`1_0_1`/`1_1_0`, xschema `1_0_0`, xtest `1_0_0`.
-	xprod is unreleased.
+	xprod is unreleased. `xcsv` and `xschema` carry `xhttp`'s layout — entry
+	file plus `_/` internals — and the released files predate that; a
+	structure-only change needs no release, so none was cut.
 - SPEC.md exists for xconf, xcsv, xschema, xtest and for the marduk, pybundle
 	and taskview tools. `dev/xprod/` has only a README.md.
 - Nothing under `.opencode/` is tracked: `.opencode/agent` is a gitignored
