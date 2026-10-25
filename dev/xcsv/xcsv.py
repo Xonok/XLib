@@ -20,306 +20,112 @@ file_reader, file_writer, file_writer_open (planned for future version)
 All public functions return (result, error) tuples by default.
 Pass raise_errors=True to raise exceptions instead.
 
-Exception hierarchy:
-CSVError
-ParseError          # tokenize/parse failure
-SchemaError         # schema mismatch, unknown key, wrong field count
-UnfinishedLineError # fewer fields than schema (unless allow_unfinished)
-IOError             # file read/write failure
-ReschemaError       # malformed reschema row
+This file is the public interface and nothing else: the implementation lives in
+`_/`, as csv_tok (the tokenizer), csv_ser (the serializer), csv_schema (schema
+mapping), csv_io (file IO) and csv_err (the exception hierarchy, bound here
+under the names this library publishes). Every function below hands one call
+into `_deliver`, which is the whole of the raise_errors policy.
+
+Exception hierarchy: CSVError is the base. ParseError is a tokenize or parse
+failure; SchemaError a schema mismatch, an unknown key or a wrong field count;
+UnfinishedLineError fewer fields than the schema, unless allow_unfinished is
+set; IOError a file read or write failure; ReschemaError a malformed reschema
+row.
 """
-from ._ import csv_tok,csv_ser
-class CSVError(Exception):
-	pass
-class ParseError(CSVError):
-	pass
-class SchemaError(CSVError):
-	pass
-class UnfinishedLineError(CSVError):
-	pass
-class IOError(CSVError):
-	pass
-class ReschemaError(CSVError):
-	pass
-def _normalize_schema(schema: list[str] | dict[str, int]):
-	"""Accept list [col1, col2...] or dict {col: index} → return dict."""
-	if isinstance(schema, list):
-		return {col: i for i, col in enumerate(schema)}
-	return schema
+from ._ import csv_err,csv_io,csv_schema,csv_ser,csv_tok
+
+CSVError = csv_err.CSVError
+ParseError = csv_err.ParseError
+SchemaError = csv_err.SchemaError
+UnfinishedLineError = csv_err.UnfinishedLineError
+IOError = csv_err.IOError
+ReschemaError = csv_err.ReschemaError
+
+def _deliver(fn, raise_errors: bool, *args):
+	"""Run one internal call and answer with the public (result, error) pair.
+
+	An internal signals failure by raising a csv_err exception; this is the one
+	place that decides whether the caller sees it raised or as the error half.
+	The internals know nothing about raise_errors."""
+	try:
+		return fn(*args), None
+	except csv_err.CSVError as error:
+		if raise_errors:
+			raise
+		return None, str(error)
+
+#Primitives: the tokenizer and the serializer.
 def tokenize(line: str, raise_errors: bool = False):
 	"""Split a CSV line (with // comments and quoting) into cells.
 	Returns (tokens, error) where tokens is list[str] | None."""
-	result, error = csv_tok.tokenize(line)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	return result, None
+	return _deliver(csv_tok.tokenize, raise_errors, line)
+
 def serialize(*args: str | None, raise_errors: bool = False):
 	"""Join values into one CSV line with standard quoting.
-	Returns (line, error) where line is str."""
-	result, error = csv_ser.serialize(*args)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	return result, None
-def schema_parse(header: str, as_list: bool = False, raise_errors: bool = False):
-	"""Header row → schema. as_list=False (default) returns {col: index} dict. as_list=True returns [col1, col2...] list.
-	Returns (schema, error) where schema is dict[str, int] | list[str]."""
-	tokens, error = tokenize(header)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	if tokens is None:
-		error = "expected header row"
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	schema = {}
-	for i, key in enumerate(tokens):
-		if key is None:
-			error = "empty column name at index %d" % i
-			if raise_errors:
-				raise SchemaError(error)
-			return None, error
-		schema[key] = i
-	if as_list:
-		return tokens, None
-	return schema, None
-def parse_line(line: str, schema: list[str] | dict[str, int], allow_unfinished: bool = False, raise_errors: bool = False):
-	"""Parse one line against schema. Returns {col: value}. Raises SchemaError if field count mismatch (unless allow_unfinished). Accepts list or dict schema.
-	Returns (data, error) where data is dict[str, str | None]."""
-	tokens, error = tokenize(line)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	if tokens is None:
-		error = "expected a data row"
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
+	Returns (line, error) where line is str. The serializer has no failure mode,
+	so the error half is always None."""
+	return csv_ser.serialize(*args), None
 
-	schema_dict = _normalize_schema(schema)
-
-	if not allow_unfinished and len(tokens) != len(schema_dict):
-		error = "field count mismatch: expected %d, got %d" % (len(schema_dict), len(tokens))
-		if raise_errors:
-			raise SchemaError(error)
-		return None, error
-
-	data = {}
-	for key, idx in schema_dict.items():
-		data[key] = tokens[idx] if idx < len(tokens) else None
-	return data, None
-def write_line(path: str, *data: str | None, raise_errors: bool = False):
-	"""Append serialized line to file.
-	Returns (line, error) where line is str."""
-	line, error = serialize(*data)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	try:
-		with open(path, "a", encoding="utf-8") as f:
-			f.write(line)
-	except IOError as e:
-		error = str(e)
-		if raise_errors:
-			raise IOError(error)
-		return None, error
-	return line, None
-def write_entry(path: str, schema: list[str] | dict[str, int], raise_errors: bool = False, allow_unfinished: bool = False, **data: str | None):
-	"""Write one entry. Validates all keys in schema. If allow_unfinished, missing keys become empty fields. Accepts list or dict schema.
-	Returns (line, error) where line is str."""
-	schema_dict = _normalize_schema(schema)
-	tokens = [None] * len(schema_dict)
-
-	for key, value in data.items():
-		if key not in schema_dict:
-			error = "unknown key: %s" % key
-			if raise_errors:
-				raise SchemaError(error)
-			return None, error
-		tokens[schema_dict[key]] = value
-
-	if not allow_unfinished:
-		for key, idx in schema_dict.items():
-			if tokens[idx] is None:
-				error = "missing value for key: %s" % key
-				if raise_errors:
-					raise SchemaError(error)
-				return None, error
-
-	return write_line(path, *tokens, raise_errors=raise_errors)
-# Stage 1 — Line-based (no schema awareness)
+#Stage 1 — line-based: no schema awareness, comments discarded unless asked otherwise.
+#read_line already answers with a pair on success, so it cannot hand a call into _deliver.
 def read_line(path: str, offset: int = 0, discard_comments: bool = True, raise_errors: bool = False):
 	"""Read one line from byte offset. Returns (tokens, next_offset). Comments return (None, next_offset) if not discarded.
 	Returns (tokens, next_offset) where tokens is list[str] | None, next_offset is int."""
 	try:
-		with open(path, "r", encoding="utf-8") as f:
-			f.seek(offset)
-			line = f.readline()
-			if not line:
-				return None, offset
-			next_offset = f.tell()
-
-			tokens, error = tokenize(line)
-			if error:
-				if raise_errors:
-					raise ParseError(error)
-				return None, error
-
-			if tokens is None and not discard_comments:
-				return None, next_offset
-
-			return tokens, next_offset
-	except IOError as e:
-		error = str(e)
+		return csv_io.read_line(path, offset, discard_comments)
+	except csv_err.CSVError as error:
 		if raise_errors:
-			raise IOError(error)
-		return None, error
+			raise
+		return None, str(error)
+
 def read_all(path: str, discard_comments: bool = True, raise_errors: bool = False):
 	"""Read entire file. Returns [(tokens, line_start, line_end), ...]. Header is just first entry.
 	Returns (results, error) where results is list[tuple[list[str], int, int]]."""
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			results = []
-			offset = 0
-			while True:
-				line_start = offset
-				line = f.readline()
-				if not line:
-					break
-				offset = f.tell()
-				line_end = offset
+	return _deliver(csv_io.read_all, raise_errors, path, discard_comments)
 
-				tokens, error = tokenize(line)
-				if error:
-					if raise_errors:
-						raise ParseError(error)
-					return None, error
+def write_line(path: str, *data: str | None, raise_errors: bool = False):
+	"""Append serialized line to file.
+	Returns (line, error) where line is str."""
+	return _deliver(csv_io.append_line, raise_errors, path, *data)
 
-				if tokens is None and discard_comments:
-					continue
-
-				results.append((tokens, line_start, line_end))
-			return results, None
-	except IOError as e:
-		error = str(e)
-		if raise_errors:
-			raise IOError(error)
-		return None, error
 def write_line_tokens(path: str, tokens: list[str | None], raise_errors: bool = False):
 	"""Append one line (list of values/None) to file.
 	Returns (None, error) where error is str | None."""
-	line, error = serialize(*tokens)
-	if error:
-		if raise_errors:
-			raise ParseError(error)
-		return None, error
-	try:
-		with open(path, "a", encoding="utf-8") as f:
-			f.write(line)
-	except IOError as e:
-		error = str(e)
-		if raise_errors:
-			raise IOError(error)
-		return None, error
-	return None, None
+	_, error = _deliver(csv_io.append_line, raise_errors, path, *tokens)
+	return None, error
+
 def write_all(path: str, lines: list[list[str | None]], raise_errors: bool = False):
 	"""Append multiple lines to file. Returns count of lines written on success.
 	Returns (count, error) where count is int."""
-	count = 0
-	for tokens in lines:
-		result, error = write_line_tokens(path, tokens, raise_errors=raise_errors)
-		if error:
-			return None, error
-		count += 1
-	return None, None
-# Stage 2 — Schema-based (header-aware, no reschema)
+	return _deliver(csv_io.append_lines, raise_errors, path, lines)
+
+#Stage 2 — schema-based: header-aware, reschema only where it is opted into.
+def schema_parse(header: str, as_list: bool = False, raise_errors: bool = False):
+	"""Header row → schema. as_list=False (default) returns {col: index} dict. as_list=True returns [col1, col2...] list.
+	Returns (schema, error) where schema is dict[str, int] | list[str]."""
+	return _deliver(lambda: csv_schema.schema_from(csv_tok.tokenize(header), as_list), raise_errors)
+
+def parse_line(line: str, schema: list[str] | dict[str, int], allow_unfinished: bool = False, raise_errors: bool = False):
+	"""Parse one line against schema. Returns {col: value}. Raises SchemaError if field count mismatch (unless allow_unfinished). Accepts list or dict schema.
+	Returns (data, error) where data is dict[str, str | None]."""
+	return _deliver(lambda: csv_schema.row_to_entry(csv_tok.tokenize(line), schema, allow_unfinished), raise_errors)
+
 def parse_all(path: str, schema: list[str] | dict[str, int], allow_unfinished: bool = False, raise_errors: bool = False, reschema: bool = False):
 	"""Read all lines, parse each against schema. Returns [entry_dict, ...]. Comments skipped. By default (reschema=False), reschema rows raise ReschemaError. If reschema=True, handles reschema rows and updates schema. Accepts list or dict schema.
 
 	WARNING: When reschema=True and a __reschema__ row is encountered, the schema is updated for subsequent rows. The returned list contains entries with DIFFERENT schemas (earlier entries use old schema, later entries use new schema). Callers must handle this if they need schema consistency.
 	Returns (results, error) where results is list[dict[str, str | None]]."""
-	schema_dict = _normalize_schema(schema)
-	results = []
+	return _deliver(csv_io.parse_all, raise_errors, path, schema, allow_unfinished, reschema)
 
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			for line in f:
-				tokens, error = tokenize(line)
-				if error:
-					if raise_errors:
-						raise ParseError(error)
-					return None, error
+def write_entry(path: str, schema: list[str] | dict[str, int], raise_errors: bool = False, allow_unfinished: bool = False, **data: str | None):
+	"""Write one entry. Validates all keys in schema. If allow_unfinished, missing keys become empty fields. Accepts list or dict schema.
+	Returns (line, error) where line is str."""
+	def append():
+		tokens = csv_schema.entry_to_tokens(data, schema, allow_unfinished)
+		return csv_io.append_line(path, *tokens)
+	return _deliver(append, raise_errors)
 
-				if tokens is None:
-					continue # skip comments
-
-				if tokens and tokens[0] == "__reschema__":
-					if not reschema:
-						error = "reschema row encountered"
-						if raise_errors:
-							raise ReschemaError(error)
-						return None, error
-					# Update schema from reschema row
-					new_schema = tokens[1:]
-					if not new_schema:
-						error = "empty reschema row"
-						if raise_errors:
-							raise ReschemaError(error)
-						return None, error
-					schema_dict = {col: i for i, col in enumerate(new_schema)}
-					continue
-
-				if not allow_unfinished and len(tokens) != len(schema_dict):
-					error = "field count mismatch: expected %d, got %d" % (len(schema_dict), len(tokens))
-					if raise_errors:
-						raise SchemaError(error)
-					return None, error
-
-				data = {}
-				for key, idx in schema_dict.items():
-					data[key] = tokens[idx] if idx < len(tokens) else None
-				results.append(data)
-	except IOError as e:
-		error = str(e)
-		if raise_errors:
-			raise IOError(error)
-		return None, error
-
-	return results, None
 def write_entries(path: str, schema: list[str] | dict[str, int], entries: list[dict[str, str | None]], raise_errors: bool = False, allow_unfinished: bool = False):
 	"""Write multiple entries. Accepts list or dict schema. Returns count of entries written on success.
 	Returns (count, error) where count is int."""
-	schema_dict = _normalize_schema(schema)
-	count = 0
-
-	for entry in entries:
-		tokens = [None] * len(schema_dict)
-		for key, value in entry.items():
-			if key not in schema_dict:
-				error = "unknown key: %s" % key
-				if raise_errors:
-					raise SchemaError(error)
-				return None, error
-			tokens[schema_dict[key]] = value
-
-		if not allow_unfinished:
-			for key, idx in schema_dict.items():
-				if tokens[idx] is None:
-					error = "missing value for key: %s" % key
-					if raise_errors:
-						raise SchemaError(error)
-					return None, error
-
-		result, error = write_line_tokens(path, tokens, raise_errors=raise_errors)
-		if error:
-			return None, error
-		count += 1
-
-	return None, None
+	return _deliver(csv_io.write_entries, raise_errors, path, schema, entries, allow_unfinished)

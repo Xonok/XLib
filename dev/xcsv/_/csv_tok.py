@@ -1,6 +1,9 @@
+from . import csv_err
+
 def tokenize(line: str):
+	"""Split one line into cells, or return None for a blank line or a comment."""
 	if not line or not line.strip():
-		return None, None
+		return None
 
 	# Handle line endings: \r\n, \n, \r
 	if line.endswith("\r\n"):
@@ -19,7 +22,7 @@ def tokenize(line: str):
 	# read is a candidate even once"), not on a repetition count.
 	stripped = line.lstrip()
 	if stripped.startswith("//"):
-		return None, None
+		return None
 
 	tokens: list[str | None] = []
 	i = 0
@@ -52,7 +55,7 @@ def tokenize(line: str):
 					field.append(c)
 					i += 1
 			else:
-				return None, "unterminated quoted field"
+				raise csv_err.ParseError("unterminated quoted field")
 			tokens.append("".join(field))
 			if at_comma():
 				i += 1
@@ -71,4 +74,4 @@ def tokenize(line: str):
 	if line.endswith(","):
 		tokens.append(None)
 
-	return tokens, None
+	return tokens
