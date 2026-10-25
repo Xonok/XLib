@@ -22,9 +22,27 @@
 | `write_line(path, *data)` | Append serialized line to file |
 | `write_entry(path, schema, **data)` | Append entry matching schema to file |
 
-All return `(result, error)` tuples. Internals: `csv_tok.py` (tokenizer), `csv_ser.py` (serializer).
+All return `(result, error)` tuples.
 
-**v1_1_0 dual-support note**: `parse_line`, `write_entry`, `schema_parse` accept both **list** (preferred) and **dict** (deprecated). Internal helper `_normalize_schema(schema)` converts list → dict.
+**Module map** (reshaped 2026-10-25, epi `K1K9J1J`): `xcsv.py` is the public
+interface and nothing else — every function in it calls into `_/` and owns the
+`raise_errors` decision, and the exception classes are bound there from
+`csv_err` under the names this library publishes. Internals signal failure by
+raising out of `csv_err`; only the entry file turns that into a
+`(result, error)` tuple.
+
+| Module | Role |
+|--------|------|
+| `csv_err.py` | the exception hierarchy, both layers speak it |
+| `csv_tok.py` | tokenizer (C): line → cells |
+| `csv_ser.py` | serializer (C): cells → line |
+| `csv_schema.py` | schema mapping (C): schema form, header → schema, tokens ↔ entry |
+| `csv_io.py` | file IO (B): read_line, read_all, append_line(s), parse_all, write_entries |
+
+`csv_io` composes the three C leaves; nothing in `_/` reaches for IO it was not
+handed, and `xcsv.py` does no work of its own beyond the error policy.
+
+**v1_1_0 dual-support note**: `parse_line`, `write_entry`, `schema_parse` accept both **list** (preferred) and **dict** (deprecated). Internal helper `normalize_schema(schema)` in `_/csv_schema.py` converts list → dict; it is not part of the public API.
 
 ## Error Model & Schema Migration (v1_1_0 → v2 → v3)
 
@@ -43,11 +61,13 @@ class UnfinishedLineError(CSVError): pass # fewer fields than schema (unless all
 class IOError(CSVError): pass             # file read/write failure
 class ReschemaError(CSVError): pass       # malformed reschema row
 ```
-Each carries context (line number, column, raw line). Writer functions also get `raise_errors` for consistency.
+These six live in `_/csv_err.py`; `xcsv.py` binds the names, so `xcsv.CSVError`
+and the rest are these classes. Each carries context (line number, column,
+raw line). Writer functions also get `raise_errors` for consistency.
 
-**Internal helper** (not public):
+**Internal helper** (not public, in `_/csv_schema.py`):
 ```python
-def _normalize_schema(schema):
+def normalize_schema(schema):
 		"""Accept list [col1, col2...] or dict {col: index} → return dict."""
 		if isinstance(schema, list):
 				return {col: i for i, col in enumerate(schema)}
