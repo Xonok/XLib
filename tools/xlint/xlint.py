@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """xlint — the repository's style checker.
 
 Watch mode's terminal contract — cursor, scrollback, scroll position, inotify
@@ -6,6 +7,10 @@ and fitting — is recorded in TERMINAL.md.
 
 import argparse,ast,contextlib,ctypes,errno,io,os,re,select,signal,struct,sys,time,tokenize,subprocess
 from pathlib import Path
+
+_here = Path(__file__).resolve().parent
+if str(_here) not in sys.path:
+	sys.path.insert(0, str(_here))
 
 try:
 	from . import _html
@@ -1551,7 +1556,7 @@ def watch(rules, args):
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
-	parser.add_argument("paths", nargs="+", type=Path)
+	parser.add_argument("paths", nargs="*", type=Path, default=[Path(".")])
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
 	parser.add_argument("--no-space-indent", action="store_true", help="disable space indentation check")

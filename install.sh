@@ -8,3 +8,22 @@
 
 echo '# Python global libraries' >> ~/.profile
 echo "export PYTHONPATH=\$PYTHONPATH:$PWD" >> ~/.profile
+
+# Make the standard panel and agent tools available on PATH by name, the same
+# way oc-agent already is: a symlink in ~/.local/bin pointing at the copy in
+# this repository. Re-running this script just refreshes the links.
+mkdir -p "$HOME/.local/bin"
+chmod +x "$PWD/tools/oc-agent" "$PWD/tools/ctx" "$PWD/tools/xlint/xlint.py" \
+	"$PWD/tools/taskview/taskview.py" "$PWD/tools/taskview/taskupdate.py" \
+	"$PWD/tools/marduk/marduk" "$PWD/tools/skynet.py" \
+	"$PWD/tools/bbprs/bbprs.py" "$PWD/tools/tmux-xlib.sh" 2>/dev/null || true
+ln -sf "$PWD/tools/oc-agent" "$HOME/.local/bin/oc-agent"
+ln -sf "$PWD/tools/ctx" "$HOME/.local/bin/ctx"
+ln -sf "$PWD/tools/xlint/xlint.py" "$HOME/.local/bin/xlint"
+ln -sf "$PWD/tools/taskview/taskview.py" "$HOME/.local/bin/taskview"
+ln -sf "$PWD/tools/taskview/taskupdate.py" "$HOME/.local/bin/taskupdate"
+ln -sf "$PWD/tools/marduk/marduk" "$HOME/.local/bin/marduk"
+ln -sf "$PWD/tools/skynet.py" "$HOME/.local/bin/skynet"
+ln -sf "$PWD/tools/bbprs/bbprs.py" "$HOME/.local/bin/bbprs"
+ln -sf "$PWD/tools/tmux-xlib.sh" "$HOME/.local/bin/tmux-xlib"
+echo "Linked panel tools into $HOME/.local/bin"

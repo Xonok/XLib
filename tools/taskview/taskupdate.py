@@ -6,7 +6,17 @@ Writes to tasks.csv resolved via R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.c
 
 import argparse,csv,datetime,os,sys,time
 from pathlib import Path
-from tools.taskview.taskview import resolve_data_dir,resolve_csv
+
+_here = Path(__file__).resolve().parent
+_root = _here.parent.parent
+for _p in (str(_root), str(_root / "tools")):
+	if _p not in sys.path:
+		sys.path.insert(0, _p)
+
+try:
+	from tools.taskview.taskview import resolve_data_dir,resolve_csv
+except ImportError:
+	from taskview import resolve_data_dir,resolve_csv
 
 # Kept for backwards compatibility with existing tests that mock it
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"

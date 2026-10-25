@@ -316,7 +316,7 @@ names first — so they pin the rule and not the order.
 ## Checks run
 
 - All five files compile (`python3 -m py_compile`).
-- xlint is clean over all five (`python3 tools/xlint/xlint.py tools/pybundle/test/*.py`
+- xlint is clean over all five (`xlint tools/pybundle/test/*.py`
 	→ `clean`). Note it only sees them because the paths are explicit — directory
 	traversal skips any path part named `test`, which is `AK633QC`.
 - **Every fixture body in the suite compiles as python** — 203 of them, checked
