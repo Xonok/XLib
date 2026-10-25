@@ -105,8 +105,10 @@ def _compile_pattern(line, base):
 
 	The supported subset is what an exclusion list needs: `*`, `?`, `**`, a trailing `/`
 	for directories only, a leading `/` or an interior `/` to anchor, `!` to re-include,
-	and `#` comments. Anything outside it is treated as literal text rather than
-	guessed at, so an unrecognised pattern cannot silently exclude the whole tree.
+	and `#` comments. `**` is a whole segment standing for zero or more of them, so
+	`a/**/b` matches `a/b`, `a/x/b` and `a/x/y/b`. Anything outside the subset is
+	treated as literal text rather than guessed at, so an unrecognised pattern cannot
+	silently exclude the whole tree.
 	"""
 	line = line.rstrip()
 	if not line.strip() or line.lstrip().startswith("#"):
@@ -121,13 +123,22 @@ def _compile_pattern(line, base):
 			return None
 	anchored = line.startswith("/") or "/" in line
 	line = line.lstrip("/")
-	parts = []
-	for part in line.split("/"):
+	parts = line.split("/")
+	globstar = "(?:[^/]+/)*"
+	body = ""
+	for index, part in enumerate(parts):
 		if part == "**":
-			parts.append("(?:.*/)?")
+			# The separator belongs to the globstar: it absorbs the zero or more
+			# segments that follow it, including their separators, so joining the
+			# next segment must not add another one. A trailing globstar takes
+			# the whole remainder of the path.
+			if body and not body.endswith(globstar):
+				body += "/"
+			body += ".*" if index == len(parts) - 1 else globstar
 			continue
-		parts.append(_glob_to_regex(part))
-	body = "/".join(parts)
+		if body and not body.endswith(globstar):
+			body += "/"
+		body += _glob_to_regex(part)
 	if dir_only:
 		# A directory pattern matches the directory itself AND everything inside it.
 		regex = "^" + body + "(?:/.*)?$"
