@@ -129,10 +129,10 @@ suggestions.
 
 ## Verification (no test suite exists — manual, scratch files)
 
-1. `python3 tools/xlint/xlint.py /storage/Agents/.opencode/agent/secretary.md
+1. `xlint /storage/Agents/.opencode/agent/secretary.md
 	/storage/Agents/.opencode/agent/overseer.md` → 0 violations
 	(frontmatter lines exempt; body is tab-indented so it stays clean).
-2. Regression: `python3 tools/xlint/xlint.py .` in XLib → still 0 violations.
+2. Regression: `xlint .` in XLib → still 0 violations.
 3. Scratch `.md` cases (one file or several under `/tmp/opencode/`):
 	- no frontmatter + a space-indented line → flagged (unchanged behavior).
 	- frontmatter with space-indented keys → not flagged; a space-indented

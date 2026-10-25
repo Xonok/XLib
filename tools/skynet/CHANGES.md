@@ -60,7 +60,7 @@ COALESCE(
 ## Testing
 
 The fix was verified by:
-1. Running `python3 tools/skynet.py --window-hours 1` which now shows data from OpenCode 2 sessions
+1. Running `skynet --window-hours 1` which now shows data from OpenCode 2 sessions
 2. Checking that multiple models are tracked (glm-4.7-flash, dots-studio/dots-3-note-preview:free, thinkingmachines/inkling:free, etc.)
 3. Verifying token counts are correctly extracted (input, output, reasoning, cache)
 4. Verifying total tokens are calculated correctly (input + output + reasoning + cache)

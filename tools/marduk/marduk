@@ -1,0 +1,8 @@
+#!/bin/bash
+# marduk — launcher for the marduk panel tool.
+#
+# marduk is a package (tools/marduk/), so it cannot be exec'd directly the
+# way the single-file panel tools can. This launcher puts tools/ on PYTHONPATH
+# and runs the package module, matching how tmux-xlib.sh invokes it.
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+PYTHONPATH="$ROOT/tools${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m marduk.marduk "$@"

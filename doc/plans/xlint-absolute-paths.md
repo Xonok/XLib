@@ -69,7 +69,7 @@ The rule reads in `AGENTS.md:66-68`:
 5. `plans/remote-opencode-lxc.md` with `/root/...` → not flagged (path allowlist).
 6. `.agents/machine-info.md` (git-ignored) with `/storage/...` → not flagged (git ls-files returns nothing).
 7. `personal/Xonok/HISTORY.md` with `/storage/...` → not flagged (path allowlist).
-8. Regression: `python3 tools/xlint/xlint.py .` in XLib → 0 violations on tracked files.
+8. Regression: `xlint .` in XLib → 0 violations on tracked files.
 
 ## Optional follow-up (needs human sign-off)
 
