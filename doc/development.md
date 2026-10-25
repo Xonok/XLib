@@ -19,15 +19,16 @@ intent, not about importance.
 | | Track 1 — the spec pipeline | Track 2 — the ticket is the spec |
 |---|---|---|
 | For | feature work, anything intent-heavy | everything else; **the default** |
-| The spec | its own file, written by the human | the ticket description |
+| The spec | its own file, derived from the human's draft | the ticket description |
 | Shape | goal → requirements → decisions, as below | same three parts, in the description |
 | Tests | derived by the reviewer before code exists | written by the implementing agent, if the ticket calls for them |
 | Review | pass 2, by the reviewer | the pull request |
 
-**The boundary rule:** if the human would write the spec himself, it is track 1.
-If the goal, scope and acceptance fit in a ticket description, it is track 2.
+**The boundary rule:** if the human would write the intent down himself, it is
+track 1. If the goal, scope and acceptance fit in a ticket description, it is
+track 2.
 
-Track 2 is the default because track 1 costs a human-authored document and a
+Track 2 is the default because track 1 costs a human-confirmed draft and a
 second agent per ticket, and that is not worth paying for a fix whose whole
 scope fits in a paragraph. What track 2 gives up is the forcing function — the
 human thinking a design through by writing it down — so the human still
@@ -38,6 +39,33 @@ Neither track is exempt from the rules below. The conflict rule, the silence
 rule and the style/architecture rules apply to both; track 2 changes where the
 spec lives, not what an agent may decide alone.
 
+## Draft and spec
+
+Work that needs a spec starts from a **draft**, and the spec is derived from it.
+The draft is the human's intent; the spec is the encoding.
+
+- **`DRAFT.md`** — a working document, not the spec. Everything under *Intent*
+	is the human's: the agent carries their wording from the request and from
+	earlier documents, marks what is carried but unconfirmed, and edits only
+	structure. Everything under *Open questions* is the agent's; none of it is
+	decided. A settled question stays in the draft with its answer and what it
+	supersedes, so the disagreement remains visible.
+- **`SPEC.md`** — AI-written unless the human writes it. Numbered requirements,
+	each citing the draft section it comes from. Where the draft contradicts
+	itself or an earlier answer, the spec follows the later answer and lists the
+	superseded text.
+- **Order** — draft → human confirms → spec → tests → implementation. Code
+	follows the approved spec, not the draft.
+- **Where** — next to the library or tool: `dev/<library>/DRAFT.md` or
+	`tools/<tool>/DRAFT.md`, beside its `SPEC.md`.
+- **Track 2** — when the ticket description already carries the whole intent and
+	no discussion is needed, the ticket is the draft and no `DRAFT.md` is
+	written. The split is for work whose intent has to be settled before it can
+	be specified; it is not a reason to write two documents for a one-line fix.
+
+The pattern comes from `tools/pybundle/DRAFT.md` → `tools/pybundle/SPEC.md`;
+`dev/xcsv/DRAFT.md` is the first library use.
+
 ## The board
 
 Both tracks are tracked on the epiq board, one ticket per independent piece of
@@ -46,50 +74,53 @@ the lanes and the commit rules. A track-1 piece is usually several tickets,
 one per stage, because a stage that takes days and a stage that takes twenty
 minutes are not the same thing to review.
 
-A track-1 spec may be written by hand as before; an agent moves and tags the
-ticket as the stage progresses. The agent does not write it.
+A track-1 draft and spec may be written by hand as before; an agent moves and
+tags the ticket as the stage progresses. When the agent derives them, the human
+confirms the draft and approves the spec.
 
 ## Pipeline
 
-Six stages, each entered on the human's call (agents never advance on their own):
+Seven stages, each entered on the human's call (agents never advance on their own):
 
 | # | Stage | Who | Input | Output |
 |---|-------|-----|-------|--------|
-| 1 | Plan | planner (+ human) | intent | plan: reference for the spec |
-| 2 | Spec | human, from the plan | plan + intent | spec: goal + requirements + decisions |
-| 3 | Tests | reviewer, pass 1 | spec | tests built from the spec; spec flaws reported |
-| — | Spec fixes | human | reviewer's flaw list | spec v+n; iterate 3 → 2 until tests build clean |
-| 4 | Implementation | programmer | spec + tests | implementation |
-| 5 | Implementation review | reviewer, pass 2 | implementation + spec + tests | verdict — required before release/merge |
+| 1 | Plan | planner (+ human) | intent | plan: reference for the draft |
+| 2 | Draft | agent, from the plan and the request; human confirms | plan + intent | draft: the human's intent, open questions |
+| 3 | Spec | agent, from the confirmed draft | draft | spec: goal + requirements + decisions |
+| 4 | Tests | reviewer, pass 1 | spec | tests built from the spec; spec flaws reported |
+| — | Spec fixes | human | reviewer's flaw list | spec v+n; iterate 4 → 3 until tests build clean |
+| 5 | Implementation | programmer | spec + tests | implementation |
+| 6 | Implementation review | reviewer, pass 2 | implementation + spec + tests | verdict — required before release/merge |
 
 ## Plan
 
-Written by the planner with the human, **before** the spec. Its purpose is to
-organize intent into a reference the human can use while writing the spec:
-goal, options considered, open questions. The planner does **not** write the
-spec.
+Written by the planner with the human, **before** the draft. Its purpose is to
+organize intent into a reference the human can use while writing or confirming
+the draft: goal, options considered, open questions. The planner does **not**
+write the draft or the spec.
 
 ## Spec
 
-**Written by the human** — writing it forces the thinking through, and keeps the
-spec a documentation of the human's intent rather than an AI interpretation of
-it. Single source of truth for intent and the conflict authority. Structure:
+**Derived from the confirmed draft**, unless the human writes it by hand. The
+draft is where the thinking is forced through; the spec is its encoding, and
+the encoding is the conflict authority once approved. Structure:
 
 1. **Goal** — one prose paragraph: why this exists.
 2. **Requirements** — the technical encoding: behaviors, formulas, interfaces,
-	constraints. What tests trace to.
+	constraints. What tests trace to. Each cites the draft section it comes from.
 3. **Decisions** — numbered: choice, why, what was rejected. The choices on the
 	way to the goal.
 
 The spec is iterated: the reviewer's pass 1 surfaces flaws, the human fixes the
-spec, and the loop repeats until tests derive cleanly. The finished spec must
-let a fresh implementer do a good job from files alone, without further
-guidance.
+draft or the spec, and the loop repeats until tests derive cleanly. The finished
+spec must let a fresh implementer do a good job from files alone, without
+further guidance.
 
 ### Spec authorship — who may rewrite a spec
 
-**Specs are owned by the human.** The consequence is that an agent must be able
-to tell, from the file alone, whether it is allowed to rewrite one. So:
+**The human owns the intent and approves the spec; authorship is what the
+marker states.** The consequence is that an agent must be able to tell, from
+the file alone, whether it is allowed to rewrite one. So:
 
 - **An AI-written spec must say so, at the top, in this exact form:**
 
@@ -110,6 +141,9 @@ to tell, from the file alone, whether it is allowed to rewrite one. So:
 	records the human's choices.
 - **A human-written spec may not be edited by an AI at all** without the human
 	asking for that specific edit. Not "while I'm here", not "it's only a typo".
+- **A `DRAFT.md` is not a spec and carries no marker.** It is a working
+	document; the human's intent in it is not a licence to rewrite the human's
+	words beyond the structural edits described above.
 
 As of 2026-09-27 all eight specs in this repo are AI-written and labelled, and
 the human has **no** spec committed here. Do not read git authorship as evidence:
@@ -209,9 +243,10 @@ tests still pass, and the implementation matches what the tests specify.
 
 ## Rules
 
-- **Conflict rule**: a test that disagrees with the spec is wrong — the spec is
-	intent (the human's), the test is its encoding. Back to the reviewer. The
-	programmer never silently changes a test to fit code; it flags the conflict.
+- **Conflict rule**: a test that disagrees with the spec is wrong — the spec
+	encodes the human's intent (through the draft), the test encodes the spec.
+	Back to the reviewer. The programmer never silently changes a test to fit
+	code; it flags the conflict.
 - **Silence rule**: where tests are silent, the spec decides. Where the spec is
 	also silent, that is a flaw — back to the human, not invented by the
 	implementer.
@@ -254,7 +289,7 @@ being moved.
 
 The programmer works from these inputs, and no others:
 
-1. spec (iterated until it survived test derivation)
+1. spec (derived from the confirmed draft, iterated until it survived test derivation)
 2. tests (edges explicit)
 3. the project guidelines in `doc/style/` — always `architecture.md` and
 	`common.md`, plus the language-specific file for the language in hand
