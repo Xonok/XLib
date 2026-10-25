@@ -90,6 +90,15 @@ own file still reads as private in the bundle:
 	_foo -> _helper__foo
 	__foo -> _helper____foo
 
+**A prefix that begins with an underscore already carries the private marker, so
+the name's own underscores stay behind it.** A module in a folder named `_` has a
+prefix that starts with `_` — `_/types.py` contributes `_types__` — so `_foo`
+becomes `_types___foo`, not `__types__foo`. The double-leading form is not
+cosmetic: python reads it as class-private inside a class body and mangles it to
+`_Class__types__foo`, and the bundle raises `NameError` at the first call. The
+case is pinned by a bundle that runs (`test_acceptance.py`), because a text-level
+assertion cannot see the difference between the two forms.
+
 **The root file's own global names are not translated.** This exception is
 specific to the root file, not to files in the root folder: `helper.py` and
 `client.py` are translated even though they sit beside the root. Names the root

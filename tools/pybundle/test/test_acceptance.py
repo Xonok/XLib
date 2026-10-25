@@ -152,5 +152,16 @@ def test_a_name_in_a_default_following_multiplication_is_translated():
 	})
 	xtest.contains("def helper__compute(limit = 100 * helper__SCALE)", bundle)
 
+def test_a_method_calling_a_private_function_in_an_underscore_folder_runs():
+	# A `_/` module's prefix begins with an underscore, so moving a private name's
+	# own underscore in front of it yields `__types__seven` — which python reads
+	# as class-private inside `class Thing` and mangles, raising NameError at the
+	# first call. The bundle must run, not merely parse.
+	xtest.equal(_run({
+		"main.py": "from _ import types\n\ndef run():\n\treturn types.Thing().value()\n",
+		"_/__init__.py": "",
+		"_/types.py": "def _seven():\n\treturn 7\n\nclass Thing:\n\tdef value(self):\n\t\treturn _seven()\n",
+	}), 7)
+
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
