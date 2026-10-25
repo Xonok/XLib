@@ -22,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `b7e9f3c` (2026-10-25), **snapshot taken 2026-10-25**, **in
+Basis: `master` at `65c40c9` (2026-10-25), **snapshot taken 2026-10-25**, **in
 sync with `origin/master`** — **the repository no longer states the human's
 identity: the one history entry that quoted the reviewer's real name, the
 private workspace slug and the private repo names was redacted in place (PR
@@ -33,8 +33,9 @@ does not need to the section that has more to show (PR #82).**
 **The four panel tools share the terminal contract and the panel-size sweep
 now (PR #88, `D3G54BV`): taskview, skynet and marduk own the alternate screen
 with the cursor hidden, xlint keeps the normal screen so its scrollback holds
-the current error list only (PR #89 erases the previous report on each
-redraw), all four read inotify through ctypes, and each fits the pane
+the current error list only (PR #91 clears the screen before the saved lines,
+so neither a rerun nor a redraw leaves the previous report behind), all four
+read inotify through ctypes, and each fits the pane
 it is given — taskview cuts lines to width, skynet drops columns, marduk caps
 its body with `… +N more`, and xlint follows the end while holding a
 scrolled-up position.**

@@ -10,6 +10,24 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#219 — herdr: the four panel tools rerun after a server restart**
+	(by decision needed, medium) — **herdr 0.9.1 is installed and cannot replay a
+	pane's command; 0.9.2 added a self-reported resume command and 0.9.5 is the
+	latest**, so the upgrade comes first. The recommended shape is one
+	`tools/herdr_panel.py` wrapper: it reports
+	`python3 <wrapper> <name> <command...>` through `pane report-agent` and then
+	execs the command; it does nothing outside herdr or inside tmux. **Verified
+	end-to-end on 0.9.5 in an isolated named session** — the report lands as
+	`agent_resume` in `session.json`, a stop/start reruns the panel after a
+	client attaches, and herdr clears the entry about 3 s after the panel
+	exits. The alternatives and side effects are in the notes.
+- [x] **#220 — xlint: the previous report survives a Ctrl-C and rerun in tmux**
+	(done 2026-10-25, medium) — board: epiq `D3G54BV` (Done), merged as PR #91,
+	master `65c40c9`. **`ESC[H ESC[2J ESC[3J]`** instead of `3J` first. The same
+	order bug also left a screenful after every in-process redraw, not just a
+	rerun; measured 33 → 24 lines (short) and history 42 → 19 (tall). The watch
+	test now pins the order and checks that Ctrl-C restores the cursor. Full
+	suite 15/15.
 - [ ] **#196 — personal details: a rule and a check so an identifier cannot
 	reach a tracked file or the board** (by decision needed, high) — board: epiq
 	`EFJ4ZC6` (Todo). **The human's ruling, 2026-10-22:** *"Personal details
