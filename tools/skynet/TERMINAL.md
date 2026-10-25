@@ -20,6 +20,10 @@ numbers still add up.
 	becomes `Today` / `Window` when the full one no longer fits. Every line is
 	at most the pane width.
 
+- **No typed input reaches the screen.** Watch mode disables terminal echo so
+	text typed while the watch runs does not appear; control signals such as
+	Ctrl-C still work. One-shot runs leave the terminal alone.
+
 Enforced by `test/test_render.py` (height and width sweeps),
 `test/test_terminal.py` (cursor, alternate screen, inotify) and
 `test/test_render_table.py`.

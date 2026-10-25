@@ -19,5 +19,9 @@ the panel still updates.
 	layout; long workspace names, roles and details are cut to the pane width
 	rather than wrapped.
 
+- **No typed input reaches the screen.** Watch mode disables terminal echo so
+	text typed while the watch runs does not appear; control signals such as
+	Ctrl-C still work. `--once` leaves the terminal alone.
+
 Enforced by `test/test_terminal.py` (cursor, alternate screen, inotify) and
 `test/test_panel.py` (height cap, overflow note, compact switch, width sweep).

@@ -32,6 +32,10 @@ report still prints.
 
 One-shot runs print directly: no clearing, no cursor sequences, no `ESC[3J`.
 
+- **No typed input reaches the screen.** Watch mode disables terminal echo so
+	text typed while the watch runs does not appear; control signals such as
+	Ctrl-C still work. One-shot runs leave the terminal alone.
+
 Enforced by `test/test_watch.py` (process-level cursor, no alternate screen,
 `ESC[H ESC[2J ESC[3J]` in that order, rule reload) and
 `test/test_watch_notices.py` (the failure, its errno, the knobs, and the

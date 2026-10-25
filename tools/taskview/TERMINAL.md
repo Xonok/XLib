@@ -19,5 +19,9 @@ display still renders.
 	narrow pane must not wrap a line into a second row. The QUEUE summary was
 	the case that used to wrap.
 
+- **No typed input reaches the screen.** Watch mode disables terminal echo so
+	text typed while the watch runs does not appear; control signals such as
+	Ctrl-C still work. One-shot runs leave the terminal alone.
+
 Enforced by `test/test_terminal.py` (cursor, alternate screen, inotify) and
 `test/test_taskview.py` (the height and width sweeps).

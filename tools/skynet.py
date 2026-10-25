@@ -11,7 +11,7 @@ goes to the section that has more to show.
 
 Terminal contract: TERMINAL.md.
 """
-import argparse,contextlib,ctypes,datetime,os,select,signal,shutil,sqlite3,struct,sys,time
+import argparse,contextlib,ctypes,datetime,os,select,signal,shutil,sqlite3,struct,sys,termios,time
 from collections import defaultdict
 from pathlib import Path
 
@@ -52,11 +52,28 @@ _MINIMUM_HEIGHT = 6
 @contextlib.contextmanager
 def _fullscreen():
 	"""Watch mode owns the pane: no cursor, and no scrollback of old frames."""
+	_stdin_fd = None
+	_old_attrs = None
+	if sys.stdin.isatty():
+		try:
+			_stdin_fd = sys.stdin.fileno()
+			_old_attrs = termios.tcgetattr(_stdin_fd)
+			_new_attrs = termios.tcgetattr(_stdin_fd)
+			_new_attrs[3] &= ~(termios.ECHO | getattr(termios, "ECHOCTL", 0))
+			termios.tcsetattr(_stdin_fd, termios.TCSANOW, _new_attrs)
+		except (termios.error, OSError, AttributeError):
+			_stdin_fd = None
+			_old_attrs = None
 	sys.stdout.write(_ENTER_WATCH)
 	sys.stdout.flush()
 	try:
 		yield
 	finally:
+		if _old_attrs is not None and _stdin_fd is not None:
+			try:
+				termios.tcsetattr(_stdin_fd, termios.TCSANOW, _old_attrs)
+			except (termios.error, OSError):
+				pass
 		sys.stdout.write(_LEAVE_WATCH)
 		sys.stdout.flush()
 
