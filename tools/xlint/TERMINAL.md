@@ -24,8 +24,15 @@ report still prints.
 - **inotify first, polling only when it is unavailable.** File changes are read
 	from inotify through `ctypes`. Polling is the fallback for a kernel that has
 	no inotify, not a parallel refresh path.
+- **A degraded watch says so in the report.** When `inotify_init` or
+	`inotify_add_watch` fails, the report carries the syscall, the errno and the
+	sysctl knobs that fix it — for as long as the degradation lasts, because a
+	notice printed once would be erased by the next redraw, which clears the
+	saved lines. A directory that could not be watched is named.
 
 One-shot runs print directly: no clearing, no cursor sequences, no `ESC[3J`.
 
 Enforced by `test/test_watch.py` (process-level cursor, no alternate screen,
-`ESC[H ESC[2J ESC[3J]` in that order, rule reload).
+`ESC[H ESC[2J ESC[3J]` in that order, rule reload) and
+`test/test_watch_notices.py` (the failure, its errno, the knobs, and the
+notice in the report).

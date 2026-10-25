@@ -4,7 +4,7 @@ Watch mode's terminal contract — cursor, scrollback, scroll position, inotify
 and fitting — is recorded in TERMINAL.md.
 """
 
-import argparse,ast,contextlib,ctypes,io,os,re,select,signal,struct,sys,time,tokenize,subprocess
+import argparse,ast,contextlib,ctypes,errno,io,os,re,select,signal,struct,sys,time,tokenize,subprocess
 from pathlib import Path
 
 try:
@@ -48,6 +48,22 @@ except AttributeError:
 _BUILTIN_EXCLUDED = {"__pycache__", ".git", "node_modules", "xlib_legacy"}
 _IGNORE_FILE = ".xlintignore"
 _POLL_SECONDS = 0.2
+_INOTIFY_ADVICE = [
+	"  check: cat /proc/sys/fs/inotify/max_user_instances /proc/sys/fs/inotify/max_user_watches",
+	"  raise: sudo sysctl -w fs.inotify.max_user_instances=1024",
+	"         sudo sysctl -w fs.inotify.max_user_watches=524288",
+	"         persist in /etc/sysctl.d/60-inotify.conf",
+]
+
+def _inotify_failure(syscall, code, path = None):
+	"""The report line for an inotify call the kernel refused.
+
+	`code` is an errno number: the name and the message are both carried, because
+	`EMFILE` says what to search for and `Too many open files` says what happened.
+	"""
+	where = f" for {path}" if path is not None else ""
+	name = errno.errorcode.get(code, str(code))
+	return f"warning: {syscall} failed{where}: {name} ({os.strerror(code)})"
 
 class _Exclusions:
 	"""What xlint skips, from its own defaults plus a per-repo `.xlintignore`.
@@ -1281,7 +1297,20 @@ class _InotifyWatcher:
 		self.rules = rules
 		self.fd = None
 		self.wd_to_dir = {}
+		self.failed = []
 		self.rebuild()
+
+	def notices(self):
+		"""What the report says about the calls the kernel refused.
+
+		The notices stay for as long as the degradation does, because a message
+		printed once is erased by the next redraw — watch mode clears the screen
+		and the saved lines together.
+		"""
+		if not self.failed:
+			return []
+		return ([_inotify_failure(*failure) + " — not watched" for failure in self.failed]
+			+ _INOTIFY_ADVICE)
 
 	def rebuild(self):
 		"""Watch the directories the rules allow now, and nothing else.
@@ -1296,6 +1325,7 @@ class _InotifyWatcher:
 		if self.fd == -1:
 			raise OSError(ctypes.get_errno(), "inotify_init failed")
 		self.wd_to_dir = {}
+		self.failed = []
 		for path in self.rules.watch_dirs():
 			self.add_dir(path)
 
@@ -1310,8 +1340,10 @@ class _InotifyWatcher:
 
 	def add_dir(self, path):
 		wd = _libc.inotify_add_watch(self.fd, os.fsencode(path), _WATCH_MASK)
-		if wd != -1:
-			self.wd_to_dir[wd] = path
+		if wd == -1:
+			self.failed.append(("inotify_add_watch", ctypes.get_errno(), path))
+			return
+		self.wd_to_dir[wd] = path
 
 	def forget(self, path):
 		"""Stop tracking a directory the kernel has already dropped."""
@@ -1382,9 +1414,14 @@ class _PollWatcher:
 	backends notice the same change at the same moment.
 	"""
 
-	def __init__(self, rules):
+	def __init__(self, rules, notices = ()):
 		self.rules = rules
 		self.stamps = {path: stamp(path) for path in rules.files()}
+		self._notices = list(notices)
+
+	def notices(self):
+		"""The report lines for the inotify failure that made polling the backend."""
+		return list(self._notices)
 
 	def collect(self):
 		"""The changes since the last call, as (action, path) pairs."""
@@ -1407,8 +1444,10 @@ def make_watcher(rules):
 	if _libc is not None:
 		try:
 			return _InotifyWatcher(rules)
-		except OSError:
-			pass
+		except OSError as error:
+			return _PollWatcher(rules,
+				[_inotify_failure("inotify_init", error.errno) + " — polling instead"]
+				+ _INOTIFY_ADVICE)
 	return _PollWatcher(rules)
 
 @contextlib.contextmanager
@@ -1428,9 +1467,11 @@ def _watch_cursor():
 		sys.stdout.write(_LEAVE_WATCH)
 		sys.stdout.flush()
 
-def draw(snapshot, skipped=()):
+def draw(snapshot, skipped=(), notices=()):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
+	for notice in notices:
+		print(notice)
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked", flush=True)
 	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
@@ -1456,7 +1497,8 @@ def watch(rules, args):
 		snapshot = {path: check_file(path, args) for path in rules.files()}
 		skipped = rules.skipped()
 		watcher = make_watcher(rules)
-		draw(snapshot, skipped)
+		notices = watcher.notices()
+		draw(snapshot, skipped, notices)
 		while True:
 			changed = {}
 			reloaded = False
@@ -1471,7 +1513,8 @@ def watch(rules, args):
 			if reloaded:
 				snapshot = {path: check_file(path, args) for path in rules.files()}
 				skipped = rules.skipped()
-				draw(snapshot, skipped)
+				notices = watcher.notices()
+				draw(snapshot, skipped, notices)
 				continue
 			dirty = False
 			for path, action in changed.items():
@@ -1486,8 +1529,14 @@ def watch(rules, args):
 				else:
 					dirty = True
 					snapshot[path] = check_file(path, args)
+			# A directory that could not be watched is a change to the report too:
+			# the notice appears without any file event to carry it there.
+			current_notices = watcher.notices()
+			if current_notices != notices:
+				dirty = True
+				notices = current_notices
 			if dirty:
-				draw(snapshot, skipped)
+				draw(snapshot, skipped, notices)
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
