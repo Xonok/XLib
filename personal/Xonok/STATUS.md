@@ -22,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `65c40c9` (2026-10-25), **snapshot taken 2026-10-25**, **in
+Basis: `master` at `a30b01c` (2026-10-25), **snapshot taken 2026-10-25**, **in
 sync with `origin/master`** — **the repository no longer states the human's
 identity: the one history entry that quoted the reviewer's real name, the
 private workspace slug and the private repo names was redacted in place (PR
@@ -1109,19 +1109,22 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	without it: the choice is made through the epiq MCP, not through a repo tool,
 	so nothing local can intercept it. That is the one rule here left as prose.
 - **The best column alignment in this repo is module-docstring prose, not code.**
-	`dev/xcsv/xcsv.py:24-30` and `xlib/xcsv_1_1_0.py:97-103` line up five
-	exception names with literal `#` characters **inside a `"""` docstring**,
-	where Python sees no comment at all. Found 2026-10-09 while re-measuring the
-	alignment ruling, and it is the cause of two wrong figures I reported earlier
-	this session: the masking handled single-line strings but not docstrings, so
-	those 10 lines were counted as aligned code comments. **CLOSED, and the rule
-	is written down** (epi `HRGFRWX`, closed): **`doc/style/python.md` now has a
-	`## Docstrings` section**, and it says what was missing — module docstrings
-	are prose, function docstrings follow the same principle, **no alignment
-	columns in docstrings**, and docstrings are not exempt from the alignment
-	rule (spaces are never used for alignment, in a docstring either). Same shape
-	as `DDRBHD5`/`BX56XRY`/`13QYCT8`/`KJKEQ01`: a convention in wide use with no
-	text behind it — and all four of those are closed too.
+	`xlib/xcsv_1_1_0.py:97-103` lines up five exception names with literal `#`
+	characters **inside a `"""` docstring**, where Python sees no comment at all.
+	The `dev/xcsv/xcsv.py:24-30` half of the original finding is gone — the
+	2026-10-25 reshape (epi `K1K9J1J`) rewrote that block as prose, and a
+	released file is never edited, so its copy stays. Found 2026-10-09 while
+	re-measuring the alignment ruling, and it is the cause of two wrong figures
+	I reported earlier this session: the masking handled single-line strings but
+	not docstrings, so those 10 lines were counted as aligned code comments.
+	**CLOSED, and the rule is written down** (epi `HRGFRWX`, closed):
+	**`doc/style/python.md` now has a `## Docstrings` section**, and it says what
+	was missing — module docstrings are prose, function docstrings follow the
+	same principle, **no alignment columns in docstrings**, and docstrings are
+	not exempt from the alignment rule (spaces are never used for alignment, in
+	a docstring either). Same shape as `DDRBHD5`/`BX56XRY`/`13QYCT8`/`KJKEQ01`:
+	a convention in wide use with no text behind it — and all four of those are
+	closed too.
 - **Houserule ruled 2026-10-09, second half: alignment counts only at very high
 	comment density, and a comment belongs on the line before what it explains.**
 	Aligned same-line comments count only where **comment density is very high**;
@@ -1242,26 +1245,6 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	are a different set: #104–#110, #122, #123, #127, #133, #137, #138, #140,
 	#141, #143. The store is the record; `TASKS.md` holds this workspace's
 	**28** open items, not two.
-- **The repository's guard over its own test layout is red — eight modelbench
-	test files are unreachable by the one command meant to run them.** Measured
-	2026-10-21: `python3 tools/run_tests.py` gives **12 suites passed, 2 failed**,
-	and the two are `tools/test` and `dev/xhttp/test`. The `dev/xhttp` half is
-	the known `ContentNegotiationTest` six (`BFNRBG7`). **The `tools/test` half
-	is new**, and it is the guard that exists for exactly this failure:
-	`tools/test/test_suites.py:test_every_test_file_is_in_a_suite_or_a_listed_exception`
-	fails with **"test files that no runner reaches"** — all eight in
-	`tools/modelbench/test/` (`test_bench_mapping_hash.py`,
-	`test_compliance_protocols.py`, `test_db_regrade.py`,
-	`test_harness_mapping.py`, `test_ledger_state.py`,
-	`test_provider_error.py`, `test_raw_data.py`, `test_review_vocabulary.py`).
-	`run_tests.py`'s `SUITES` list has no `tools/modelbench/test` entry. **The
-	eight files pass on their own — 77 tests, 0 failed** — so the fix is the one
-	line the guard is asking for. **The cause is the modelbench work of
-	2026-10-20/21** (PRs #62–#67, #70), which added test files without adding
-	the suite. This is the failure class the guard was written for: *"a suite
-	that cannot be run is a suite that does not exist"*, and this one reported
-	success over content it never examined. **Filed as epiq `QPDJ8RF`,
-	taskview `#179`.**
 - **`RX5H4P3` reproduces, and it is a spec-conformance defect rather than a
 	design fork.** The bundler renames a module global to its prefixed name, and
 	a function parameter carrying the same name is a name defined inside the
