@@ -120,6 +120,9 @@ Marduk removes port files **only** on definitive signals:
 
 ## Display Format
 
+The terminal requirements — cursor, alternate screen, inotify, height cap and
+width — are recorded in `TERMINAL.md`.
+
 ### Layout (narrow pane, ~40-50 columns)
 ```
 === Marduk (Live) ===

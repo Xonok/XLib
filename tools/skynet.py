@@ -5,8 +5,11 @@ Reads opencode's message log read-only (no API calls, so this never adds usage)
 and prints per-model stats including messages, tokens, refusals, and finish reasons.
 
 The display fits the room it is given: the caps on the two tables come from the
-terminal's own height, a table that had to leave rows out says how many, and
-the room a section does not need goes to the section that has more to show.
+terminal's own height, the columns and model names come from its width, a table
+that had to leave rows out says how many, and the room a section does not need
+goes to the section that has more to show.
+
+Terminal contract: TERMINAL.md.
 """
 import argparse,contextlib,ctypes,datetime,os,select,signal,shutil,sqlite3,struct,sys,time
 from collections import defaultdict

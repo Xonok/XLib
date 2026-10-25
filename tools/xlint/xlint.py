@@ -1,3 +1,9 @@
+"""xlint — the repository's style checker.
+
+Watch mode's terminal contract — cursor, scrollback, scroll position, inotify
+and fitting — is recorded in TERMINAL.md.
+"""
+
 import argparse,ast,contextlib,ctypes,io,os,re,select,signal,struct,sys,time,tokenize,subprocess
 from pathlib import Path
 

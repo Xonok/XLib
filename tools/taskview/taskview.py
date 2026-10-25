@@ -7,6 +7,7 @@ Pipeline: main → parse_args → resolve_data_dir → resolve_csv → render lo
 → read_csv → resolve_filter → load_filter → select_tasks
 → compute_metrics → build_view → draw
 Watch modes: inotify (primary) → poll (fallback)
+Terminal contract: TERMINAL.md
 """
 
 import argparse,contextlib,csv,ctypes,os,select,signal,struct,sys,time,yaml

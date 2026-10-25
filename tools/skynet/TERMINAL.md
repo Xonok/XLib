@@ -1,0 +1,25 @@
+# skynet — terminal contract
+
+Requirements for the pane. A change that drops one is a regression even if the
+numbers still add up.
+
+- **No blinking cursor.** `--watch` hides the cursor on entry and shows it on
+	every exit path — Ctrl-C, SIGTERM, an exception. One-shot runs leave it
+	alone.
+- **No scrollback beyond the current state.** `--watch` draws in the terminal's
+	alternate screen, so a replaced frame cannot accumulate in scrollback; the
+	normal screen returns on exit. One-shot output is unchanged.
+- **inotify first, polling only when it is unavailable.** Database changes are
+	read from inotify on the database's directory, through `ctypes`. Polling is
+	the fallback for a kernel that has no inotify, not a parallel refresh path.
+- **Fits the height.** The two tables split the rows the pane has; a section
+	that leaves rows out says `… +N more`; below six lines the display falls
+	back to the one-line counts. A full frame never scrolls its header away.
+- **Fits the width.** Model names are truncated and columns are dropped as the
+	pane narrows — `Tot` first, then `In`, `Out`, `Ref`, `Msgs` — and the title
+	becomes `Today` / `Window` when the full one no longer fits. Every line is
+	at most the pane width.
+
+Enforced by `test/test_render.py` (height and width sweeps),
+`test/test_terminal.py` (cursor, alternate screen, inotify) and
+`test/test_render_table.py`.
