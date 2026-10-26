@@ -19,7 +19,7 @@ change.
 The two pace figures are rates, not percentages of the quota used:
 
 - `pace` is the average rate since the paid period started.
-- `today` is the rate since local midnight.
+- `today` is the rate since UTC midnight.
 
 Both are expressed as a percentage of the **sustainable daily rate**, which is
 `limit / period_days`. At 100% the current rate exhausts the quota exactly at
@@ -84,7 +84,7 @@ This is the free-model daily counter, not all requests; `usage_daily` is paid
 dollars and is not shown on the first line (DRAFT Q5 A, Q6 A).
 
 The counter appears to reset at UTC midnight. Use it as the provider reports it;
-do not re-derive a local day (DRAFT Q6 A).
+do not re-derive a day from local request counts (DRAFT Q6 A).
 
 ### Credentials
 
@@ -168,8 +168,11 @@ one response; the DRAFT records it as a known limit.
 
 ## Day baseline
 
-The Go API has no daily history. The day pace needs the meter reading at local
-midnight (DRAFT Q2 A, Q3 A).
+The Go API has no daily history. The day pace needs the meter reading at UTC
+midnight (DRAFT Q2 A, Q3 A). The human ruled UTC midnight on 2026-10-26:
+OpenRouter's free counter and the Go `week` meter reset at 00:00Z, while the
+Go `month` meter resets at `access.endsAt` (16:47:40Z on 2026-11-24), so UTC is
+the consistent day boundary even though it is not the month's reset.
 
 **File:** `~/.local/share/skynet/quota.json` (JSON, version 1):
 
@@ -188,12 +191,12 @@ midnight (DRAFT Q2 A, Q3 A).
 
 **Update rules**, on every successful Go read:
 
-1. `today` is the local date of `now`, formatted `YYYY-MM-DD`.
+1. `today` is the UTC date of `now`, formatted `YYYY-MM-DD`.
 2. If the stored `day` is missing or differs from `today`:
-	- If `last_seen` is within 900 seconds of local midnight (either side),
+	- If `last_seen` is within 900 seconds of UTC midnight (either side),
 		set `day_start_used` to `last_used`.
 	- Otherwise set `day_start_used` to `None`; the panel shows `today ?`
-		until the next midnight.
+		until the next UTC midnight.
 	- Set `day` to `today`.
 3. If `period_start` differs from the stored one, set `day_start_used` to
 	`None` (a new paid period).
@@ -344,7 +347,7 @@ characters.
 - **R3.3** A missing key makes OpenRouter `absent`; a missing
 	`free_model_daily_requests` makes it `unavailable`; HTTP/network/JSON errors
 	make it `unavailable`.
-- **R3.4** Do not re-derive a local day (DRAFT Q6 A).
+- **R3.4** Do not re-derive a day from the local database (DRAFT Q6 A).
 - **R3.5** Do not display `usage_daily` on the first line (DRAFT Q5 A).
 
 ### Pace
@@ -366,8 +369,8 @@ characters.
 - **R5.1** The state path is `~/.local/share/skynet/quota.json` (DRAFT Q3 A);
 	create the directory when missing.
 - **R5.2** A missing or corrupt file is empty state.
-- **R5.3** On the first successful read of a new local day, use `last_used` as
-	`day_start_used` only when `last_seen` is within 900 seconds of local
+- **R5.3** On the first successful read of a new UTC day, use `last_used` as
+	`day_start_used` only when `last_seen` is within 900 seconds of UTC
 	midnight; otherwise `None` (DRAFT Q2 A).
 - **R5.4** A changed `period_start` or a decreasing `used` resets the day
 	baseline.
@@ -425,7 +428,7 @@ characters.
 | # | Decision | Answer |
 |---|----------|--------|
 | Q1 | Auth token handling | A — read-only; `Go ?` on 401; no refresh |
-| Q2 | "Today" baseline | A — persist a midnight baseline; `today ?` without one |
+| Q2 | "Today" baseline | A — persist a UTC-midnight baseline; `today ?` without one |
 | Q3 | State location | A — `~/.local/share/skynet/quota.json` |
 | Q4 | Width fallback | B — abbreviate first, then drop |
 | Q5 | Free usage | A — internal only; no free field |
@@ -453,7 +456,7 @@ characters.
 - The access token expires; read-only means the Go field disappears until
 	opencode refreshes the token.
 - The Go meter has no daily history; a cold start mid-day shows `today ?`
-	until the next midnight.
+	until the next UTC midnight.
 - The Go meter may lag; the overall pace is stable, the day pace is noisier.
 - The Go meter is not Zen list price; quota dollars are the meter's unit.
 - OpenRouter's counter is a UTC-day, free-models-only counter.

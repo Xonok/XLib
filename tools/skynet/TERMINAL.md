@@ -26,9 +26,11 @@ numbers still add up.
 	edge, with the space after the title absorbing the spare columns, so it
 	does not read as part of the title. It never wraps: the labels abbreviate
 	(`G`, `p`, `t`) and then fields drop from the right, so the same numbers
-	stay readable in a narrow pane. A configured source that cannot be read
-	shows `?`; one that is not configured is omitted. The read is synchronous
-	with a three-second timeout and a failure never removes a table.
+	stay readable in a narrow pane. `today` is measured from UTC midnight, the
+	same day boundary as OpenRouter's counter. A configured source that cannot
+	be read shows `?`; one that is not configured is omitted. The read is
+	synchronous with a three-second timeout and a failure never removes a
+	table.
 
 - **No typed input reaches the screen.** Watch mode disables terminal echo so
 	text typed while the watch runs does not appear; control signals such as

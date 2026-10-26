@@ -21,7 +21,7 @@ touched.
 | # | Decision | Recommendation | Your decision |
 |---|----------|----------------|---------------|
 | Q1 | Auth token handling | Read-only. Show `Go ?` when the token is rejected; do not refresh or write credentials. | **A** |
-| Q2 | "Today" baseline | Persist the meter reading at local midnight; show `today ?` when no baseline exists. | **A** |
+| Q2 | "Today" baseline | Persist the meter reading at midnight (UTC, per the 2026-10-26 follow-up); show `today ?` when no baseline exists. | **A** |
 | Q3 | State location | `~/.local/share/skynet/quota.json`. | **A** |
 | Q4 | Width fallback | Drop whole fields right-to-left: `OR`, `today`, `pace`, then shorten the Go field. | **B — abbreviate first, then drop** |
 | Q5 | Free usage | Keep it internal; do not add a free counter to the first line. | **A** |
@@ -206,8 +206,8 @@ today_pace    = ((U - U_day_start) / (T - day_start)) / sustainable * 100
 ```
 
 - `overall_pace` is the average rate since the paid period started.
-- `today_pace` is the rate since local midnight. It needs `U_day_start`, the
-	meter value at local midnight.
+- `today_pace` is the rate since UTC midnight. It needs `U_day_start`, the
+	meter value at UTC midnight.
 - At `100%`, the rate is exactly `sustainable`; the quota reaches `L` at `R`.
 - At `200%`, it reaches `L` at `S + period_days / 2`.
 
@@ -245,7 +245,7 @@ the shape of the number.
 	If skynet runs for a month without opencode refreshing the token, the Go
 	field will disappear until opencode runs again.
 - **The Go meter has no daily history.** "Current day's pace" needs a baseline
-	from local midnight. The API cannot supply it retroactively. A state file
+	from UTC midnight. The API cannot supply it retroactively. A state file
 	written by skynet is the only exact source when the panel has been running;
 	otherwise the day number is unavailable.
 - **The period start is `access.startsAt`.** On the measured account this is
@@ -316,11 +316,11 @@ the shape of the number.
 	 Return `None` when a denominator is zero or negative. Test them with a
 	 fixed clock; no network.
 7. **Day baseline state.** `~/.local/share/skynet/quota.json`, storing the
-	 last meter value and the local date. On the first sample of a new local
-	 day, set `day_start_used` from the previous reading if that reading is
-	 close to midnight; otherwise `None`. Write atomically (write a temp file,
-	 then `os.replace`). Ignore a corrupt file. Handle the meter resetting
-	 downward as a new period.
+	 last meter value and the UTC date. On the first sample of a new UTC day,
+	 set `day_start_used` from the previous reading if that reading is close to
+	 midnight; otherwise `None`. Write atomically (write a temp file, then
+	 `os.replace`). Ignore a corrupt file. Handle the meter resetting downward
+	 as a new period.
 8. **Header renderer.** A `quota_line(quota, width)` function that starts from
 	 `=== Skynet ===`. It tries the full form first, then the abbreviated form
 	 (Q4 B), then drops fields right-to-left. It must never return a line
@@ -382,6 +382,13 @@ The API has no daily history.
 
 **Decision: A.** Persist a midnight baseline; `today ?` without one. Decided
 2026-10-26.
+
+**Follow-up 2026-10-26:** the boundary is **UTC midnight**, not local — the
+human's ruling, since OpenRouter's counter and the Go `week` meter reset at
+00:00Z. It supersedes "local midnight" in the options above. The Go `month`
+meter resets at `access.endsAt` (16:47:40Z on 2026-11-24), so the month itself
+is not a UTC-day reset; UTC is the common day boundary for the line, not the
+month's reset.
 
 ### Q3 — State location
 

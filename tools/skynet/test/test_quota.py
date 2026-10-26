@@ -15,19 +15,19 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 import xtest
 import skynet
 
-LOCAL = datetime.datetime.now().astimezone().tzinfo
-NOW = datetime.datetime(2026, 10, 26, 12, 0, tzinfo=LOCAL)
+UTC = datetime.timezone.utc
+NOW = datetime.datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 GO_URL = "https://opencode.ai/console/api/go/status"
 OR_URL = "https://openrouter.ai/api/v1/key"
-PERIOD_START = datetime.datetime(2026, 10, 1, tzinfo=LOCAL).isoformat()
-PERIOD_END = datetime.datetime(2026, 10, 31, tzinfo=LOCAL).isoformat()
+PERIOD_START = datetime.datetime(2026, 10, 1, tzinfo=UTC).isoformat()
+PERIOD_END = datetime.datetime(2026, 10, 31, tzinfo=UTC).isoformat()
 LIMIT = 6_000_000_000
 ACCESS = "secret-access-token"
 OR_KEY = "secret-openrouter-key"
 
-def _local(year, month, day, hour=0, minute=0):
-	"""A time in the machine's local zone, so day boundaries are deterministic."""
-	return datetime.datetime(year, month, day, hour, minute, tzinfo=LOCAL)
+def _utc(year, month, day, hour=0, minute=0):
+	"""A time on the UTC day boundary the quota line measures against."""
+	return datetime.datetime(year, month, day, hour, minute, tzinfo=UTC)
 
 def _db(folder, rows):
 	"""A temporary credential database; each row is (integration_id, value, active, time_updated)."""
@@ -247,42 +247,48 @@ def test_an_openrouter_http_failure_is_unavailable():
 
 def test_the_sustainable_rate_is_one_hundred_percent():
 	go = _ok_go(used=3_000_000_000)
-	pace = skynet.compute_pace(go, None, _local(2026, 10, 16))
+	pace = skynet.compute_pace(go, None, _utc(2026, 10, 16))
 	xtest.equal(round(pace["overall"]), 100, "half the period and half the quota is sustainable")
 
 def test_twice_the_sustainable_rate_is_two_hundred_percent():
 	go = _ok_go(used=6_000_000_000)
-	pace = skynet.compute_pace(go, None, _local(2026, 10, 16))
+	pace = skynet.compute_pace(go, None, _utc(2026, 10, 16))
 	xtest.equal(round(pace["overall"]), 200, "twice the rate exhausts the quota halfway")
 
 def test_the_used_percentage_is_reported():
 	go = _ok_go(used=1_500_000_000)
-	pace = skynet.compute_pace(go, None, _local(2026, 10, 16))
+	pace = skynet.compute_pace(go, None, _utc(2026, 10, 16))
 	xtest.equal(round(pace["used_percent"]), 25, "a quarter of the limit is 25%")
 
 def test_the_today_pace_uses_the_midnight_baseline():
 	go = _ok_go(used=3_000_000_000)
-	pace = skynet.compute_pace(go, 2_900_000_000, _local(2026, 10, 26, 12))
+	pace = skynet.compute_pace(go, 2_900_000_000, _utc(2026, 10, 26, 12))
 	xtest.equal(round(pace["today"]), 100, "half a day at half the day's allowance is sustainable")
+
+def test_the_today_pace_uses_utc_midnight():
+	tz = datetime.timezone(datetime.timedelta(hours=2))
+	now = datetime.datetime(2026, 10, 26, 14, 0, tzinfo=tz)
+	pace = skynet.compute_pace(_ok_go(used=3_000_000_000), 2_900_000_000, now)
+	xtest.equal(round(pace["today"]), 100, "the day is measured from 00:00Z, not local midnight")
 
 def test_today_is_unknown_without_a_baseline():
 	go = _ok_go()
-	pace = skynet.compute_pace(go, None, _local(2026, 10, 26, 12))
+	pace = skynet.compute_pace(go, None, _utc(2026, 10, 26, 12))
 	xtest.equal(pace["today"], None, "no midnight reading means no day pace")
 
 def test_today_is_unknown_when_the_meter_fell():
 	go = _ok_go(used=100_000_000)
-	pace = skynet.compute_pace(go, 200_000_000, _local(2026, 10, 26, 12))
+	pace = skynet.compute_pace(go, 200_000_000, _utc(2026, 10, 26, 12))
 	xtest.equal(pace["today"], None, "a meter that fell cannot give a rate")
 
 def test_pace_is_unknown_before_the_period_starts():
 	go = _ok_go()
-	pace = skynet.compute_pace(go, None, _local(2026, 9, 30))
+	pace = skynet.compute_pace(go, None, _utc(2026, 9, 30))
 	xtest.equal(pace["overall"], None, "elapsed time is not positive")
 
 def test_pace_is_unknown_with_a_zero_limit():
 	go = _ok_go(limit=0)
-	pace = skynet.compute_pace(go, None, _local(2026, 10, 16))
+	pace = skynet.compute_pace(go, None, _utc(2026, 10, 16))
 	xtest.equal(pace["overall"], None, "a zero limit has no sustainable rate")
 	xtest.equal(pace["used_percent"], None, "a zero limit has no percentage")
 
@@ -311,68 +317,77 @@ def _load(path):
 def test_a_first_read_has_no_baseline_and_records_the_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _local(2026, 10, 26, 10))
+		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
 		state = _load(path)["go"]
 	xtest.equal(baseline, None, "a cold start has no midnight reading")
 	xtest.equal(state["last_used"], 123_000_000, "the meter is recorded for tomorrow's rollover")
 	xtest.equal(state["day"], "2026-10-26", "the local day is recorded")
 
+def test_the_state_day_is_the_utc_date():
+	tz = datetime.timezone(datetime.timedelta(hours=2))
+	with tempfile.TemporaryDirectory() as folder:
+		path = Path(folder) / "quota.json"
+		now = datetime.datetime(2026, 10, 26, 0, 30, tzinfo=tz)
+		skynet.update_day_state(path, _ok_go(used=123_000_000), now)
+		state = _load(path)["go"]
+	xtest.equal(state["day"], "2026-10-25", "the state day is the UTC date, not the local one")
+
 def test_the_baseline_is_kept_within_the_same_day():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_local(2026, 10, 26, 1).timestamp())))
-		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _local(2026, 10, 26, 10))
+		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_utc(2026, 10, 26, 1).timestamp())))
+		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, 111, "an existing baseline is not replaced")
 
 def test_a_rollover_near_midnight_uses_the_last_reading():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		midnight = _local(2026, 10, 26)
+		midnight = _utc(2026, 10, 26)
 		_save(path, _state("2026-10-25", last_used=500, last_seen=int(midnight.timestamp()) - 60))
-		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _local(2026, 10, 26, 0, 5))
+		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 0, 5))
 	xtest.equal(baseline, 500, "a reading within 15 minutes of midnight is the baseline")
 
 def test_a_rollover_far_from_midnight_has_no_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		midnight = _local(2026, 10, 26)
+		midnight = _utc(2026, 10, 26)
 		_save(path, _state("2026-10-25", last_used=500, last_seen=int(midnight.timestamp()) - 3600))
-		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _local(2026, 10, 26, 10))
+		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "a stale reading cannot stand in for midnight")
 
 def test_a_changed_period_resets_the_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_local(2026, 10, 26, 1).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
-		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _local(2026, 10, 26, 10))
+		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_utc(2026, 10, 26, 1).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
+		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "a new paid period starts a new baseline")
 
 def test_a_decreasing_meter_resets_the_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		_save(path, _state("2026-10-26", day_start_used=111, last_used=500_000_000, last_seen=int(_local(2026, 10, 26, 1).timestamp())))
-		baseline = skynet.update_day_state(path, _ok_go(used=100_000_000), _local(2026, 10, 26, 10))
+		_save(path, _state("2026-10-26", day_start_used=111, last_used=500_000_000, last_seen=int(_utc(2026, 10, 26, 1).timestamp())))
+		baseline = skynet.update_day_state(path, _ok_go(used=100_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "a meter that went down reset underneath us")
 
 def test_a_corrupt_state_file_is_empty_state():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		path.write_text("{not json", encoding="utf-8")
-		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _local(2026, 10, 26, 10))
+		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "a corrupt file behaves like no file")
 
 def test_a_state_with_wrong_types_is_treated_as_empty():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		_save(path, {"version": 1, "go": {"day": 123, "day_start_used": "x", "last_used": "y", "last_seen": [], "period_start": 42}})
-		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _local(2026, 10, 26, 10))
+		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "a value of the wrong type cannot become a baseline")
 
 def test_a_write_failure_leaves_today_unknown():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		path.mkdir()
-		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _local(2026, 10, 26, 10))
+		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, None, "an unwritable state file must not break the tables")
 
 # --- display ---------------------------------------------------------------
