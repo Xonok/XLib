@@ -116,9 +116,19 @@ HTTP is the default; the harness path exists only for models that are reachable 
 	rate limit and is not one. `transport.py` sends its own User-Agent.
 - **403 at that gateway is ambiguous** — "wrong caller" *and* "rate limited". Only the body
 	distinguishes them, so the code reads it.
-- **Reasoning models need `--max-tokens` ≳ 12288** in an agent loop. Below that they return
-	*empty* content with `finish_reason: length` or `stop`, which is a budget problem wearing
-	a model's clothes.
+- **A reasoning model needs the larger per-call budget** — ≳ 12288 tokens in an agent loop.
+	Below that it returns *empty* content with `finish_reason: length` or `stop`, a budget
+	problem wearing a model's clothes. The budget now comes from the registry's
+	`reasoning = true` (`episodes_run.budget_for`), not from a list of model names in each
+	wave script; `--max-tokens` still overrides.
+- **A 429 is a quota refusal, and the body names which quota.** Google's free tier is per
+	model per project and per minute: 15 requests a minute for the flash-lite family,
+	16,000 input tokens a minute for gemma-4-26b (measured 2026-10-22). The metric,
+	`quotaId`, `quotaValue` and `RetryInfo.retryDelay` live in `details[]`, past the point
+	a 200-character cut reaches, so the whole body is kept on the error and the retry waits
+	the delay the provider names. The transport also paces to `rpm`/`tpm` from the registry
+	before each call. Retrying on our own clock inside the same minute is what turned a
+	two-second refusal into a lost cell (E31).
 - **Dotted names in `models.toml` must be quoted** — `[qwen3.8-27b]` is a nested TOML table,
 	not a name, and two models silently vanished from the registry that way. Dotted table
 	headers are quoted and `transport.validate_registry()` runs before every run.
@@ -148,7 +158,7 @@ HTTP is the default; the harness path exists only for models that are reachable 
 | Path | What it is |
 |---|---|
 | `METHOD.md` | the measurement discipline: freeze rules, storage rules, what counts as a hole in a run |
-| `models.toml` | short name → provider ID, transport. **The `gating` column is unreliable — `--probe` false-negatives harness-transport models, so it reports a model dead on a day a real episode graded it `autonomy` 6/6. A negative probe is not evidence of unavailability; only a real episode is. Treat it as a hint.** |
+| `models.toml` | short name → provider ID, transport, the measured per-minute quota (`rpm`/`tpm`), and the `reasoning` flag. **The `gating` column is unreliable — `--probe` false-negatives harness-transport models, so it reports a model dead on a day a real episode graded it `autonomy` 6/6. A negative probe is not evidence of unavailability; only a real episode is. Treat it as a hint.** |
 | `transport.py` | both call paths; `--probe` re-verifies gating, `harness_stream()` exposes the event stream |
 | `agent.py` | the four-tool loop, both action protocols, and the harness-transport episode runner |
 | `episodes_run.py` | sandbox setup, repeats, trace output |
