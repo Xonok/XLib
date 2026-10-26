@@ -21,7 +21,6 @@ STATE_PATH = os.path.expanduser("~/.local/share/skynet/quota.json")
 USER_AGENT = "skynet/1.0"
 HTTP_TIMEOUT = 3
 QUOTA_REFRESH_SECONDS = 60
-DAY_BASELINE_WINDOW = 900
 MICROCENTS_PER_DOLLAR = 100_000_000
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 SHOW_EXTRA = False
@@ -232,6 +231,14 @@ def _parse_time(text):
 		raise ValueError("time has no timezone")
 	return parsed
 
+def _nearest_utc_midnight(value):
+	"""The UTC midnight closest to `value`; a tie goes to the next one."""
+	utc = value.astimezone(datetime.timezone.utc)
+	midnight = utc.replace(hour=0, minute=0, second=0, microsecond=0)
+	if (utc - midnight).total_seconds() >= 43200:
+		midnight += datetime.timedelta(days=1)
+	return midnight
+
 def go_quota(credential, now, fetch):
 	"""The Go month meter, or the reason it cannot be shown.
 
@@ -258,7 +265,7 @@ def go_quota(credential, now, fetch):
 		return {"state": "absent"}
 	try:
 		start = _parse_time(access["startsAt"])
-		end = _parse_time(access["endsAt"])
+		end = _nearest_utc_midnight(_parse_time(access["endsAt"]))
 		meter = access["meters"]["month"]
 		limit = int(meter["limitMicroCents"])
 		used = int(meter["usedMicroCents"])
@@ -349,32 +356,27 @@ def _write_day_state(state_path, go_state):
 	os.replace(temporary, path)
 
 def update_day_state(state_path, go, now):
-	"""The midnight meter reading to measure today against, and persist it.
+	"""The reading today is measured against, persisted for the next run.
 
-	The provider has no daily history, so today's baseline is the reading
-	taken near UTC midnight: a rollover reuses the last reading only when
-	`last_seen` is within `DAY_BASELINE_WINDOW` seconds of midnight. A new
-	paid period, a meter that fell, or a write failure all leave the baseline
-	unknown (`today ?`) rather than guessing.
+	The provider has no daily history, so the first successful read of a new
+	UTC day becomes the baseline; usage between midnight and that read counts
+	as the previous day. A missing baseline for the current day is filled the
+	same way, so a cold start does not leave `today` unavailable. A new paid
+	period or a meter that fell restarts the day at the current reading.
 	"""
 	if go["state"] != "ok":
 		return None
 	stored = _load_day_state(state_path)
 	utc = now.astimezone(datetime.timezone.utc)
 	today = utc.date().isoformat()
-	utc_midnight = utc.replace(hour=0, minute=0, second=0, microsecond=0)
-	last_seen = _number(stored.get("last_seen"))
 	last_used = _number(stored.get("last_used"))
-	if stored.get("day") != today:
-		baseline = None
-		if last_seen is not None and abs(last_seen - utc_midnight.timestamp()) <= DAY_BASELINE_WINDOW:
-			baseline = last_used
-	else:
-		baseline = _number(stored.get("day_start_used"))
+	baseline = _number(stored.get("day_start_used")) if stored.get("day") == today else None
 	if stored.get("period_start") != go["period_start"]:
 		baseline = None
 	if last_used is not None and go["used"] < last_used:
 		baseline = None
+	if baseline is None:
+		baseline = go["used"]
 	state = {
 		"day": today,
 		"day_start_used": baseline,
@@ -385,7 +387,7 @@ def update_day_state(state_path, go, now):
 	try:
 		_write_day_state(state_path, state)
 	except (OSError, TypeError, ValueError):
-		return None
+		pass
 	return baseline
 
 def sample_quota(now=None, state_path=None, fetch=None, db_path=None):
