@@ -446,3 +446,8 @@ two places; it gets written when the state files are stripped.
 - `1793007578` · 2026-10-26 11:39:38 · `XLib` — **The skynet quota block is right-aligned.**
 	Follow-up to `ENXZ4WY` (PR #105, rebase-merged as `605329b`): the gap after `=== Skynet ===` absorbs the pane's spare columns, so the block's right edge is the pane's right edge and it no longer reads as part of the title. The fallback order is unchanged — a wider pane widens the gap, not the block. SPEC R6.7, `TERMINAL.md` and the DRAFT record the placement; 95 skynet tests, full suite 15/15, xlint clean.
 	→ epiq `ENXZ4WY` (Done), PR #105 as `605329b`, taskview `#225`, `tools/skynet/`
+
+- `1793008263` · 2026-10-26 11:51:03 · `XLib` — **The skynet `today` pace now measures from UTC midnight.**
+	Follow-up to `ENXZ4WY` (PR #106, rebase-merged as `020851c`), on the human's ruling that UTC midnight is fine because the provider limits seem to refresh there. **Partly true, and the part that is not is worth recording:** OpenRouter's free counter and the Go `week` meter reset at 00:00Z, but the Go `month` meter resets at `access.endsAt` (16:47:40Z on 2026-11-24), so UTC is the common day boundary for the line, not the month's reset. `compute_pace` and `update_day_state` now take the UTC date and `00:00Z` as the boundary, with the 900-second rollover window measured against it; two tests pin the boundary with a non-UTC clock. 97 skynet tests, full suite 15/15, xlint clean.
+	**The cold-start limitation is unchanged:** changing the boundary does not create a reading at it, so `today ?` remains until the panel has a sample within 15 minutes of 00:00Z — 02:00 local.
+	→ epiq `ENXZ4WY` (Done), PR #106 as `020851c`, taskview `#225`, `tools/skynet/`
