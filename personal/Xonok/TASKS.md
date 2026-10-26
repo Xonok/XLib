@@ -784,15 +784,17 @@ needed when there is no due date.
 	(by 2026-10-31, medium) — deliberately its own ticket rather than a line in
 	#113: this is *policy*, #113 is *mechanism*. Grep-level, zero false
 	positives. Needs #113's extension point first.
-- [ ] **#113 — xlint: support repo-specific rules without editing `xlint.py`**
-	(by 2026-10-24, medium) — board: epiq `P71VNQX` (Todo). **The spec is on the
-	ticket.** A repo rule is arbitrary Python, not a declarative matcher: the
-	default module is `tools/xlint_rules.py`, auto-loaded when present;
-	`.xlint.toml` is only the backup path when that location does not fit; the
-	module's `rules()` returns `{name, paths?, check}`, and `check(files)` gets
-	each selected file's lines and returns findings. One module per checkout;
-	#114 is the first real consumer, #141's durable half follows. In-process on
-	every commit, with `--no-repo-rules` to skip.
+- [x] **#113 — xlint: support repo-specific rules without editing `xlint.py`**
+	(done 2026-10-26, medium) — board: epiq `P71VNQX` (Done), merged as PR #109,
+	master `540246c`. A repo rule is arbitrary Python: the default module is
+	`tools/xlint_rules.py`, `.xlint.toml` is the backup path, and one module
+	per checkout governs its files. `rules()` returns `{name, paths?, check}`;
+	`check(files)` gets each selected file's lines once and returns
+	`(path, line, message)`. Load and run failures are hard errors, never a
+	pass; in-process on every commit, with `--no-repo-rules` to skip; watch
+	reloads the module, config and configured file. 41 tests in xtest's idiom;
+	xlint suite 177; full suite 15/15; `tools/xlint/REPO_RULES.md` is the
+	contract. #114 is the first real consumer; #141's durable half follows.
 - [ ] **#110 — The best alignment in the repo is docstring prose** (by decision
 	needed, low) — `dev/xcsv/xcsv.py:24-30` and `xlib/xcsv_1_1_0.py:97-103`
 	align exception names **inside a module docstring**, where no comment exists.
