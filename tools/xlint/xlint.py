@@ -534,7 +534,7 @@ def _findings(result, path, rule):
 		if not isinstance(item, (tuple, list)) or len(item) != 3:
 			raise _RepoRuleError(f"{path}: rule '{rule}' returned {item!r}, expected (path, line, message)")
 		offender, line, message = item
-		if not isinstance(offender, (str, Path)):
+		if not isinstance(offender, (str, os.PathLike)):
 			raise _RepoRuleError(f"{path}: rule '{rule}' returned a finding whose path is {type(offender).__name__}")
 		if line is not None and (not isinstance(line, int) or isinstance(line, bool) or line < 1):
 			raise _RepoRuleError(f"{path}: rule '{rule}' returned line {line!r}, expected 1 or greater, or None")
