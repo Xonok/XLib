@@ -12,8 +12,9 @@ this afterwards.
 	Europe/Helsinki, against the live account and database on this machine.
 
 **Status:** decisions recorded 2026-10-26; `tools/skynet/SPEC.md` is derived
-from this draft. No code has been written; neither `tools/skynet.py` nor its
-tests are touched.
+from this draft. Docs merged as `317345f` (PR #102); ticket `ENXZ4WY` is in
+Todo. No code has been written; neither `tools/skynet.py` nor its tests are
+touched.
 
 ## Decisions at a glance
 
@@ -497,4 +498,5 @@ Decided 2026-10-26.
 - `tools/skynet.py` — 519 lines, no network code, untouched.
 - `tools/skynet/test/` — `test_render.py`, `test_render_table.py`,
 	`test_terminal.py`; untouched.
-- No epiq ticket for this work yet.
+- Ticket `ENXZ4WY` (Todo) — this work; docs merged as `317345f` (PR #102).
+	Implementation has not started.
