@@ -6,8 +6,12 @@
 #If that's an issue, do this to bypass the problem for one terminal:
 #source ~/.profile
 
-echo '# Python global libraries' >> ~/.profile
-echo "export PYTHONPATH=\$PYTHONPATH:$PWD" >> ~/.profile
+# Append the PYTHONPATH export only once, so re-running install.sh does not
+# accumulate duplicate lines in ~/.profile.
+if ! grep -qF "$PWD" ~/.profile 2>/dev/null; then
+	echo '# Python global libraries' >> ~/.profile
+	echo "export PYTHONPATH=\$PYTHONPATH:$PWD" >> ~/.profile
+fi
 
 # Make the standard panel and agent tools available on PATH by name, the same
 # way oc-agent already is: a symlink in ~/.local/bin pointing at the copy in

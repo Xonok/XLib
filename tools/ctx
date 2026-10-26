@@ -88,7 +88,14 @@ print("\t".join(col[0] for col in cur.description))
 for row in cur:
 	print("\t".join("" if v is None else str(v) for v in row))
 ' 2>&1) || die "query failed:"$'\n'"$RAW"
-ROWS=${RAW#*$'\n'} # strip the tsv header
+# Strip the tsv header line. If the query returned no rows, RAW is just the
+# header (no newline), so ROWS must be cleared — otherwise the header gets
+# parsed as a data row and the render crashes.
+if [[ "$RAW" == *$'\n'* ]]; then
+	ROWS=${RAW#*$'\n'}
+else
+	ROWS=""
+fi
 
 if [[ -z ${ROWS//[[:space:]]/} ]]; then
 	hint=""
