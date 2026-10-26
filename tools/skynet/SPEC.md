@@ -78,7 +78,8 @@ quota source (DRAFT Q7 A).
 ### OpenRouter
 
 `GET https://openrouter.ai/api/v1/key`, with `Authorization: Bearer <key>`.
-Response field used: `free_model_daily_requests`, with `used` and `limit`.
+Response field used: `free_model_daily_requests`, with `used` and `limit`,
+nested under `data` in the measured response (the top level is accepted too).
 This is the free-model daily counter, not all requests; `usage_daily` is paid
 dollars and is not shown on the first line (DRAFT Q5 A, Q6 A).
 
@@ -264,16 +265,19 @@ The acceptance table, with the measured example:
 | Width | Line |
 |------:|------|
 | 70+ | `=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000` |
-| 55–69 | `=== Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000` |
-| 42–54 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
-| 35–41 | `=== Skynet === G $1.87/60 3% · p 72` |
-| 28–34 | `=== Skynet === G $1.87/60 3%` |
-| 25–27 | `=== Skynet === G $1.87 3%` |
-| 19–24 | `=== Skynet === G 3%` |
+| 56–69 | `=== Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000` |
+| 43–55 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
+| 36–42 | `=== Skynet === G $1.87/60 3% · p 72` |
+| 29–35 | `=== Skynet === G $1.87/60 3%` |
+| 26–28 | `=== Skynet === G $1.87 3%` |
+| 19–25 | `=== Skynet === G 3%` |
 | 14–18 | `=== Skynet ===` |
 
-Widths below 14 are out of scope; the title itself is 14 columns. The function
-must never return more than `width` characters.
+The boundaries are the lengths of those lines; the earlier draft of this table
+was one column low in the first seven rows, which would have asked for a line
+wider than the pane it was given. Widths below 14 are out of scope; the title
+itself is 14 columns. The function must never return more than `width`
+characters.
 
 ## Watch and one-shot
 

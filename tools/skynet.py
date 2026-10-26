@@ -11,12 +11,19 @@ goes to the section that has more to show.
 
 Terminal contract: TERMINAL.md.
 """
-import argparse,contextlib,ctypes,datetime,os,select,signal,shutil,sqlite3,struct,sys,termios,time
+import argparse,contextlib,ctypes,datetime,json,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
 from collections import defaultdict
 from pathlib import Path
 
 NAME = "Skynet"
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+STATE_PATH = os.path.expanduser("~/.local/share/skynet/quota.json")
+USER_AGENT = "skynet/1.0"
+HTTP_TIMEOUT = 3
+QUOTA_REFRESH_SECONDS = 60
+DAY_BASELINE_WINDOW = 900
+MICROCENTS_PER_DOLLAR = 100_000_000
+OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 SHOW_EXTRA = False
 _CLEAR_SCREEN = "\033[2J\033[H"
 _ENTER_WATCH = "\033[?25l\033[?1049h"
@@ -122,6 +129,367 @@ class _Inotify:
 		if self.fd != -1:
 			os.close(self.fd)
 			self.fd = -1
+
+class _HTTPFailure(Exception):
+	"""An HTTP read that did not produce JSON.
+
+	`status` is the response code when there was one, and `None` for a
+	network, timeout or decoding failure; the callers use 404 to mean "this
+	account has no such product" and everything else to mean "unknown".
+	"""
+
+	def __init__(self, status=None):
+		self.status = status
+		super().__init__(f"HTTP {status}" if status is not None else "request failed")
+
+def _headers(token):
+	"""The headers every provider request carries; the UA is mandatory."""
+	return {
+		"Accept": "application/json",
+		"User-Agent": USER_AGENT,
+		"Authorization": f"Bearer {token}",
+	}
+
+def http_get_json(url, headers=None):
+	"""One JSON read. Failures are `_HTTPFailure`, never silent.
+
+	The explicit User-Agent is not politeness: Cloudflare rejects Python's
+	default with `403 error code: 1010`.
+	"""
+	request_headers = dict(headers or {})
+	request_headers.setdefault("Accept", "application/json")
+	request_headers.setdefault("User-Agent", USER_AGENT)
+	request = urllib.request.Request(url, headers=request_headers)
+	try:
+		with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
+			body = response.read()
+	except urllib.error.HTTPError as error:
+		raise _HTTPFailure(error.code) from error
+	except (urllib.error.URLError, TimeoutError, OSError) as error:
+		raise _HTTPFailure() from error
+	try:
+		return json.loads(body.decode("utf-8"))
+	except (UnicodeDecodeError, json.JSONDecodeError) as error:
+		raise _HTTPFailure() from error
+
+def _go_credential(rows):
+	"""The active opencode credential, parsed into a source."""
+	if not rows:
+		return {"state": "absent"}
+	try:
+		value = json.loads(rows[0][0])
+		return {
+			"state": "ok",
+			"access": value["access"],
+			"expires": int(value["expires"]),
+			"server": value["metadata"]["server"],
+		}
+	except (KeyError, TypeError, ValueError):
+		return {"state": "unavailable"}
+
+def _openrouter_credential(rows):
+	"""The OpenRouter credential, parsed into a source."""
+	if not rows:
+		return {"state": "absent"}
+	try:
+		value = json.loads(rows[0][0])
+		return {"state": "ok", "key": value["key"]}
+	except (KeyError, TypeError, ValueError):
+		return {"state": "unavailable"}
+
+def read_credentials(db_path=None):
+	"""The Go and OpenRouter credentials, read once from the local database.
+
+	A missing row is `absent` (the provider is not configured); a row that
+	cannot be parsed or a database that cannot be opened is `unavailable`.
+	The connection is read-only and is never written to.
+	"""
+	sources = {"go": {"state": "unavailable"}, "openrouter": {"state": "unavailable"}}
+	try:
+		conn = sqlite3.connect(f"file:{db_path or DB_PATH}?mode=ro", uri=True)
+		try:
+			go_rows = conn.execute(
+				"SELECT value FROM credential WHERE integration_id = 'opencode' AND active = 1 ORDER BY time_updated DESC"
+			).fetchall()
+			openrouter_rows = conn.execute(
+				"SELECT value FROM credential WHERE integration_id = 'openrouter' ORDER BY COALESCE(active, 0) DESC, time_updated DESC"
+			).fetchall()
+		finally:
+			conn.close()
+	except sqlite3.Error:
+		return sources
+	sources["go"] = _go_credential(go_rows)
+	sources["openrouter"] = _openrouter_credential(openrouter_rows)
+	return sources
+
+def _parse_time(text):
+	"""An ISO timestamp with an explicit zone; `Z` is `+00:00`."""
+	if not isinstance(text, str):
+		raise ValueError("time is not a string")
+	value = text[:-1] + "+00:00" if text.endswith("Z") else text
+	parsed = datetime.datetime.fromisoformat(value)
+	if parsed.tzinfo is None:
+		raise ValueError("time has no timezone")
+	return parsed
+
+def go_quota(credential, now, fetch):
+	"""The Go month meter, or the reason it cannot be shown.
+
+	`404` and a null `access` mean the account has no Go product (`absent`);
+	every other failure is `unavailable`, never an exception into the renderer.
+	"""
+	if credential["state"] != "ok":
+		return {"state": credential["state"]}
+	if credential["expires"] <= now.timestamp() * 1000:
+		return {"state": "unavailable"}
+	url = credential["server"].rstrip("/") + "/api/go/status"
+	try:
+		data = fetch(url, _headers(credential["access"]))
+	except _HTTPFailure as error:
+		return {"state": "absent"} if error.status == 404 else {"state": "unavailable"}
+	except (LookupError, TypeError, ValueError, OSError):
+		return {"state": "unavailable"}
+	try:
+		product = data["product"]
+		access = data["access"]
+	except (KeyError, TypeError):
+		return {"state": "unavailable"}
+	if access is None:
+		return {"state": "absent"}
+	try:
+		start = _parse_time(access["startsAt"])
+		end = _parse_time(access["endsAt"])
+		meter = access["meters"]["month"]
+		limit = int(meter["limitMicroCents"])
+		used = int(meter["usedMicroCents"])
+	except (KeyError, TypeError, ValueError):
+		return {"state": "unavailable"}
+	if product not in ("go", "go-plus"):
+		return {"state": "unavailable"}
+	return {
+		"state": "ok",
+		"product": product,
+		"start": start,
+		"end": end,
+		"period_start": access["startsAt"],
+		"limit": limit,
+		"used": used,
+	}
+
+def openrouter_quota(credential, fetch):
+	"""The OpenRouter free-model daily counter, or the reason it is missing."""
+	if credential["state"] != "ok":
+		return {"state": credential["state"]}
+	try:
+		data = fetch(OPENROUTER_KEY_URL, _headers(credential["key"]))
+	except (_HTTPFailure, LookupError, TypeError, ValueError, OSError):
+		return {"state": "unavailable"}
+	try:
+		payload = data["data"] if isinstance(data, dict) and "data" in data else data
+		daily = payload["free_model_daily_requests"]
+		return {"state": "ok", "used": int(daily["used"]), "limit": int(daily["limit"])}
+	except (KeyError, TypeError, ValueError):
+		return {"state": "unavailable"}
+
+def compute_pace(go, day_start_used, now):
+	"""The used percentage and the two rates, as percentages of sustainable.
+
+	`overall` divides the used meter by the elapsed days since the period
+	start; `today` divides the day's increase by the elapsed day. Both are
+	`None` when their denominator is missing or non-positive, and a meter
+	that fell below the baseline cannot give a rate.
+	"""
+	pace = {"used_percent": None, "overall": None, "today": None}
+	if go["state"] != "ok":
+		return pace
+	limit = go["limit"]
+	used = go["used"]
+	if limit > 0:
+		pace["used_percent"] = used / limit * 100
+	period_days = (go["end"] - go["start"]).total_seconds() / 86400
+	if period_days <= 0 or limit <= 0:
+		return pace
+	sustainable = limit / period_days
+	elapsed = (now - go["start"]).total_seconds() / 86400
+	if elapsed > 0:
+		pace["overall"] = (used / elapsed) / sustainable * 100
+	local = now.astimezone()
+	day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+	day_elapsed = (local - day_start).total_seconds() / 86400
+	if day_start_used is not None and used >= day_start_used and day_elapsed > 0:
+		pace["today"] = ((used - day_start_used) / day_elapsed) / sustainable * 100
+	return pace
+
+def _number(value):
+	"""A stored timestamp or meter reading, or `None` when it is not a number."""
+	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		return None
+	return value
+
+def _load_day_state(state_path):
+	"""The stored Go day baseline, or an empty one when missing or corrupt."""
+	try:
+		with open(state_path, encoding="utf-8") as file:
+			state = json.load(file)
+	except (OSError, TypeError, ValueError):
+		return {}
+	if not isinstance(state, dict):
+		return {}
+	go = state.get("go")
+	return go if isinstance(go, dict) else {}
+
+def _write_day_state(state_path, go_state):
+	"""Replace the state atomically, so a crash never leaves half a file."""
+	path = Path(state_path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	temporary = path.with_name(path.name + ".tmp")
+	with open(temporary, "w", encoding="utf-8") as file:
+		json.dump({"version": 1, "go": go_state}, file, sort_keys=True)
+		file.write("\n")
+	os.replace(temporary, path)
+
+def update_day_state(state_path, go, now):
+	"""The midnight meter reading to measure today against, and persist it.
+
+	The provider has no daily history, so today's baseline is the reading
+	taken near local midnight: a rollover reuses the last reading only when
+	`last_seen` is within `DAY_BASELINE_WINDOW` seconds of midnight. A new
+	paid period, a meter that fell, or a write failure all leave the baseline
+	unknown (`today ?`) rather than guessing.
+	"""
+	if go["state"] != "ok":
+		return None
+	stored = _load_day_state(state_path)
+	local = now.astimezone()
+	today = local.date().isoformat()
+	local_midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+	last_seen = _number(stored.get("last_seen"))
+	last_used = _number(stored.get("last_used"))
+	if stored.get("day") != today:
+		baseline = None
+		if last_seen is not None and abs(last_seen - local_midnight.timestamp()) <= DAY_BASELINE_WINDOW:
+			baseline = last_used
+	else:
+		baseline = _number(stored.get("day_start_used"))
+	if stored.get("period_start") != go["period_start"]:
+		baseline = None
+	if last_used is not None and go["used"] < last_used:
+		baseline = None
+	state = {
+		"day": today,
+		"day_start_used": baseline,
+		"last_used": go["used"],
+		"last_seen": int(now.timestamp()),
+		"period_start": go["period_start"],
+	}
+	try:
+		_write_day_state(state_path, state)
+	except (OSError, TypeError, ValueError):
+		return None
+	return baseline
+
+def sample_quota(now=None, state_path=None, fetch=None, db_path=None):
+	"""Both quotas at one instant, with the day baseline updated.
+
+	A failed source becomes `unavailable`; it never raises, so the tables
+	always render.
+	"""
+	if now is None:
+		now = datetime.datetime.now().astimezone()
+	read = fetch or http_get_json
+	credentials = read_credentials(db_path)
+	go = go_quota(credentials["go"], now, read)
+	openrouter = openrouter_quota(credentials["openrouter"], read)
+	baseline = update_day_state(state_path or STATE_PATH, go, now) if go["state"] == "ok" else None
+	return {"go": go, "openrouter": openrouter, "pace": compute_pace(go, baseline, now)}
+
+def _dollars(microcents, exact=False):
+	"""Microcents as dollars; an exact integral amount has no decimals."""
+	if exact and microcents % MICROCENTS_PER_DOLLAR == 0:
+		return f"${microcents // MICROCENTS_PER_DOLLAR}"
+	return f"${microcents / MICROCENTS_PER_DOLLAR:.2f}"
+
+def _percent(value):
+	return f"{round(value)}%" if value is not None else "?"
+
+def _go_variants(quota):
+	"""The Go field, longest first: limit, then used, then the percentage alone."""
+	go = quota.get("go") or {}
+	if go.get("state") != "ok":
+		return []
+	pace = quota.get("pace") or {}
+	label = "G+" if go.get("product") == "go-plus" else "G"
+	used = _dollars(go["used"])
+	limit = _dollars(go["limit"], exact=True)[1:]
+	percent = _percent(pace.get("used_percent"))
+	return [
+		f"{label} {used}/{limit} {percent}",
+		f"{label} {used} {percent}",
+		f"{label} {percent}",
+	]
+
+def _quota_fields(quota, abbreviated):
+	"""The first line's fields, in display order, for one of the two forms."""
+	go = quota.get("go") or {"state": "absent"}
+	pace = quota.get("pace") or {}
+	fields = []
+	if go.get("state") == "ok":
+		label = "Go+" if go.get("product") == "go-plus" else "Go"
+		if abbreviated:
+			label = "G+" if label == "Go+" else "G"
+		used = _dollars(go["used"])
+		limit = _dollars(go["limit"], exact=True)
+		if abbreviated:
+			limit = limit[1:]
+		fields.append(f"{label} {used}/{limit} {_percent(pace.get('used_percent'))}")
+		if pace.get("overall") is not None:
+			fields.append(f"p {round(pace['overall'])}" if abbreviated else f"pace {round(pace['overall'])}%/d")
+		if pace.get("today") is not None:
+			fields.append(f"t {round(pace['today'])}" if abbreviated else f"today {round(pace['today'])}%/d")
+		else:
+			fields.append("t ?" if abbreviated else "today ?")
+	elif go.get("state") == "unavailable":
+		fields.append("G ?" if abbreviated else "Go ?")
+	openrouter = quota.get("openrouter") or {"state": "absent"}
+	if openrouter.get("state") == "ok":
+		fields.append(f"OR {openrouter['used']}/{openrouter['limit']}")
+	elif openrouter.get("state") == "unavailable":
+		fields.append("OR ?")
+	return fields
+
+def _quota_text(title, fields):
+	if not fields:
+		return title
+	return title + " " + " · ".join(fields)
+
+def quota_line(quota, width):
+	"""The first line: full form, abbreviated form, then fields dropped.
+
+	Never returns more than `width` characters, and never a newline. The
+	abbreviated form keeps every field; only when it still does not fit are
+	fields dropped, from the right (`OR`, `today`, `pace`), then the Go field
+	is shortened to its percentage alone, then the title.
+	"""
+	title = f"=== {NAME} ==="
+	if quota is None:
+		return title if len(title) <= width else title[:width]
+	line = _quota_text(title, _quota_fields(quota, False))
+	if len(line) <= width:
+		return line
+	fields = _quota_fields(quota, True)
+	line = _quota_text(title, fields)
+	if len(line) <= width:
+		return line
+	while len(fields) > 1:
+		fields = fields[:-1]
+		line = _quota_text(title, fields)
+		if len(line) <= width:
+			return line
+	for variant in _go_variants(quota)[1:]:
+		line = _quota_text(title, [variant])
+		if len(line) <= width:
+			return line
+	return title if len(title) <= width else title[:width]
 
 def load_stats(limit_seconds):
 	conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
@@ -381,12 +749,13 @@ def plural(count, noun):
 	"""`count` and its noun, agreeing in number."""
 	return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
-def render(rows, now, height=None, width=None):
+def render(rows, now, height=None, width=None, quota=None):
 	"""The whole display: the header, then the Today table and the Window table.
 
 	`height` is the number of lines the display may use, and `width` the
 	columns it may use; the caps on the rows come from the first, the columns
 	and the model names from the second, so the render fits the pane it has.
+	`quota` is a `sample_quota` result; without one the header is unchanged.
 	"""
 	if height is None or width is None:
 		size = terminal_size()
@@ -410,7 +779,7 @@ def render(rows, now, height=None, width=None):
 			return f"{NAME}: no agents active"
 		return f"{NAME}: {plural(today_count, 'model')} today, {plural(window_count, 'model')} in window"
 	if not all_stats:
-		return f"=== {NAME} ===\n\nno agents active in window"
+		return f"{quota_line(quota, width)}\n\nno agents active in window"
 	columns, col_w = fit_columns(width, SHOW_EXTRA)
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
@@ -426,7 +795,7 @@ def render(rows, now, height=None, width=None):
 	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns)
 	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
 	return (
-		f"=== {NAME} ===\n"
+		f"{quota_line(quota, width)}\n"
 		f"{today_text}"
 		f"\n\n{window_text}"
 	)
@@ -440,9 +809,9 @@ def db_stamp():
 			values.append(0)
 	return tuple(values)
 
-def build_report(window_hours, now, height=None, width=None):
+def build_report(window_hours, now, height=None, width=None, quota=None):
 	rows = load_stats(window_hours * 3600)
-	return render(rows, now, height, width)
+	return render(rows, now, height, width, quota)
 
 def draw(text):
 	print(_CLEAR_SCREEN, end="")
@@ -469,9 +838,13 @@ def _db_watcher():
 
 def watch(window_hours):
 	with _fullscreen():
-		draw(build_report(window_hours, time.time()))
+		quota = sample_quota()
+		quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
+		draw(build_report(window_hours, time.time(), quota=quota))
 		# The terminal's size is part of what is watched: a pane that was resized
-		# has to redraw, or the old layout stays and runs off the edge.
+		# has to redraw, or the old layout stays and runs off the edge. The pace
+		# also changes with time, so the quota timer wakes the loop even when the
+		# database does not.
 		size = terminal_size()
 		watcher = _db_watcher()
 		stamp = db_stamp()
@@ -485,11 +858,15 @@ def watch(window_hours):
 					current = db_stamp()
 					changed = current != stamp
 					stamp = current
+				refresh_quota = time.monotonic() >= quota_due
 				current_size = terminal_size()
-				if not changed and current_size == size:
+				if not changed and current_size == size and not refresh_quota:
 					continue
+				if refresh_quota:
+					quota = sample_quota()
+					quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
 				size = current_size
-				draw(build_report(window_hours, time.time()))
+				draw(build_report(window_hours, time.time(), quota=quota))
 		finally:
 			if watcher is not None:
 				watcher.close()
@@ -512,7 +889,8 @@ def main():
 		except KeyboardInterrupt:
 			pass
 		return 0
-	print(build_report(args.window_hours, time.time()))
+	quota = sample_quota()
+	print(build_report(args.window_hours, time.time(), quota=quota))
 	return 0
 
 if __name__ == "__main__":
