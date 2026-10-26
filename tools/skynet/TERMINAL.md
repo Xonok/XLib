@@ -21,13 +21,15 @@ numbers still add up.
 	at most the pane width.
 
 - **The first line carries the quotas, right-aligned.** `=== Skynet ===` is
-	followed by `Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000` when
+	followed by `Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000` when
 	both providers are configured. The block sits against the pane's right
 	edge, with the space after the title absorbing the spare columns, so it
 	does not read as part of the title. It never wraps: the labels abbreviate
 	(`G`, `p`, `t`) and then fields drop from the right, so the same numbers
-	stay readable in a narrow pane. `today` starts at the first reading after
-	UTC midnight; usage before that reading counts as the previous day. The
+	stay readable in a narrow pane. `today` is today's spend as a percentage of
+	the sustainable daily allowance: it starts at 0% at the first reading after
+	UTC midnight, counts usage before that reading as the previous day, and only
+	rises with usage. `pace` remains the average rate with `%/d`. The
 	subscription reset is rounded to the nearest UTC midnight for the pace. A
 	configured source that cannot be read shows `?`; one that is not configured
 	is omitted. The read is synchronous with a three-second timeout and a

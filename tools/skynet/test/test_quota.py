@@ -270,26 +270,26 @@ def test_the_used_percentage_is_reported():
 	pace = skynet.compute_pace(go, None, _utc(2026, 10, 16))
 	xtest.equal(round(pace["used_percent"]), 25, "a quarter of the limit is 25%")
 
-def test_the_today_pace_uses_the_midnight_baseline():
+def test_today_is_the_share_of_the_daily_allowance():
 	go = _ok_go(used=3_000_000_000)
 	pace = skynet.compute_pace(go, 2_900_000_000, _utc(2026, 10, 26, 12))
-	xtest.equal(round(pace["today"]), 100, "half a day at half the day's allowance is sustainable")
+	xtest.equal(round(pace["today"]), 50, "half of the day's allowance is 50%")
 
-def test_the_today_pace_uses_utc_midnight():
-	tz = datetime.timezone(datetime.timedelta(hours=2))
-	now = datetime.datetime(2026, 10, 26, 14, 0, tzinfo=tz)
-	pace = skynet.compute_pace(_ok_go(used=3_000_000_000), 2_900_000_000, now)
-	xtest.equal(round(pace["today"]), 100, "the day is measured from 00:00Z, not local midnight")
+def test_today_does_not_depend_on_the_time_of_day():
+	go = _ok_go(used=3_000_000_000)
+	morning = skynet.compute_pace(go, 2_900_000_000, _utc(2026, 10, 26, 1))
+	evening = skynet.compute_pace(go, 2_900_000_000, _utc(2026, 10, 26, 23))
+	xtest.equal(morning["today"], evening["today"], "idle time does not dilute the day's share")
 
 def test_today_is_unknown_without_a_baseline():
 	go = _ok_go()
 	pace = skynet.compute_pace(go, None, _utc(2026, 10, 26, 12))
-	xtest.equal(pace["today"], None, "no midnight reading means no day pace")
+	xtest.equal(pace["today"], None, "no baseline means no day share")
 
 def test_today_is_unknown_when_the_meter_fell():
 	go = _ok_go(used=100_000_000)
 	pace = skynet.compute_pace(go, 200_000_000, _utc(2026, 10, 26, 12))
-	xtest.equal(pace["today"], None, "a meter that fell cannot give a rate")
+	xtest.equal(pace["today"], None, "a meter that fell cannot give a day share")
 
 def test_pace_is_unknown_before_the_period_starts():
 	go = _ok_go()
@@ -364,12 +364,19 @@ def test_a_null_baseline_for_today_is_filled_from_the_current_meter():
 		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, 600_000_000, "the cold-start day gets a baseline on the next read")
 
-def test_a_changed_period_starts_today_at_the_current_meter():
+def test_a_changed_period_continues_the_day_across_the_new_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_utc(2026, 10, 26, 1).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
-		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, 222_000_000, "a new paid period restarts today at the current meter")
+		_save(path, _state("2026-10-26", day_start_used=100_000_000, last_used=150_000_000, last_seen=int(_utc(2026, 10, 26, 1).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
+		baseline = skynet.update_day_state(path, _ok_go(used=1_000_000), _utc(2026, 10, 26, 10))
+	xtest.equal(baseline, -50_000_000, "the pre-reset day spend is carried across the reset")
+
+def test_a_changed_period_on_a_new_day_starts_at_the_current_meter():
+	with tempfile.TemporaryDirectory() as folder:
+		path = Path(folder) / "quota.json"
+		_save(path, _state("2026-10-25", day_start_used=100_000_000, last_used=150_000_000, last_seen=int(_utc(2026, 10, 25, 23).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
+		baseline = skynet.update_day_state(path, _ok_go(used=1_000_000), _utc(2026, 10, 26, 10))
+	xtest.equal(baseline, 1_000_000, "a new day starts today at the current meter")
 
 def test_a_decreasing_meter_starts_today_at_the_current_meter():
 	with tempfile.TemporaryDirectory() as folder:
@@ -403,7 +410,7 @@ def test_a_write_failure_still_returns_the_baseline():
 
 def test_the_full_line_carries_every_field():
 	line = skynet.quota_line(_display_quota(), 70)
-	xtest.equal(line, "=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000", "the acceptance table's full line")
+	xtest.equal(line, _aligned("Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000", 70), "the acceptance table's full line")
 
 def test_the_line_abbreviates_before_dropping():
 	line = skynet.quota_line(_display_quota(), 60)
@@ -441,7 +448,7 @@ def test_an_unavailable_go_shows_a_question_mark_and_no_pace():
 def test_an_unavailable_openrouter_shows_a_question_mark():
 	quota = _display_quota(openrouter={"state": "unavailable"})
 	line = skynet.quota_line(quota, 80)
-	xtest.equal(line, _aligned("Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR ?", 80), "the counter is unknown, not absent")
+	xtest.equal(line, _aligned("Go $1.87/$60 3% · pace 72%/d · today 94% · OR ?", 80), "the counter is unknown, not absent")
 
 def test_absent_sources_contribute_nothing():
 	quota = {"go": {"state": "absent"}, "openrouter": {"state": "absent"}, "pace": {"used_percent": None, "overall": None, "today": None}}

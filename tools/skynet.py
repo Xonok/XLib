@@ -299,12 +299,15 @@ def openrouter_quota(credential, fetch):
 		return {"state": "unavailable"}
 
 def compute_pace(go, day_start_used, now):
-	"""The used percentage and the two rates, as percentages of sustainable.
+	"""The used percentage, the overall rate and today's share of the day.
 
 	`overall` divides the used meter by the elapsed days since the period
-	start; `today` divides the day's increase by the elapsed day. Both are
-	`None` when their denominator is missing or non-positive, and a meter
-	that fell below the baseline cannot give a rate.
+	start and is a percentage of the sustainable daily rate. `today` is the
+	day's increase as a percentage of the sustainable daily allowance, so it
+	starts at 0% each UTC day and only rises as usage grows; it does not
+	decay with idle time. Both are `None` when their denominator is missing
+	or non-positive, and a meter that fell below the baseline cannot give a
+	number.
 	"""
 	pace = {"used_percent": None, "overall": None, "today": None}
 	if go["state"] != "ok":
@@ -320,11 +323,8 @@ def compute_pace(go, day_start_used, now):
 	elapsed = (now - go["start"]).total_seconds() / 86400
 	if elapsed > 0:
 		pace["overall"] = (used / elapsed) / sustainable * 100
-	utc = now.astimezone(datetime.timezone.utc)
-	day_start = utc.replace(hour=0, minute=0, second=0, microsecond=0)
-	day_elapsed = (utc - day_start).total_seconds() / 86400
-	if day_start_used is not None and used >= day_start_used and day_elapsed > 0:
-		pace["today"] = ((used - day_start_used) / day_elapsed) / sustainable * 100
+	if day_start_used is not None and used >= day_start_used:
+		pace["today"] = (used - day_start_used) / sustainable * 100
 	return pace
 
 def _number(value):
@@ -372,8 +372,14 @@ def update_day_state(state_path, go, now):
 	last_used = _number(stored.get("last_used"))
 	baseline = _number(stored.get("day_start_used")) if stored.get("day") == today else None
 	if stored.get("period_start") != go["period_start"]:
-		baseline = None
-	if last_used is not None and go["used"] < last_used:
+		# The provider reset the monthly meter. Keep the day continuous by
+		# carrying the pre-reset spend into the new baseline, so today's share
+		# does not jump back to zero in the middle of the day.
+		if baseline is not None and last_used is not None:
+			baseline -= last_used
+		else:
+			baseline = None
+	elif last_used is not None and go["used"] < last_used:
 		baseline = None
 	if baseline is None:
 		baseline = go["used"]
@@ -447,7 +453,7 @@ def _quota_fields(quota, abbreviated):
 		if pace.get("overall") is not None:
 			fields.append(f"p {round(pace['overall'])}" if abbreviated else f"pace {round(pace['overall'])}%/d")
 		if pace.get("today") is not None:
-			fields.append(f"t {round(pace['today'])}" if abbreviated else f"today {round(pace['today'])}%/d")
+			fields.append(f"t {round(pace['today'])}" if abbreviated else f"today {round(pace['today'])}%")
 		else:
 			fields.append("t ?" if abbreviated else "today ?")
 	elif go.get("state") == "unavailable":
