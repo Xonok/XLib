@@ -29,6 +29,11 @@ HARNESS_TIMEOUT = 900
 # empty content with finish_reason='error' and then holds the socket open.
 HTTP_TIMEOUT = 180
 RETRY_STATUS = {429,500,502,503,504}
+# A wait longer than this is not a minute quota. The measured minute delays were 1s and
+# 47s; a day quota arrives with 67,682s to the next midnight Pacific. The gap is wide, so
+# this number is a safety net rather than the discriminator — the metric is, in
+# `refusal_kind`.
+MAX_QUOTA_SLEEP = 120
 
 class TransportError(Exception):
 	"""A call that produced no reply.
@@ -44,6 +49,18 @@ class TransportError(Exception):
 		self.body = body
 		self.status = status
 		self.quota = quota or {}
+
+class Deferred(TransportError):
+	"""The model's own allowance is spent; the caller must move on.
+
+	A day-quota 429 is the provider saying "not today", not a failure of the model — a run
+	that meets it is a deferred cell rather than a grade. It carries the whole body and the
+	parsed quota, so the row records what refused it and for how long (E32).
+
+	It is a `TransportError` because every existing caller already treats that as "no reply,
+	record a hole"; the distinct type is what lets a queue defer one model and carry on with
+	the rest instead of parking the whole run (5REVVZE).
+	"""
 
 class UnseenShape(Exception):
 	"""An event or a field arrived in a shape this tool does not know.
@@ -206,6 +223,30 @@ def _delay_seconds(text):
 def _retry_from_message(message):
 	m = re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s",message or "",re.I)
 	return float(m.group(1)) if m else None
+
+def refusal_kind(quota,body=""):
+	"""Which quota a refusal is, from the provider's own words.
+
+	Four kinds, and they need different handling:
+
+	- `daily` — the model's own day allowance. The wait runs to the provider's reset
+	  (67,682s measured on 2026-10-26), so it is a deferral: raise `Deferred` and let the
+	  caller move on.
+	- `minute` — a per-minute limit with a short named wait (1s and 47s measured on
+	  2026-10-22). Sleeping the named delay is right.
+	- `unknown` — no quota named. Retry on the transport's own backoff.
+
+	**The metric is the discriminator, not the delay.** A day quota and a minute quota
+	arrive on the same 429 path, and the body says which (`quotaId` / `quotaMetric`); the
+	OpenRouter text is the fallback for bodies that carry no `details[]` (E32).
+	"""
+	parts = [(quota or {}).get(k) or "" for k in ("quota_id","quota_metric","message")]
+	text = f"{' '.join(str(p) for p in parts)} {body or ''}".lower()
+	if "perday" in text or "per-day" in text or "free-models-per-day" in text:
+		return "daily"
+	if (quota or {}).get("quota_id") or (quota or {}).get("retry_delay") is not None:
+		return "minute"
+	return "unknown"
 
 def _refusal_text(model,status,body,quota):
 	"""One line that names the refusal, with the quota and the wait when they exist."""
@@ -470,8 +511,14 @@ def call_chat(model,messages,workdir="/tmp/opencode/bench-run",max_tokens=2048,t
 			body = _error_body(e)
 			gated = "within OpenCode" in body
 			quota = parse_quota(body) if e.code == 429 else {}
-			last = TransportError(_refusal_text(model,e.code,body,quota),
-				body=body,status=e.code,quota=quota)
+			kind = refusal_kind(quota,body) if e.code == 429 else ""
+			text = _refusal_text(model,e.code,body,quota)
+			if kind == "daily" or (quota.get("retry_delay") or 0) > MAX_QUOTA_SLEEP:
+				# A day quota is a deferral, not a wait. Sleeping the named delay parked the
+				# 2026-10-26 wave until the next morning and left no record of the refusal
+				# (E32): the whole body, the quota and the wait travel on the error.
+				raise Deferred(text,body=body,status=e.code,quota=quota) from None
+			last = TransportError(text,body=body,status=e.code,quota=quota)
 			if gated or attempt == retries-1:
 				raise last
 			if e.code == 429 and quota.get("retry_delay") is not None:

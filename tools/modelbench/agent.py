@@ -338,6 +338,7 @@ DIRECT_MAPPING = (
 	"transport._auth_headers",
 	"transport._error_body",
 	"transport.parse_quota",
+	"transport.refusal_kind",
 	"transport._delay_seconds",
 	"transport._retry_from_message",
 	"transport._refusal_text",
@@ -351,6 +352,7 @@ DIRECT_MAPPING = (
 	"agent.RUN_TIMEOUT",
 	"transport.HTTP_TIMEOUT",
 	"transport.RETRY_STATUS",
+	"transport.MAX_QUOTA_SLEEP",
 	"transport.AUTH_PATH",
 	# `call_chat` names the harness timeout in its source, even though the direct path
 	# never waits that long. It is listed so the constants check stays honest, and the
