@@ -310,7 +310,10 @@ characters.
 	already blocks for up to one second on inotify; after that it must check
 	the quota timer and redraw if it expired, even when the database did not
 	change. The pace depends on time, so a redraw must not wait for a database
-	write.
+	write. An inotify wakeup is only a hint: a redraw happens only when
+	`db_stamp()` changed since the last frame, because SQLite opens and closes
+	the WAL and shared-memory files for a read-only query and those opens must
+	not count as database activity.
 - A failed read never prevents the tables from rendering; the source's field
 	becomes `?` or disappears.
 - The fetch is synchronous with a 3-second timeout. A background thread is

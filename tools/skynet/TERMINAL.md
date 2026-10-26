@@ -10,8 +10,11 @@ numbers still add up.
 	alternate screen, so a replaced frame cannot accumulate in scrollback; the
 	normal screen returns on exit. One-shot output is unchanged.
 - **inotify first, polling only when it is unavailable.** Database changes are
-	read from inotify on the database's directory, through `ctypes`. Polling is
-	the fallback for a kernel that has no inotify, not a parallel refresh path.
+	read from inotify on the database's directory, through `ctypes`. The wakeup
+	is only a hint: it redraws when `db_stamp()` changed, so the WAL and
+	shared-memory files that SQLite opens and closes for a read cannot wake the
+	tool into redrawing itself. Polling is the fallback for a kernel that has no
+	inotify, not a parallel refresh path.
 - **Fits the height.** The two tables split the rows the pane has; a section
 	that leaves rows out says `… +N more`; below six lines the display falls
 	back to the one-line counts. A full frame never scrolls its header away.
