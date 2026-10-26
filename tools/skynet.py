@@ -313,9 +313,9 @@ def compute_pace(go, day_start_used, now):
 	elapsed = (now - go["start"]).total_seconds() / 86400
 	if elapsed > 0:
 		pace["overall"] = (used / elapsed) / sustainable * 100
-	local = now.astimezone()
-	day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
-	day_elapsed = (local - day_start).total_seconds() / 86400
+	utc = now.astimezone(datetime.timezone.utc)
+	day_start = utc.replace(hour=0, minute=0, second=0, microsecond=0)
+	day_elapsed = (utc - day_start).total_seconds() / 86400
 	if day_start_used is not None and used >= day_start_used and day_elapsed > 0:
 		pace["today"] = ((used - day_start_used) / day_elapsed) / sustainable * 100
 	return pace
@@ -352,7 +352,7 @@ def update_day_state(state_path, go, now):
 	"""The midnight meter reading to measure today against, and persist it.
 
 	The provider has no daily history, so today's baseline is the reading
-	taken near local midnight: a rollover reuses the last reading only when
+	taken near UTC midnight: a rollover reuses the last reading only when
 	`last_seen` is within `DAY_BASELINE_WINDOW` seconds of midnight. A new
 	paid period, a meter that fell, or a write failure all leave the baseline
 	unknown (`today ?`) rather than guessing.
@@ -360,14 +360,14 @@ def update_day_state(state_path, go, now):
 	if go["state"] != "ok":
 		return None
 	stored = _load_day_state(state_path)
-	local = now.astimezone()
-	today = local.date().isoformat()
-	local_midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+	utc = now.astimezone(datetime.timezone.utc)
+	today = utc.date().isoformat()
+	utc_midnight = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 	last_seen = _number(stored.get("last_seen"))
 	last_used = _number(stored.get("last_used"))
 	if stored.get("day") != today:
 		baseline = None
-		if last_seen is not None and abs(last_seen - local_midnight.timestamp()) <= DAY_BASELINE_WINDOW:
+		if last_seen is not None and abs(last_seen - utc_midnight.timestamp()) <= DAY_BASELINE_WINDOW:
 			baseline = last_used
 	else:
 		baseline = _number(stored.get("day_start_used"))
