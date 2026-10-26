@@ -22,17 +22,19 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `0e4b177` (2026-10-26), **snapshot taken 2026-10-26**, **in
-sync with `origin/master`** — **the root checkout is clean.** **Five tickets
-merged on 2026-10-26, and all five are now in the Closed archive: `SBEA654` (the
+Basis: `master` at `5ac6b1d` (2026-10-26), **snapshot taken 2026-10-26**, **in
+sync with `origin/master`** — **the root checkout is clean.** **Six tickets
+merged on 2026-10-26: the morning's five are now in the Closed archive —
+`SBEA654` (the
 direct-path modelbench instrument change, PR #101 as `529ff8d`), `ENXZ4WY` (the
 skynet quota line, docs PR #102, implementation PR #104 as `5686257`,
 right-aligned PR #105 as `605329b`, UTC-midnight PR #106 as `020851c`,
 pragmatic baseline PR #107 as `487af87`, day-share PR #108 as `7df9c10`),
 `785B71H` (the epiq actor is the agent, never the human, `0928cd1`), `P71VNQX`
 (xlint repo-specific rules, PR #109 as `540246c`), and `ZHSW7FJ` (the
-OpenRouter routes of the never-run free models, `0e4b177`). The Done lane is
-empty.** The five tickets from 2026-10-25 remain
+OpenRouter routes of the never-run free models, `0e4b177`) — and `2WVYBR5`
+(skynet's watch loop no longer redraws on its own SQLite reads, PR #110 as
+`5ac6b1d`) is in Done, awaiting release.** The five tickets from 2026-10-25 remain
 merged: `BMGY94P` makes a `**` in the middle of an ignore pattern match
 again; `89VGNXW` puts inotify failures in the watch report; `2N3BARC` makes
 `install.sh` link the standard tools into `~/.local/bin`; `DRGA3SX` stops the
