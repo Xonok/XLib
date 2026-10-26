@@ -13,8 +13,8 @@ from ._ import helper,err,websocket,request,response,server
 _MB = 1024*1024
 
 #Server and handler
-def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120):
-	return server.serve_forever(addr,handler,handler_args,ssl_keys,new_thread,promise,max_requests)
+def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120,redirect_from=None):
+	return server.serve_forever(addr,handler,handler_args,ssl_keys,new_thread,promise,max_requests,redirect_from)
 def await_startup(promise,timeout=5):
 	return server.await_startup(promise,timeout)
 def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests=120):
@@ -72,6 +72,7 @@ err_HTTPNegativeContentLength = err.HTTPNegativeContentLength
 err_HTTPContentLengthBad = err.HTTPContentLengthBad
 err_HTTPPayloadTooBig = err.HTTPPayloadTooBig
 err_HTTPBodyIncomplete = err.HTTPBodyIncomplete
+err_HTTPRedirectNoSSL = err.HTTPRedirectNoSSL
 err_JSONDecodeError = err.JSONDecodeError
 err_StrDecodeError = err.StrDecodeError
 err_HTTPCapitalizedHeader = err.HTTPCapitalizedHeader

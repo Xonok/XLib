@@ -3,11 +3,13 @@ from concurrent.futures import Future
 from . import err,response,request,helper,websocket
 
 #Server and handler
-def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120):
+def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promise=None,max_requests=120,redirect_from=None):
+	if redirect_from is not None and ssl_keys is None:
+		raise err.HTTPRedirectNoSSL("SSL keys must be provided when using redirect_from.")
 	if promise is None:
 		promise = Future()
 	if new_thread:
-		_thread.start_new_thread(serve_forever,(addr,handler,handler_args,ssl_keys,False,promise,max_requests))
+		_thread.start_new_thread(serve_forever,(addr,handler,handler_args,ssl_keys,False,promise,max_requests,redirect_from))
 		return promise
 	try:
 		context = None
@@ -19,6 +21,9 @@ def serve_forever(addr,handler,handler_args,ssl_keys=None,new_thread=False,promi
 		sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		sock.bind((addr))
 		sock.listen()
+		#Why: catch both errors from the same place.
+		if redirect_from is not None:
+			http_to_https((addr[0],redirect_from),addr[1],True).result()
 		print("Serving you forever:",addr,flush=True)
 		promise.set_result(True)
 	except Exception as e:
@@ -121,3 +126,18 @@ def serve_websocket(req,on_message=None,on_open=None,on_close=None):
 	websocket.sender(client,ctx)
 	#Signal a successful websocket session, so nothing else would be done:
 	return True
+def http_to_https(addr,https_port=None,new_thread=False):
+	def redirect(req):
+		client = req["client"]
+		host = req["headers"].get("host")
+		if not host:
+			#Why: can't construct redirect url without hostname.
+			response.send_response(client,400)
+			return
+		hostname = host[:host.index("]")+1] if host.startswith("[") else host.split(":",1)[0]
+		if https_port is None or https_port == 443:
+			location = "https://" + hostname + req["target"]
+		else:
+			location = "https://%s:%d%s" % (hostname,https_port,req["target"])
+		response.send_redirect(client,308,location)
+	return serve_forever(addr,redirect,(),None,new_thread)

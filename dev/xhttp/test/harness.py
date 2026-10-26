@@ -224,6 +224,19 @@ def status_code(raw):
 	except ValueError:
 		return None
 
+# --- TLS fixtures ---------------------------------------------------------
+
+def test_ssl_keys():
+	"""
+	The throwaway self-signed certificate, as serve_forever's `ssl_keys` takes it.
+
+	Test-only, and not a secret: it exists so a TLS handshake can be run
+	without an external dependency or a per-run `openssl` call. Regenerate it
+	with the command in fixtures/README.md.
+	"""
+	folder = os.path.join(HERE,"fixtures")
+	return os.path.join(folder,"cert.pem"),os.path.join(folder,"key.pem")
+
 # --- live server ----------------------------------------------------------
 
 def free_port():

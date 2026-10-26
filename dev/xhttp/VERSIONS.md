@@ -2,6 +2,41 @@
 
 > **Convention:** each entry cites the epiq ref of the release's ticket (e.g. `[ABC1234]`). Entries without a ref were released before this convention.
 
+## 1_1_0 [EVPP93Y]
+
+HTTPS redirect, restored from `dumb_http`'s `redirect_to_https` and moved into
+`serve_forever` as `redirect_from`, a trailing optional parameter. Traveller
+used to run a redirect listener beside the TLS one and dropped it when the
+server was simplified; with the game on 9200/9201 the old implementation could
+not simply return, because it built the destination from the request's `Host`
+and assumed the standard ports.
+
+`serve_forever(..., redirect_from=http_port)` starts a second listener on that
+port. Every request there is answered with **308** and
+`Location: https://<host>:<listen port><target>`. 308 rather than 301 because
+the game POSTs JSON commands, and a 301 lets a browser repeat a POST as a GET
+with the body dropped. The destination port is the listener's own - not
+`Host`'s, which is the port the client just used.
+
+The redirect is built from `req["target"]`, not `filepath`: `filepath` is
+percent-decoded and query-free, so the old `urlparse(...).path` dropped every
+query string. Percent-encoding reaches the https server as the client wrote
+it. A bracketed IPv6 `Host` keeps its brackets; 443 is omitted from Location;
+a request without `Host` gets 400, since there is no hostname to redirect to.
+
+`redirect_from` requires `ssl_keys`: an https Location pointing at a plain
+listener sends every client into a failed handshake. `err.HTTPRedirectNoSSL`
+refuses that at the call. The redirect's bind is awaited through the same
+startup promise as the main listener, so a taken http port reaches
+`await_startup` instead of being discovered only by a traceback in its thread.
+
+`http_to_https` stays internal - the public path is the option. The suite gains
+`test_https.py`: the redirect's formatting, the public option end to end, and
+the first real TLS handshake in this suite, using a throwaway self-signed
+certificate in `test/fixtures/`. **288 tests, 0 failures, 1 skipped**, up from
+276; the TLS positive path is new coverage of behaviour that had been verified
+by hand and never by the suite.
+
 ## 1_0_1 [VC9QWYY]
 
 Keep-alive, and percent-decoding of the request target. Both found by

@@ -11,7 +11,7 @@ the only tests here that touch the real kernel interface, which is the point:
 an fd leak is invisible to a mock.
 """
 
-import os,socket,threading,time,unittest,contextlib,io,harness
+import os,socket,ssl,threading,time,unittest,contextlib,io,harness
 from xhttp import xhttp
 from xhttp._ import server
 
@@ -264,10 +264,17 @@ class WrapHandlerEdgeTest(unittest.TestCase):
 		# A client that speaks plaintext to a TLS port. Must not print a
 		# traceback per attempt - notes/xhttp.md records the pass clauses for
 		# exactly this, and the listener must not die on it.
+		#
+		# This used to pass `None` as the ssl_context, so it tested plain HTTP
+		# and proved nothing. The handshake is what raises here, so the context
+		# has to be a real one.
+		certificate,private_key = harness.test_ssl_keys()
+		context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+		context.load_cert_chain(certificate,private_key)
 		a,b = socket.socketpair()
 		try:
 			b.sendall(b"GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
-			xhttp.wrap_handler(lambda req,*a: None,(),None,a,("1.2.3.4",9))
+			xhttp.wrap_handler(lambda req,*a: None,(),context,a,("1.2.3.4",9))
 		finally:
 			b.close()
 			try:

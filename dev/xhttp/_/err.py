@@ -11,6 +11,7 @@ class HTTPNegativeContentLength(HTTPError): pass
 class HTTPContentLengthBad(HTTPError): pass
 class HTTPPayloadTooBig(HTTPError): pass
 class HTTPBodyIncomplete(HTTPError): pass
+class HTTPRedirectNoSSL(HTTPError): pass
 #this is a HTTPError as a compromise
 class JSONDecodeError(HTTPError): pass
 #same
