@@ -156,6 +156,31 @@ gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Specialised moderation model, not general purpose. Registered for completeness, not as a benchmark subject."
 
+["flint-v1.0"]
+id = "recursive/flint-v1.0:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+reasoning = true
+note = "New free model, created 2026-10-21. The console's flint-40b-free is taskview #191; this is the model's free OpenRouter route, and a route is not a model, so it is a registry key of its own."
+
+["nemotron-3.5-lightning-openrouter"]
+id = "nvidia/nemotron-3.5-lightning:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "The OpenRouter route of the model measured on the console as `nemotron-3.5-lightning`. Separate key and separate corpus rows: a route is not a model."
+
+["nemotron-3.5-super-vl-openrouter"]
+id = "nvidia/nemotron-3.5-super-vl:free"
+provider = "openrouter"
+transport = "http"
+gating = "open"
+endpoint = "https://openrouter.ai/api/v1"
+note = "The OpenRouter route of the console's `nemotron-3.5-super-vl-free`. At probe on 2026-10-26 this route answered HTTP 502; that is recorded as a hole, not as a grade."
+
 # --- console models: harness-only, verified 403 on direct HTTP ---
 
 ["ling-flash-fin"]
