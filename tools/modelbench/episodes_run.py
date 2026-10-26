@@ -5,11 +5,12 @@ the previous run's fix. That is the whole point of repeating: whether a model fi
 bug on its own second and third attempts is part of what trust means.
 """
 
-import argparse,agent,hashlib,json,os,shutil,subprocess,sys,tempfile,time,tomllib,trace,transport
+import argparse,agent,hashlib,json,os,shutil,sqlite3,subprocess,sys,tempfile,time,tomllib,trace,transport
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EPISODES = os.path.join(HERE,"episodes")
 REGISTRY = os.path.join(HERE,"models.toml")
+OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
 
 # Reasoning models spend thousands of tokens thinking before answering and return EMPTY
 # content when the budget is too small (`finish_reason: length`), which reads as a model
@@ -23,6 +24,36 @@ REASONING_MAX_TOKENS = 12288
 def budget_for(model):
 	"""The per-call token budget a model needs, from the registry rather than its name."""
 	return REASONING_MAX_TOKENS if model.get("reasoning") else DEFAULT_MAX_TOKENS
+
+def session_directory(session_id):
+	"""The directory opencode actually opened a harness session in.
+
+	The harness path once opened sessions in the launch directory instead of the episode
+	sandbox: the run succeeded, the checker ran on an untouched sandbox, and the ledger's
+	audit admitted it as a result (E21). The transport now sets both `cwd` and `$PWD`, but
+	the record has to be able to say the session landed where it should have, so the run
+	carries the directory opencode itself recorded.
+
+	`""` means unverified — a missing database or an old session is not evidence of a
+	wrong directory, and the ledger treats the two differently.
+	"""
+	if not session_id:
+		return ""
+	try:
+		db = sqlite3.connect(f"file:{OPENCODE_DB}?mode=ro",uri=True)
+		try:
+			for table in ("session_v2","session"):
+				try:
+					row = db.execute(f"select directory from {table} where id=?",(session_id,)).fetchone()
+				except sqlite3.OperationalError:
+					continue
+				if row:
+					return row[0] or ""
+		finally:
+			db.close()
+	except Exception:
+		return ""
+	return ""
 
 def load_episode(name):
 	dir_path = os.path.join(EPISODES,name)
@@ -135,7 +166,11 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=None,pr
 			"n_turns":raw.get("n_turns"),"usage":raw.get("usage"),
 			"protocol":raw.get("protocol"),
 			"prompt":raw.get("prompt"),"messages":raw.get("messages"),
-			"raw":raw.get("raw"),"session":raw.get("session")},
+			"raw":raw.get("raw"),"session":raw.get("session"),
+			# Where the run meant to be, and where opencode says the session actually was.
+			# The ledger refuses a contradiction (E21); an absent value is unverified.
+			"root":raw.get("root"),
+			"session_directory":session_directory(raw.get("session"))},
 		# The confounds of the harness path travel with the result, so a report cannot
 		# quote a harness grade beside a direct grade without the difference showing.
 		# The provider's own explanation of a failed session, and the process's stderr.

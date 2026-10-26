@@ -99,6 +99,36 @@ def _baselines():
 			out[name] = trace.check_episode(d)[1]
 	return out
 
+def _provenance(trace):
+	"""Did a harness session open where the run says it did?
+
+	E21/H01QJF2: opencode 2 took the session directory from `$PWD`, so a run could succeed
+	in the launch directory while the checker ran on an untouched sandbox — and the ledger
+	admitted it, because it had turns and a full case set. The record now carries the
+	sandbox it meant to use (`trace.root`) and the directory opencode recorded for the
+	session (`trace.session_directory`).
+
+	A contradiction is a hole in the run, not a result about the model. **An absent value is
+	`unverified` and stays admissible**: only a contradiction is evidence, and the rule is
+	that a harness failure is a hole, never a finding about a model.
+	"""
+	trace = trace or {}
+	root = trace.get("root") or ""
+	actual = trace.get("session_directory") or ""
+	if not root or not actual:
+		return "unverified"
+	try:
+		if os.path.realpath(root) == os.path.realpath(actual):
+			return "matches"
+	except OSError:
+		return "unverified"
+	return "wrong directory"
+
+def _admitted(row):
+	"""The standing audit, applied to a row: a hole in a run is never read as a result."""
+	return (bool(row["grade"]) and row["cases"] > 0 and bool(row["n_turns"])
+		and row.get("session_in_sandbox") != "wrong directory")
+
 def _row(root,src,line,rec,baselines):
 	detail = rec.get("detail") or {}
 	checker = detail.get("checker") or {}
@@ -129,10 +159,13 @@ def _row(root,src,line,rec,baselines):
 		"claim":detail.get("claim"),"declared_status":detail.get("declared_status"),
 		"turns_stored":_count_turns(rec) > 0}
 	row["state_stored"] = _state_dir(root,src,row) is not None
+	# Where the session actually opened, against where it was supposed to. Only a
+	# contradiction refuses the row; old records carry neither field and stay `unverified`.
+	row["session_in_sandbox"] = _provenance(rec.get("trace") or {})
 	# The standing audit, applied to every row so a hole in a run can never be read as a
 	# result: an empty case set is a dead checker, zero turns is a run that produced
 	# nothing, and a missing grade is a rate limit or a crash. None of them is a model.
-	row["admitted"] = bool(row["grade"]) and row["cases"] > 0 and bool(row["n_turns"])
+	row["admitted"] = _admitted(row)
 	if args.check and row["turns_stored"]:
 		base = baselines.get(rec.get("episode"))
 		state = _state_dir(root,src,row)
