@@ -12,19 +12,23 @@
 Skynet's first line is `=== Skynet ===`. It carries no information about the
 quota the panel's own usage is spending. The change puts the OpenCode Go quota
 and the OpenRouter free-request quota on that line, with the absolute spend,
-the percentage used, and two pace figures that say whether the current rate is
-sustainable. The tables below it, and their height/width contract, do not
-change.
+the percentage used, and two day figures. The tables below it, and their
+height/width contract, do not change.
 
-The two pace figures are rates, not percentages of the quota used:
+The two figures are different kinds:
 
-- `pace` is the average rate since the paid period started.
-- `today` is the rate since UTC midnight.
+- `pace` is the **average rate** since the paid period started, as a
+	percentage of the **sustainable daily rate**, `limit / period_days`. At
+	100% the current rate exhausts the quota exactly at the reset; at 200% it
+	exhausts it halfway through.
+- `today` is **today's spend as a percentage of the sustainable daily
+	allowance**. It starts at 0% at the first reading of a UTC day and only
+	rises as usage grows, so it is the day's runway used — not a rate. Idle
+	time does not dilute it.
 
-Both are expressed as a percentage of the **sustainable daily rate**, which is
-`limit / period_days`. At 100% the current rate exhausts the quota exactly at
-the reset; at 200% it exhausts it halfway through. This is the human's wording
-encoded as a unit (DRAFT Q4, *What the display would look like*).
+The rate/share split is the human's 2026-10-26 ruling: pacing is done by
+stopping for the day or switching to OpenRouter, so the useful number is how
+much of the day's allowance is gone.
 
 ## Architecture
 
@@ -150,19 +154,18 @@ period_days  = (end - start) / 86400
 sustainable  = limit / period_days
 used_percent = used / limit * 100
 overall_pace = (used / (now - start in days)) / sustainable * 100
-today_pace   = ((used - day_start_used) / (now - day_start in days))
-               / sustainable * 100
+today_share  = (used - day_start_used) / sustainable * 100
 ```
 
 - `overall_pace` is `None` when `now <= start`, `period_days <= 0` or
 	`limit <= 0`.
-- `today_pace` is `None` when `day_start_used` is `None`, `now <= day_start`,
-	`used < day_start_used` or either denominator is non-positive.
+- `today_share` is `None` when `day_start_used` is `None`,
+	`used < day_start_used` or `sustainable <= 0`.
 - `used_percent` is `None` when `limit <= 0`.
-- Render round to the nearest integer. The full form says `72%/d`; the
-	abbreviated form says `p 72`.
-- `100%` is exactly the sustainable rate; `200%` exhausts the quota in half
-	the period. Tests pin both.
+- Render round to the nearest integer. The full `pace` says `72%/d` and the
+	full `today` says `42%`; the abbreviated form says `p 72` and `t 42`.
+- `100%` is exactly the sustainable rate for `pace`; `200%` exhausts the quota
+	in half the period. Tests pin both.
 
 The period start is `access.startsAt`. If the account renews and the API keeps
 the original subscription start instead of advancing it, the overall pace
@@ -171,7 +174,7 @@ one response; the DRAFT records it as a known limit.
 
 ## Day baseline
 
-The Go API has no daily history. The day pace needs a baseline reading. The
+The Go API has no daily history. The day share needs a baseline reading. The
 human's 2026-10-26 ruling is deliberately pragmatic: **the first successful
 read of a new UTC day becomes the baseline**, and usage between 00:00Z and that
 read counts as the previous day. The panel therefore does not need to observe
@@ -203,13 +206,15 @@ midnight for the pace rather than treated as the day reset.
 1. `today` is the UTC date of `now`, formatted `YYYY-MM-DD`.
 2. If the stored `day` differs from `today`, set `day_start_used` to `None`.
 	Set `day` to `today`.
-3. If `period_start` differs from the stored one, set `day_start_used` to
-	`None` (a new paid period).
-4. If `used < last_used`, set `day_start_used` to `None` (the meter reset
-	downward).
-5. If `day_start_used` is `None` — a new day, a cold start, a new period or a
-	meter reset — set it to the current `used`. Usage before this read counts
-	as the previous day.
+3. If `period_start` differs from the stored one and the stored `day` is
+	`today`, carry the day's pre-reset spend across: set `day_start_used` to
+	the old baseline minus `last_used`. On a new day, set it to `None`
+	instead.
+4. If `used < last_used` without a period change, set `day_start_used` to
+	`None` (the meter reset downward).
+5. If `day_start_used` is `None` — a new day, a cold start, a new period on a
+	new day or a meter reset — set it to the current `used`. Usage before this
+	read counts as the previous day.
 6. If `day_start_used` is already set for `today`, keep it.
 7. Update `last_used`, `last_seen` and `period_start`.
 8. Write atomically: a temporary file in the same directory, then
@@ -237,7 +242,7 @@ space after the title), fields joined by ` · `, in this order:
 |---|---|---|
 | Go | `Go $1.87/$60 3%` or `Go+ …` | `Go ?` |
 | Pace | `pace 72%/d`; omitted when the pace is `None` | omitted |
-| Today | `today 94%/d`; `today ?` when the baseline is missing; omitted when today is `None` | omitted |
+| Today | `today 94%`; `today ?` when the baseline is missing; omitted when today is `None` | omitted |
 | OpenRouter | `OR 29/1000` | `OR ?` |
 
 `absent` sources contribute nothing. If both sources are `absent`, the line is
@@ -248,7 +253,7 @@ Dollar formatting:
 - `used` dollars: two decimals (`$1.87`).
 - `limit` dollars: no decimals when integral (`$60`), otherwise two.
 - Percentage: nearest integer (`3%`).
-- Pace: nearest integer with `%/d`.
+- Pace: nearest integer with `%/d`; today: nearest integer with `%`.
 
 ### Abbreviated form (DRAFT Q4 B)
 
@@ -263,7 +268,7 @@ field:
 | OpenRouter | `OR 29/1000` | `OR ?` |
 
 The abbreviated form is the same field order and join. `p` and `t` keep the
-meaning of the full form; the `%/d` decoration is dropped for width.
+meaning of the full form; the `%/d` decoration on `pace` is dropped for width.
 
 ### Drop order
 
@@ -280,8 +285,8 @@ The acceptance table, with the measured example:
 
 | Width | Line |
 |------:|------|
-| 70+ | `=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000` |
-| 56–69 | `=== Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000` |
+| 68+ | `=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000` |
+| 56–67 | `=== Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000` |
 | 43–55 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
 | 36–42 | `=== Skynet === G $1.87/60 3% · p 72` |
 | 29–35 | `=== Skynet === G $1.87/60 3%` |
@@ -367,10 +372,9 @@ characters.
 - **R4.2** `sustainable = limit / period_days`.
 - **R4.3** `used_percent = used / limit * 100`.
 - **R4.4** `overall_pace = (used / (now - start in days)) / sustainable * 100`.
-- **R4.5** `today_pace = ((used - day_start_used) / (now - day_start in days))
-	/ sustainable * 100`.
-- **R4.6** Return `None` when a denominator is zero or negative, when
-	`used < day_start_used`, or when the needed baseline is missing.
+- **R4.5** `today_share = (used - day_start_used) / sustainable * 100`.
+- **R4.6** Return `None` when `sustainable <= 0`, when `used < day_start_used`,
+	or when the needed baseline is missing.
 - **R4.7** Round to the nearest integer at render time.
 - **R4.8** At `used = limit * (now - start) / (end - start)`, the pace is 100%;
 	at twice that, 200%.
@@ -383,8 +387,10 @@ characters.
 - **R5.3** On the first successful read of a new UTC day — or when today's
 	baseline is missing — set `day_start_used` to the current `used`; usage
 	before that read counts as the previous day (DRAFT Q2 A).
-- **R5.4** A changed `period_start` or a decreasing `used` restarts the day
-	baseline at the current `used`.
+- **R5.4** A changed `period_start` on the same day carries the pre-reset day
+	spend into the new baseline, so the day share continues rather than
+	dropping to zero; on a new day it starts at the current `used`. A
+	decreasing `used` without a period change restarts at the current `used`.
 - **R5.5** Keep an existing `day_start_used` for the same day.
 - **R5.6** Write atomically; a write failure is not fatal — the current
 	render keeps the baseline, and the next run starts from its first reading.
@@ -469,7 +475,8 @@ characters.
 - The Go meter has no daily history; a cold start mid-day attributes the
 	usage before its first read to the previous day, so `today` starts at 0%
 	from that read rather than covering the whole calendar day.
-- The Go meter may lag; the overall pace is stable, the day pace is noisier.
+- The Go meter may lag; the day share moves only when the meter does, so it can
+	jump in a batch rather than smoothly.
 - The Go meter is not Zen list price; quota dollars are the meter's unit.
 - OpenRouter's counter is a UTC-day, free-models-only counter.
 - Free usage has no nominal value in either API; "dollars saved by a

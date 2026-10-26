@@ -53,10 +53,10 @@ The first line today is `=== Skynet ===`. With all sources available and enough
 room, it uses the full form:
 
 ```
-=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000
+=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000
 ```
 
-That is 70 columns, and it is right-aligned against the pane width: the space
+That is 68 columns, and it is right-aligned against the pane width: the space
 after the title absorbs the spare columns, so the quota block reads as
 separate from the `=== Skynet ===` title. The sample shows the minimum width,
 where the gap is one space. When it does not fit, the line first switches to
@@ -72,8 +72,8 @@ right:
 
 | Width | Line |
 |------:|------|
-| 70+ | full form |
-| 56–69 | abbreviated form |
+| 68+ | full form |
+| 56–67 | abbreviated form |
 | 43–55 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
 | 36–42 | `=== Skynet === G $1.87/60 3% · p 72` |
 | 29–35 | `=== Skynet === G $1.87/60 3%` |
@@ -85,10 +85,16 @@ The boundaries are those lines' lengths; the first version of this table
 counted `=== Skynet ===` as 13 columns and was one low in seven rows. Widths
 below 14 are out of scope; the title itself is 14 columns.
 
-The `%/d` in the full form means "percent of the sustainable daily rate", not
+The `%/d` on `pace` means "percent of the sustainable daily rate", not
 "percent of the quota used today". At 100% the current rate exhausts the quota
 exactly at the reset; at 200% it exhausts it halfway through. The abbreviated
-`p` and `t` keep the same meaning without the `%/d` decoration.
+`p` keeps that meaning.
+
+**Follow-up 2026-10-26:** `today` is a different unit — **today's spend as a
+percentage of the sustainable daily allowance**. It starts at 0% at the first
+reading of the UTC day and only rises with usage; idle time does not dilute it,
+so it reads as runway used. The `%/d` decoration is gone from the full form.
+The abbreviated `t` keeps the same meaning.
 
 When the Go meter is known but the day baseline is not, `today` becomes `?`
 (full form) or `t ?` (abbreviated form):
@@ -202,14 +208,15 @@ period_days   = (R - S) / 86400
 sustainable   = L / period_days
 used_percent  = U / L * 100
 overall_pace  = (U / (T - S)) / sustainable * 100
-today_pace    = ((U - U_day_start) / (T - day_start)) / sustainable * 100
+today_share   = (U - U_day_start) / sustainable * 100
 ```
 
 - `overall_pace` is the average rate since the paid period started.
-- `today_pace` is the rate since UTC midnight. It needs `U_day_start`, the
-	meter value at UTC midnight.
-- At `100%`, the rate is exactly `sustainable`; the quota reaches `L` at `R`.
-- At `200%`, it reaches `L` at `S + period_days / 2`.
+- `today_share` is today's spend as a percentage of the sustainable daily
+	allowance. It needs `U_day_start`, the meter value at the day's first
+	reading.
+- At `100%`, the `pace` rate is exactly `sustainable`; the quota reaches `L` at
+	`R`. At `200%`, it reaches `L` at `S + period_days / 2`.
 
 Measured example (2026-10-26 02:56 EET):
 
@@ -319,9 +326,11 @@ the shape of the number.
 7. **Day baseline state.** `~/.local/share/skynet/quota.json`, storing the
 	 last meter value and the UTC date. On the first sample of a new UTC day —
 	 or when today's baseline is missing — set `day_start_used` to the current
-	 meter reading, so usage before it counts as the previous day. Write
-	 atomically (write a temp file, then `os.replace`). Ignore a corrupt file.
-	 Handle the meter resetting downward as a new period.
+	 meter reading, so usage before it counts as the previous day. A period
+	 change mid-day carries the pre-reset spend into the new baseline so the
+	 day share stays continuous. Write atomically (write a temp file, then
+	 `os.replace`). Ignore a corrupt file. Handle the meter resetting downward
+	 as a new period.
 8. **Header renderer.** A `quota_line(quota, width)` function that starts from
 	 `=== Skynet ===`. It tries the full form first, then the abbreviated form
 	 (Q4 B), then drops fields right-to-left. It must never return a line
@@ -349,7 +358,7 @@ the shape of the number.
 	 section to `tools/skynet/SPEC.md` if a spec is written; `CHANGES.md` is
 	 not the place for it.
 13. **State and permissions.** The state file is per-machine and must not be
-	 tracked. If `~/.local/share/skynet/` cannot be created, the day pace is
+	 tracked. If `~/.local/share/skynet/` cannot be created, the day share is
 	 `?` and the rest still works.
 
 ## Open questions
