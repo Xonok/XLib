@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """xlint — the repository's style checker.
 
+A checkout can carry its own policy in `tools/xlint_rules.py`, or in the file
+`.xlint.toml` names with `[rules] path`. The module is arbitrary Python: its
+`rules()` returns `{name, paths?, check}`, and `check(files)` receives the
+selected files' lines and returns findings. One module per checkout, loaded
+in-process, reloaded in watch mode, and skippable with `--no-repo-rules`.
+REPO_RULES.md is the contract.
+
 Watch mode's terminal contract — cursor, scrollback, scroll position, inotify
 and fitting — is recorded in TERMINAL.md.
 """
 
-import argparse,ast,contextlib,ctypes,errno,io,os,re,select,signal,struct,sys,termios,time,tokenize,subprocess
+import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
@@ -223,6 +230,16 @@ def find_exclusion_roots(start):
 	return [directory for directory in find_exclusion_chain(start)
 		if (directory / _IGNORE_FILE).is_file()]
 
+def find_checkout_root(start):
+	"""The checkout that owns `start`, or None when it is outside every checkout.
+
+	The same walk the exclusion chain uses, because the boundary is the same
+	one: a `.xlintignore` and a `tools/xlint_rules.py` both belong to the
+	repository that holds them, and a worktree is its own checkout.
+	"""
+	root = find_exclusion_chain(start)[-1]
+	return root if _is_checkout_root(root) else None
+
 def exclusion_reason(path, exclusions=None):
 	"""Why `path` is excluded, or None when it is not.
 
@@ -435,6 +452,361 @@ class _IgnoreRules:
 				if child.is_dir() and self.in_scope(child):
 					wanted.add(child)
 		return wanted
+
+class _RepoRuleError(Exception):
+	"""A repo rule that could not be loaded or run.
+
+	Every one of these is fatal to the run. A rule that did not run must not
+	look like a rule that found nothing, so the caller exits 1 rather than
+	reporting a clean tree.
+	"""
+
+_RULE_MODULE_SERIAL = itertools.count()
+
+def _select_all(path):
+	"""The matcher for a rule that names no `paths`: every file xlint visits."""
+	return True
+
+def _selection(patterns, base):
+	"""A matcher for one rule's `paths`, in the `.xlintignore` pattern language.
+
+	The patterns are relative to the checkout root, and the last match wins, so
+	a negation re-includes what an earlier pattern selected — the same rule
+	`.xlintignore` follows.
+	"""
+	compiled = [rule for rule in (_compile_pattern(line, base) for line in patterns) if rule is not None]
+	base = base.resolve()
+	def selects(path):
+		verdict = False
+		try:
+			relative = Path(path).resolve().relative_to(base).as_posix()
+		except ValueError:
+			return False
+		for negated, _, regex in compiled:
+			if regex.match(relative) is not None:
+				verdict = not negated
+		return verdict
+	return selects
+
+def _validate_rules(entries, path, root):
+	"""The `rules()` result as the run needs it, or the error that stops the run."""
+	if not isinstance(entries, (list, tuple)):
+		raise _RepoRuleError(f"{path}: `rules()` returned {type(entries).__name__}, expected a list")
+	rules = []
+	names = set()
+	for index, entry in enumerate(entries, start = 1):
+		if not isinstance(entry, dict):
+			raise _RepoRuleError(f"{path}: rule #{index} is {type(entry).__name__}, expected a mapping")
+		name = entry.get("name")
+		if not isinstance(name, str) or not name:
+			raise _RepoRuleError(f"{path}: rule #{index} has no name")
+		if name in names:
+			raise _RepoRuleError(f"{path}: duplicate rule name '{name}'")
+		names.add(name)
+		unknown = set(entry) - {"name", "paths", "check"}
+		if unknown:
+			raise _RepoRuleError(f"{path}: rule '{name}' has unknown keys: {', '.join(sorted(unknown))}")
+		check = entry.get("check")
+		if not callable(check):
+			raise _RepoRuleError(f"{path}: rule '{name}' has no `check` callable")
+		selection = entry.get("paths")
+		if selection is None:
+			selects = _select_all
+		elif not isinstance(selection, (list, tuple)) or not all(isinstance(item, str) for item in selection):
+			raise _RepoRuleError(f"{path}: rule '{name}' has `paths` that is not a list of strings")
+		else:
+			selects = _selection(selection, root)
+		rules.append({"name": name, "check": check, "selects": selects})
+	return rules
+
+def _findings(result, path, rule):
+	"""Validate one rule's return value, and normalise it to `(Path, line, message)`."""
+	if result is None:
+		raise _RepoRuleError(f"{path}: rule '{rule}' returned None, expected findings")
+	try:
+		items = list(result)
+	except TypeError as error:
+		raise _RepoRuleError(f"{path}: rule '{rule}' returned {type(result).__name__}, expected findings") from error
+	found = []
+	for item in items:
+		if not isinstance(item, (tuple, list)) or len(item) != 3:
+			raise _RepoRuleError(f"{path}: rule '{rule}' returned {item!r}, expected (path, line, message)")
+		offender, line, message = item
+		if not isinstance(offender, (str, Path)):
+			raise _RepoRuleError(f"{path}: rule '{rule}' returned a finding whose path is {type(offender).__name__}")
+		if line is not None and (not isinstance(line, int) or isinstance(line, bool) or line < 1):
+			raise _RepoRuleError(f"{path}: rule '{rule}' returned line {line!r}, expected 1 or greater, or None")
+		if not isinstance(message, str):
+			raise _RepoRuleError(f"{path}: rule '{rule}' returned a finding whose message is {type(message).__name__}")
+		found.append((Path(offender), line, message))
+	return found
+
+def _load_rules(path, root):
+	"""Import one rule module afresh, and validate what its `rules()` returns.
+
+	The source is read and compiled here rather than handed to `importlib` for
+	one reason: the bytecode cache keys on mtime and size, so a same-size edit
+	within the filesystem's timestamp granularity would run the old code. That
+	is exactly what a watch-mode reload must not do. A fresh module object is
+	created each time, and dropped from `sys.modules` by the next load or by a
+	failed one.
+	"""
+	name = f"_xlint_repo_rules_{next(_RULE_MODULE_SERIAL)}"
+	try:
+		source = path.read_text(encoding = "utf-8")
+	except (OSError, UnicodeDecodeError) as error:
+		raise _RepoRuleError(f"{path}: cannot read the module: {error}") from error
+	try:
+		code = compile(source, str(path), "exec")
+	except SyntaxError as error:
+		raise _RepoRuleError(f"{path}: import failed: SyntaxError: {error}") from error
+	spec = importlib.util.spec_from_file_location(name, path,
+		submodule_search_locations = [str(path.parent)] if path.name == "__init__.py" else None)
+	if spec is None or spec.loader is None:
+		module = types.ModuleType(name)
+	else:
+		module = importlib.util.module_from_spec(spec)
+	module.__file__ = str(path)
+	sys.modules[name] = module
+	try:
+		try:
+			exec(code, module.__dict__)
+		except (Exception, SystemExit) as error:
+			raise _RepoRuleError(f"{path}: import failed: {type(error).__name__}: {error}") from error
+		runner = getattr(module, "rules", None)
+		if runner is None:
+			raise _RepoRuleError(f"{path}: no `rules()` function")
+		if not callable(runner):
+			raise _RepoRuleError(f"{path}: `rules` is not callable")
+		try:
+			entries = runner()
+		except (Exception, SystemExit) as error:
+			raise _RepoRuleError(f"{path}: `rules()` raised {type(error).__name__}: {error}") from error
+		return name, _validate_rules(entries, path, root)
+	except BaseException:
+		sys.modules.pop(name, None)
+		raise
+
+class _RepoModule:
+	"""One checkout's repo rules: the module it resolves to, and its rules.
+
+	The config is read on every load, so a `.xlint.toml` that appears, moves or
+	breaks is honoured without restarting. A load that fails stores the error
+	instead of raising, so watch mode can show it and retry; `problems` is
+	where a stored error becomes fatal.
+	"""
+
+	def __init__(self, root):
+		self.root = root
+		self.config = root / ".xlint.toml"
+		self.default = root / "tools" / "xlint_rules.py"
+		self.target = None
+		self.rules = []
+		self.error = None
+		self.module_name = None
+		self.load()
+
+	def candidates(self):
+		"""The files whose change can change this checkout's rules."""
+		paths = [self.config, self.default]
+		if self.target is not None:
+			paths.append(self.target)
+		return paths
+
+	def state(self):
+		"""A stamp over the config, the default module and the configured module."""
+		return tuple((str(path), stamp(path)) for path in self.candidates())
+
+	def load(self):
+		"""Read the config and load the module it names, or the default one.
+
+		The previous module is dropped from `sys.modules` first, so a reload
+		executes the file that is on disk now rather than reusing the module
+		from the run before.
+		"""
+		self.error = None
+		self.rules = []
+		self.target = None
+		if self.module_name is not None:
+			sys.modules.pop(self.module_name, None)
+			self.module_name = None
+		try:
+			target = self._configured()
+			if target is None and self.default.is_file():
+				target = self.default
+			self.target = target
+			if target is None:
+				return
+			if not target.exists():
+				raise _RepoRuleError(f"{self.config}: [rules] path does not exist: {target}")
+			if not target.is_file():
+				raise _RepoRuleError(f"{self.config}: [rules] path is not a file: {target}")
+			self.module_name, self.rules = _load_rules(target, self.root)
+		except _RepoRuleError as error:
+			self.error = error
+
+	def _configured(self):
+		"""The path `.xlint.toml` names, or None when it has no `[rules]` table.
+
+		The path is relative to the checkout root and must stay inside it. An
+		absolute path, or one that climbs out with `..`, is an error rather than
+		a silent load of a file the repository does not carry.
+		"""
+		if not self.config.is_file():
+			return None
+		try:
+			data = tomllib.loads(self.config.read_text(encoding = "utf-8"))
+		except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+			raise _RepoRuleError(f"{self.config}: {error}") from error
+		section = data.get("rules")
+		if section is None:
+			return None
+		if not isinstance(section, dict):
+			raise _RepoRuleError(f"{self.config}: [rules] must be a table")
+		path = section.get("path")
+		if not isinstance(path, str) or not path:
+			raise _RepoRuleError(f"{self.config}: [rules] needs a `path` string")
+		candidate = Path(path)
+		if candidate.is_absolute():
+			raise _RepoRuleError(f"{self.config}: [rules] path must stay inside the checkout: {path}")
+		target = (self.root / candidate).resolve()
+		if target != self.root and self.root not in target.parents:
+			raise _RepoRuleError(f"{self.config}: [rules] path must stay inside the checkout: {path}")
+		return target
+
+class _RepoRules:
+	"""Every checkout a run touches, and the repo rules each one carries.
+
+	The watched paths decide which checkouts exist at startup; a nested
+	checkout is discovered when one of its files reaches `problems`, and its
+	own module governs those files from then on. A path outside every checkout
+	has no repo rules.
+	"""
+
+	def __init__(self, paths):
+		self.paths = [Path(path) for path in paths]
+		self.entries = {}
+		for path in self.paths:
+			root = find_checkout_root(path)
+			if root is not None:
+				self._entry(root)
+		self.state = self._state()
+
+	def _entry(self, root):
+		"""The rules of one checkout, loaded on first use."""
+		if root not in self.entries:
+			self.entries[root] = _RepoModule(root)
+		return self.entries[root]
+
+	def _state(self):
+		"""A stamp over every file that can change the loaded rules."""
+		return tuple((str(root), entry.state()) for root, entry in self.entries.items())
+
+	def watch_dirs(self):
+		"""The directories whose files can change the rules.
+
+		The nearest existing parent is used for a candidate that does not exist
+		yet, because inotify cannot watch a directory that is not there; the
+		checkout root is watched so the creation of `tools/` is seen.
+		"""
+		dirs = set()
+		for entry in self.entries.values():
+			for path in entry.candidates():
+				parent = path.parent
+				while not parent.is_dir() and parent != parent.parent:
+					parent = parent.parent
+				dirs.add(parent)
+		return dirs
+
+	def refresh(self):
+		"""Reload the rules when a config or module changed, and say whether it did."""
+		before = self._state()
+		if before == self.state:
+			return False
+		for entry in self.entries.values():
+			entry.load()
+		self.state = before
+		return True
+
+	def problems(self, files):
+		"""The findings of every checkout's rules over `files`.
+
+		Each rule is called once with every file it selects, so a rule can
+		compare files. A load or run error is raised: a rule that did not run
+		must not be mistaken for one that found nothing.
+		"""
+		grouped = {root: [] for root in self.entries}
+		for path in files:
+			root = find_checkout_root(path)
+			if root is None:
+				continue
+			self._entry(root)
+			grouped.setdefault(root, []).append(path)
+		for root in list(self.entries):
+			entry = self.entries[root]
+			if entry.error is not None:
+				raise entry.error
+		found = []
+		for root, group in grouped.items():
+			entry = self.entries[root]
+			texts = {}
+			for path in group:
+				try:
+					texts[path] = path.read_text(encoding = "utf-8").splitlines()
+				except (OSError, UnicodeDecodeError):
+					continue
+			for rule in entry.rules:
+				selected = [(path, texts[path]) for path in group if path in texts and rule["selects"](path)]
+				try:
+					result = rule["check"](selected)
+				except (Exception, SystemExit) as error:
+					raise _RepoRuleError(f"{entry.target}: rule '{rule['name']}' raised {type(error).__name__}: {error}") from error
+				found.extend(_findings(result, entry.target, rule["name"]))
+		return found
+
+class _Rules:
+	"""The rule set in force for one run: built-in exclusions plus repo rules.
+
+	`_IgnoreRules` decides what is in scope; `_RepoRules` decides what the
+	checkouts in scope add to the report. They are separate because an ignore
+	file can exclude a file from the run, and a repo rule cannot: a rule
+	selects files to inspect, and the report is built from every file the run
+	visits.
+	"""
+
+	def __init__(self, paths, repo_rules = True):
+		self.ignores = _IgnoreRules(paths)
+		self.repo = _RepoRules(paths) if repo_rules else None
+
+	def files(self):
+		return self.ignores.files()
+
+	def skipped(self):
+		return self.ignores.skipped()
+
+	def watch_dirs(self):
+		dirs = self.ignores.watch_dirs()
+		if self.repo is not None:
+			dirs |= self.repo.watch_dirs()
+		return dirs
+
+	def for_path(self, path):
+		return self.ignores.for_path(path)
+
+	def in_scope(self, path):
+		return self.ignores.in_scope(path)
+
+	def refresh(self):
+		changed = self.ignores.refresh()
+		if self.repo is not None and self.repo.refresh():
+			changed = True
+		return changed
+
+	def repo_problems(self, files):
+		"""The repo findings, or an empty list when `--no-repo-rules` is in force."""
+		if self.repo is None:
+			return []
+		return self.repo.problems(files)
 
 def check_double_blank(lines):
 	report = []
@@ -1500,22 +1872,45 @@ def _watch_cursor():
 		sys.stdout.write(_LEAVE_WATCH)
 		sys.stdout.flush()
 
-def draw(snapshot, skipped=(), notices=()):
+def _finding_text(path, line, message):
+	"""One finding as the report prints it; a file-level finding has no line."""
+	if line is None:
+		return f"{path}: {message}"
+	return f"{path}:{line}: {message}"
+
+def _finding_key(finding):
+	"""The report's order, with a file-level finding sorting before line 1."""
+	path, line, message = finding
+	return (str(path), -1 if line is None else line, message)
+
+def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
 	for notice in notices:
 		print(notice)
+	if error is not None:
+		print(f"repo rules: {error}", flush=True)
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked", flush=True)
 	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
-	for path, line, msg in sorted(found):
-		print(f"{path}:{line}: {msg}", flush=True)
+	found.extend(repo)
+	for path, line, msg in sorted(found, key=_finding_key):
+		print(_finding_text(path, line, msg), flush=True)
 	if found:
 		print(f"{len(found)} problem(s)", flush=True)
+	elif error is not None:
+		print("repo rules failed", flush=True)
 	elif skipped:
 		print("nothing checked", flush=True)
 	else:
 		print("clean", flush=True)
+
+def _repo_report(rules, files):
+	"""The repo findings, or the load/run error that replaced them."""
+	try:
+		return rules.repo_problems(files), None
+	except _RepoRuleError as error:
+		return [], str(error)
 
 def watch(rules, args):
 	"""Watch the paths, and redraw the report as they change.
@@ -1524,14 +1919,18 @@ def watch(rules, args):
 	moves the scope, and a scope that moved is read again from the top. That is
 	the only way a newly ignored file can leave the report and a newly
 	un-ignored one can enter it — and the reload prints nothing of its own, so
-	what the screen shows is the report and nothing else.
+	what the screen shows is the report and nothing else. A repo rule module is
+	a rule too: its errors are shown and retried when the module or config
+	changes, rather than ending the watch.
 	"""
 	with _watch_cursor():
-		snapshot = {path: check_file(path, args) for path in rules.files()}
+		files = rules.files()
+		snapshot = {path: check_file(path, args) for path in files}
+		repo, error = _repo_report(rules, files)
 		skipped = rules.skipped()
 		watcher = make_watcher(rules)
 		notices = watcher.notices()
-		draw(snapshot, skipped, notices)
+		draw(snapshot, skipped, notices, repo, error)
 		while True:
 			changed = {}
 			reloaded = False
@@ -1544,10 +1943,12 @@ def watch(rules, args):
 				else:
 					changed.setdefault(path, action)
 			if reloaded:
-				snapshot = {path: check_file(path, args) for path in rules.files()}
+				files = rules.files()
+				snapshot = {path: check_file(path, args) for path in files}
+				repo, error = _repo_report(rules, files)
 				skipped = rules.skipped()
 				notices = watcher.notices()
-				draw(snapshot, skipped, notices)
+				draw(snapshot, skipped, notices, repo, error)
 				continue
 			dirty = False
 			for path, action in changed.items():
@@ -1569,12 +1970,14 @@ def watch(rules, args):
 				dirty = True
 				notices = current_notices
 			if dirty:
-				draw(snapshot, skipped, notices)
+				repo, error = _repo_report(rules, list(snapshot))
+				draw(snapshot, skipped, notices, repo, error)
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
 	parser.add_argument("paths", nargs="*", type=Path, default=[Path(".")])
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
+	parser.add_argument("--no-repo-rules", action="store_true", help="do not load the checkout's repo rules")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
 	parser.add_argument("--no-space-indent", action="store_true", help="disable space indentation check")
 	parser.add_argument("--no-trailing", action="store_true", help="disable trailing whitespace check")
@@ -1601,7 +2004,7 @@ def main():
 		if not entry.exists():
 			parser.error(f"not found: {entry}")
 
-	rules = _IgnoreRules(args.paths)
+	rules = _Rules(args.paths, repo_rules = not args.no_repo_rules)
 	skipped = rules.skipped()
 
 	if args.watch:
@@ -1612,17 +2015,25 @@ def main():
 			pass
 		return 0
 
+	files = rules.files()
+	try:
+		repo = rules.repo_problems(files)
+	except _RepoRuleError as error:
+		print(f"{NAME}: {error}", file = sys.stderr)
+		return 1
 	problems = []
-	for path in rules.files():
+	for path in files:
 		problems.extend((path, line, msg) for line, msg in check_file(path, args))
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked")
-	if not problems:
+	if not problems and not repo:
 		print("nothing checked" if skipped else "clean")
 		return 0
 	for path, line, msg in problems:
 		print(f"{path}:{line}: {msg}")
-	print(f"{len(problems)} problem(s)")
+	for path, line, msg in repo:
+		print(_finding_text(path, line, msg))
+	print(f"{len(problems) + len(repo)} problem(s)")
 	return 1
 
 if __name__ == "__main__":
