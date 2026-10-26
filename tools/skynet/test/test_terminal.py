@@ -4,6 +4,10 @@ Skynet used to stat the database once a second. That is polling even when the
 kernel could have said exactly when it changed, so the watch now listens on
 the database's directory and only falls back to the stamp when inotify is
 not there.
+
+The stamp still decides whether a wakeup was a real write: a read-only SQLite
+connection opens and closes the WAL and the shared-memory file, which looks
+like activity to the directory watch but leaves both mtimes alone.
 """
 import io,os,sys,tempfile
 from contextlib import redirect_stdout
@@ -54,6 +58,77 @@ def test_inotify_reports_a_write_to_a_watched_file():
 	xtest.true(
 		any(watched == path and mask & (skynet._IN_CLOSE_WRITE | skynet._IN_MODIFY) for mask, watched in events),
 		f"the write was reported: {events}")
+
+def test_an_open_and_close_without_a_write_is_not_a_change():
+	if not skynet.HAS_INOTIFY:
+		return "skipped: inotify is not available on this machine"
+	with tempfile.TemporaryDirectory() as folder:
+		db = Path(folder) / "opencode.db"
+		wal = Path(folder) / "opencode.db-wal"
+		db.write_text("", encoding="utf-8")
+		wal.write_text("", encoding="utf-8")
+		saved = skynet.DB_PATH
+		skynet.DB_PATH = str(db)
+		watcher = skynet._Inotify()
+		try:
+			watcher.add(Path(folder))
+			stamp = skynet.db_stamp()
+			watcher.read(0.1)
+			# A read-only query opens these for writing and closes them without
+			# writing, which is the event that used to redraw the pane forever.
+			for path in (db, wal):
+				with open(path, "ab"):
+					pass
+			stamp, changed = skynet._db_changed(watcher, stamp, timeout=0.5)
+			current = skynet.db_stamp()
+		finally:
+			watcher.close()
+			skynet.DB_PATH = saved
+	xtest.true(not changed, "an open-close without a write is not a change")
+	xtest.equal(stamp, current, "the old stamp still describes the database")
+
+def test_a_write_is_a_change():
+	if not skynet.HAS_INOTIFY:
+		return "skipped: inotify is not available on this machine"
+	with tempfile.TemporaryDirectory() as folder:
+		db = Path(folder) / "opencode.db"
+		wal = Path(folder) / "opencode.db-wal"
+		db.write_text("", encoding="utf-8")
+		wal.write_text("", encoding="utf-8")
+		saved = skynet.DB_PATH
+		skynet.DB_PATH = str(db)
+		watcher = skynet._Inotify()
+		try:
+			watcher.add(Path(folder))
+			stamp = skynet.db_stamp()
+			watcher.read(0.1)
+			with open(wal, "ab") as handle:
+				handle.write(b"a message")
+			stamp, changed = skynet._db_changed(watcher, stamp, timeout=0.5)
+			current = skynet.db_stamp()
+		finally:
+			watcher.close()
+			skynet.DB_PATH = saved
+	xtest.true(changed, "a write to the WAL is a change")
+	xtest.equal(stamp, current, "the stamp follows the write")
+
+def test_without_inotify_the_stamp_decides():
+	with tempfile.TemporaryDirectory() as folder:
+		db = Path(folder) / "opencode.db"
+		db.write_text("", encoding="utf-8")
+		saved = skynet.DB_PATH
+		skynet.DB_PATH = str(db)
+		try:
+			stamp = skynet.db_stamp()
+			stamp, changed = skynet._db_changed(None, stamp, timeout=0)
+			quiet = not changed
+			with open(db, "ab") as handle:
+				handle.write(b"a message")
+			stamp, changed = skynet._db_changed(None, stamp, timeout=0)
+		finally:
+			skynet.DB_PATH = saved
+	xtest.true(quiet, "an unchanged database is not a change")
+	xtest.true(changed, "the polling fallback sees a write")
 
 def test_there_is_no_database_watch_when_inotify_is_missing():
 	saved = skynet.HAS_INOTIFY

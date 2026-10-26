@@ -855,6 +855,23 @@ def _db_watcher():
 		return None
 	return watcher
 
+def _db_changed(watcher, stamp, timeout=_POLL_SECONDS):
+	"""Whether the database itself changed since `stamp`.
+
+	An inotify wakeup is only a hint. SQLite opens and closes the WAL and the
+	shared-memory file beside the database for a read-only query, and those
+	opens are `IN_CLOSE_WRITE` events on names that look like the database —
+	so trusting the event makes the tool wake itself forever. The mtimes are
+	what decide: a read leaves them alone.
+	"""
+	if watcher is not None:
+		if not watcher.read(timeout):
+			return stamp, False
+	else:
+		time.sleep(timeout)
+	current = db_stamp()
+	return current, current != stamp
+
 def watch(window_hours):
 	with _fullscreen():
 		quota = sample_quota()
@@ -869,14 +886,7 @@ def watch(window_hours):
 		stamp = db_stamp()
 		try:
 			while True:
-				changed = False
-				if watcher is not None:
-					changed = any(path.name.startswith("opencode.db") for _, path in watcher.read(_POLL_SECONDS))
-				else:
-					time.sleep(_POLL_SECONDS)
-					current = db_stamp()
-					changed = current != stamp
-					stamp = current
+				stamp, changed = _db_changed(watcher, stamp)
 				refresh_quota = time.monotonic() >= quota_due
 				current_size = terminal_size()
 				if not changed and current_size == size and not refresh_quota:
