@@ -83,6 +83,9 @@ where `xhttp.py` lives and where its `from _ import helper,err` resolves.
 	the declared length; anything past it belongs to the next request.
 - **dumb_http parity table** — one test per actual call site in the repo,
 	so the replacement gap is measured rather than guessed.
+- **TLS and the redirect** — `test_https.py` completes a real handshake with
+	the fixture certificate and checks the 308 Location: query string, rewritten
+	port, IPv6 brackets, 443 and a missing `Host`.
 - **Preflight check** — `run.py` reports the state of the response path
 	before the first test, so a cascade of `NameError` does not hide the real
 	causes.

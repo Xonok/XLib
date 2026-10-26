@@ -37,8 +37,12 @@ dev/xhttp/
 	_/
 		err.py        HTTPError and its subclasses
 		helper.py
+		request.py    request parsing
+		response.py   response building and file serving
+		server.py     listener, handler loop, HTTPS redirect
 		websocket.py  native websocket; frames and handshakes itself
-	test/           test suite, 115 tests
+	test/           test suite
+	compare/        temporary RFC comparison material
 	SPEC.md         this file
 	README.md       short overview
 ```
@@ -84,7 +88,8 @@ accepted sock gettimeout : None     -> NOT inherited
 ```
 
 An accepted socket is fully blocking, so a peer that connects and stalls
-mid-handshake blocks a thread for as long as it likes. `xhttp.py:47` now sets
+mid-handshake blocks a thread for as long as it likes. `_/server.py`'s accept
+loop now sets
 `settimeout(60)` on accepted sockets, which is the only defence. Verified in
 the test suite as `test_accepted_socket_has_no_timeout`.
 
@@ -133,7 +138,7 @@ losing the query string because `self.path` was overwritten with a parsed
 value, which broke websocket login with a `KeyError` on every connection.
 
 Implemented: `read_request` returns `leftover`, and `wrap_handler` feeds it
-back as the next request's buffer (`xhttp.py:63`).
+back as the next request's buffer (the handler loop in `_/server.py`).
 
 **7. The websocket is implemented natively, not through the HTTP response
 writer.**
@@ -146,8 +151,39 @@ instead assembles the whole handshake into a dict and sends it in one
 
 The two items that were blocking the websocket — the incremental writer and
 `read_exact(n)` — are therefore **not needed as originally specified**.
-`read_exact` does exist (`xhttp.py:178`) because framing needs it; the
+`read_exact` does exist (`_/request.py`) because framing needs it; the
 incremental writer does not exist and should not be added without a caller.
+
+**8. The https redirect is a `serve_forever` option, and it trusts the request
+target over `filepath`.**
+
+`dumb_http` carried a separate `redirect_to_https` server class. The replacement
+is the same listener with `redirect_from=http_port`: the caller names the source
+port, and the destination is always the port the server is already listening on.
+That is the part that changed with Traveller - the old implementation built the
+Location from `Host` and assumed 80/443, which is wrong once the game runs on
+9200/9201.
+
+The Location is `"https://" + hostname + req["target"]`. **`target`, not
+`filepath`** - `filepath` is percent-decoded and carries no query, so the old
+`urlparse(...).path` dropped every query string; a redirect that loses `?v=2`
+looks like a working redirect and behaves like a different page. Percent-encoding
+therefore reaches the https server as the client wrote it. `Host` supplies the
+hostname only; its port is replaced with the listener's own, a bracketed IPv6
+address keeps its brackets, 443 is written without a port, and a request without
+`Host` gets 400 - there is no hostname to redirect to.
+
+**308, not 301.** A 301 lets a client repeat a POST as a GET with the body
+dropped; the game's commands are POSTed JSON, so that is a lost command rather
+than a lost page. 308 preserves the method and body. It is also cached
+permanently, which is the point of a permanent redirect but worth knowing when
+`https_port` is turned back off.
+
+`redirect_from` requires `ssl_keys` and refuses without them
+(`err.HTTPRedirectNoSSL`): an https Location pointing at a plain listener sends
+every client into a failed handshake. The redirect's own bind is awaited through
+the same startup promise as the main listener, so a taken http port reaches
+`await_startup` instead of only the thread that tried to bind it.
 
 ## Traps not to re-introduce
 
@@ -164,7 +200,7 @@ incremental writer does not exist and should not be added without a caller.
 	clauses are never tried. `socket.error` **is** `OSError`, so an `EWOULDBLOCK`
 	test inside it silently swallows anything else in that category.
 
-## State as of 2026-10-10
+## State as of 2026-10-26
 
 Measured by running the suite, not read off the screen.
 
@@ -172,59 +208,50 @@ Measured by running the suite, not read off the screen.
 |-------|-------|
 | Listener, TLS, per-connection threading, error containment | done and verified |
 | Request parsing | done — method, target, headers, body; enforces Content-Length; rejects chunked, duplicate, capitalized and invalid; returns `filepath`, `payload` and `leftover` |
-| Response building | done — status line, headers, body, gzip, auto headers; `send_file` config shape still mismatched (below) |
-| Tests | `--core` **103 passed, exit 0**. Full **115 tests, 1 failure, 2 skipped**. The failure is an edge test, `test_two_requests_in_one_segment` (pipelining) |
-| dumb_http parity | **8/8** call-site capabilities present |
-| Websocket | `_/websocket.py` written, **not yet runnable** — see below |
+| Response building | done — status line, headers, body, gzip filtered through `Accept-Encoding`, auto headers; `send_file` resolves root and target through `realpath` and refuses anything outside the root |
+| HTTPS redirect | done — `serve_forever(..., redirect_from=http_port)` answers every request with a 308 to the TLS port, requires `ssl_keys`, and reports a failed redirect bind through `await_startup` |
+| Tests | **288 tests, 0 failures, 1 skipped** (`python3 dev/xhttp/test/run.py`) |
+| dumb_http parity | **8/8** call-site capabilities present, plus the `redirect_to_https` server dumb_http also had |
+| Websocket | implemented, exercised end to end, and covered by the suite; two consumer-error faults and the uninterruptible listener remain, tracked on epi `Z70VRAC` |
 
-The one outstanding failure is `ParseEdgeTest.test_two_requests_in_one_segment`:
-the second request in a pipelined segment is drained before the test can read
-it. It is tagged `@harness.edge`, so it is documented backlog rather than a
-blocker.
-
-### The websocket does not currently run
-
-`from xlib_dev import xhttp` **works** — import chain fixed.
-
-The defects that remain in `_/websocket.py`:
-
-- **`sender` thread leak**: `serve_websocket` starts `sender` and `receiver` threads.
-	`receiver` breaks on error and calls `on_close`. `sender` loops forever on
-	`ctx["_send"].get()` with no shutdown path. If `send()` is called after the
-	connection drops, the queue grows unbounded and the thread is never
-	recycled. No sentinel, no socket-liveness check, no cleanup.
-- `queue` imported but unused (the `queue.Queue` is created in `context()`).
-- The websocket has never been exercised end-to-end.
-
-The `key_hash` typo, `_send` arg order, and `on_message` msg pass were fixed 2026-10-10.
+The websocket's remaining faults: an exception from the caller's `on_message`
+still ends the connection, an exception from `on_open` still writes an HTTP 500
+into the upgraded stream, and the listener has no timeout so `accept()` cannot
+be interrupted. The idle-60s kill and the skipped `on_close` on a close frame
+are fixed. None of these is consumer-side.
 
 ## Open
 
-- **`send_file` config shape** — resolved 2026-10-13. `send_file` takes a
-	mapping from extension to a **dict** with `folder`, `mime` and `compress`
-	keys; it was never meant to take a tuple. `Space-Traveller/config/files.json`
-	holds a `cache` key the library does not read. Undecided still whether
-	`xhttp` reads that file directly or takes a mapping.
-- **`send_file` traversal guard** — rejects the literal token `".."`, which is
-	weaker than a `realpath`-inside-`realpath(cwd)` check.
-	Path traversal is live on `dumb_http` as soon as file serving becomes
-	config-driven, so this belongs in `xhttp`.
+- **`send_file` config shape** — resolved 2026-10-13, and the remaining half is
+	settled by the leaf rule: `send_file` takes a mapping from extension to a
+	**dict** with `folder`, `mime` and `compress` keys; it never takes a tuple and
+	it does not read config itself. `Space-Traveller/config/files.json` holds a
+	`cache` key the library does not read.
+- **`send_file` traversal guard** — resolved 2026-10-23, in `1_0_2`. The guard
+	resolves the serving root and the target with `os.path.realpath` and refuses
+	anything outside the root, so a symlink cannot escape the served folder. The
+	literal-`..` token check is kept as a cheap second gate.
 - **Header dict is lowercase-only.** `read_request` lowercases names
 	and xhttp's own call sites use lowercase. The dict is still
 	a plain `dict`, so an external caller writing `headers.get("X-Real-IP")`
 	gets `None`. Either subclass it case-insensitively or document that callers
 	lowercase.
-- **`send_not_found` / `serve_files`** — no direct coverage in the suite.
-- **Websocket** — the six defects above. **`send()` message-type validation is
-	no longer on this list**: it validates (`_/websocket.py:62-65`), and the two
-	tests that said otherwise had `pass` inside their `assertRaises` — they were
-	never written, so the suite read as a defect where there was none (epi
-	`7Z7DE78`, closed 2026-10-18). The suite is **223 tests, 0 failures, 1
-	skipped**, against the source and against a bundle.
+- **`send_not_found` / `serve_files`** — covered since 2026-10-23 by
+	`test_file_serving.py` (`ServeFilesTest`, `SendNotFoundTest`).
+- **Websocket** — the implementation is exercised end to end and covered by the
+	suite. Two consumer-error faults and the uninterruptible listener remain,
+	tracked on epi `Z70VRAC`: an `on_message` exception is treated as a fatal
+	transport error, an `on_open` exception writes an HTTP 500 into an already
+	upgraded stream, and the listening socket has no timeout. The idle-60s kill
+	and the missing `on_close` on a close frame are fixed. **`send()`
+	message-type validation is not on this list**: it validates
+	(`_/websocket.py:62-65`), and the two tests that said otherwise had `pass`
+	inside their `assertRaises` — they were never written, so the suite read as
+	a defect where there was none (epi `7Z7DE78`, closed 2026-10-18).
 - **The `dev/xhttp/` folder is tracked** as of `ba84849` and `0a0dcd8`
 	(2026-10-13/14). What is untracked is nothing in it.
 
-## The error hierarchy — why nineteen classes
+## The error hierarchy — why twenty classes
 
 Recorded 2026-10-18, from the human, because it is the reasoning behind a shape
 that looks like duplication and is not.
@@ -232,8 +259,11 @@ that looks like duplication and is not.
 **The classes are separate so a caller *can* discriminate.** The point is to
 leave the option open: a caller that wants to forward certain errors to its client
 — a `HTTPDoubleDotForbidden` as a 403, say — can, and one that does not care can
-catch `HTTPError`. That asymmetry is the whole reason there are nineteen rather
+catch `HTTPError`. That asymmetry is the whole reason there are twenty rather
 than one. Throwing a single exception class everywhere would remove it.
+`HTTPRedirectNoSSL` is the one that reports a misconfiguration rather than a
+request failure; it is separate so a caller can name it, and it is raised
+before a listener starts rather than from a handler.
 
 **`HTTPError` is the broad catch on purpose.** It is the base of all of them, so
 a caller who wants to silence xhttp without silencing python's errors generally
@@ -244,7 +274,7 @@ catches `HTTPError` and nothing else. It is what `wrap_handler`'s blanket
 bundler's spec makes a local module import bind nothing, so a bundle has no `err`
 attribute and no module objects at all — `xhttp.err.HTTPError` is an
 `AttributeError` against a bundle. **The root file is therefore the only place a
-caller of a bundle can reach these**, which is what the nineteen
+caller of a bundle can reach these**, which is what the twenty
 `err_HTTPError = err.HTTPError` lines in `xhttp.py` are for. They are public API,
 not duplication, and they exist in the source for the same reason: the root is
 what a caller is meant to see.

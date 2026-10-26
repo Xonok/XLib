@@ -3,6 +3,14 @@
 This is a replacement for dumb\_http.py and websocket.py
 It's meant to be more generic and easier to use, but support the same features.
 
+## What it provides
+
+HTTP/1.1 with keep-alive, TLS on the accepted connection
+(`serve_forever(..., ssl_keys=(certificate, private_key))`), an optional
+HTTP-to-HTTPS redirect (`redirect_from=http_port`), WebSocket, file serving
+from a caller-supplied mapping, and gzip filtered through the request's
+`Accept-Encoding`.
+
 ## Key differences compared to dumb_http
 
 No class bloat. Classes are only used where they are entirely unavoidable - for error types.

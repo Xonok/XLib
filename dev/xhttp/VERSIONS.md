@@ -37,6 +37,46 @@ certificate in `test/fixtures/`. **288 tests, 0 failures, 1 skipped**, up from
 276; the TLS positive path is new coverage of behaviour that had been verified
 by hand and never by the suite.
 
+## 1_0_2 [BFNRBG7]
+
+Gzip content-coding negotiation, the pipelining fix, and the two collected
+changes that had been waiting for a release.
+
+**`send_response_full` now filters compression through the request's
+`Accept-Encoding`.** Before this it compressed whenever `compress=True`, so a
+client that sent no header, an empty one, or `gzip;q=0` was answered with
+`Content-Encoding: gzip`. The parser is `helper.accept_encodings`; the answer
+is stored per request in the thread-local response state and cleared after
+every handler, so a keep-alive connection cannot inherit the previous
+request's choice. **Outside a request the server's own `compress` flag
+stands** - the human's ruling of 2026-10-21: the negotiation filters the
+server's decision, and there is no client statement to filter against when a
+caller invokes the library directly. **`send_file` now resolves the serving
+root and the target with `os.path.realpath` and refuses anything outside the
+root**, replacing the literal-`..` token check; a symlink can no longer escape
+the served folder.
+
+**`wrap_handler` keeps `buffer = req["leftover"]` again.** The line was lost in
+1_0_1, so two requests that arrived in one TCP segment hung the connection and
+leaked the thread: the first was answered, the second was never read
+(`7VFKBXT`). The test that pins it is `test_pipelining.py`.
+
+**The two collected changes** (`AC9YJYQ`): `HTTPDoubleDotForbidden` now gets a
+400 instead of falling through to the generic handler, which printed a
+traceback and closed the client, and the redundant `client.close()` in the 505
+branch is gone; `serve_forever` takes `max_requests` in its public signature,
+where the server had it internally all along.
+
+The negotiation's implementation also found a bundler defect - two modules
+using the same bare helper name produced a bundle that compiled, was
+xlint-clean, and raised `NameError` on its first call (`BDHZNY6`). This release
+avoids it by naming the helper and the local differently; the bundler defect
+itself is tracked separately.
+
+**276 tests, 0 failures, 1 skipped** - the six `ContentNegotiationTest`
+failures that 1_0_1 shipped on purpose are green, and the pipelining edge test
+is no longer the outstanding failure.
+
 ## 1_0_1 [VC9QWYY]
 
 Keep-alive, and percent-decoding of the request target. Both found by
