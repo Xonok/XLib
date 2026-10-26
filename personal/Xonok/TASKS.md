@@ -21,6 +21,13 @@ needed when there is no due date.
 	`agent_resume` in `session.json`, a stop/start reruns the panel after a
 	client attaches, and herdr clears the entry about 3 s after the panel
 	exits. The alternatives and side effects are in the notes.
+- [ ] **#225 — skynet: Go and OpenRouter quotas in the first line**
+	(by 2026-10-30, high) — board: epiq `ENXZ4WY` (In progress), PR #104.
+	Shows `Go $2.49/$60 4% · pace 76%/d · today ? · OR 29/1000` on the first
+	line, abbreviating and then dropping fields as the pane narrows. The day
+	pace needs the local midnight baseline in `~/.local/share/skynet/quota.json`;
+	`today ?` is expected until the next midnight. 57 new xtest cases, full
+	suite 15/15, xlint clean. Waiting on review.
 - [x] **#220 — xlint: the previous report survives a Ctrl-C and rerun in tmux**
 	(done 2026-10-25, medium) — board: epiq `D3G54BV` (Done), merged as PR #91,
 	master `65c40c9`. **`ESC[H ESC[2J ESC[3J]`** instead of `3J` first. The same
