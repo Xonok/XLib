@@ -14,6 +14,14 @@
 # transport = "harness" only reachable through `opencode run`. ~13,140 prompt tokens and
 #              ~11.5s per call, of which ~13k is opencode's own fixed preamble. It does
 #              not shrink when the agent is stripped of tools. ~87x the cost of http.
+#
+# rpm / tpm     the provider's measured per-minute quota for this model, when known. The
+#              transport paces to it. The limit is per model per project, not account-wide,
+#              and a per-process pacer cannot coordinate two processes running one model.
+# reasoning     true when the model thinks before it answers. The episode runner then gives
+#              it the larger per-call budget (12288 rather than 4096): a truncated thinking
+#              model returns empty content and grades as a model that cannot follow
+#              instructions (E23).
 
 ["space-bunny"]
 id = "space-bunny-free"
@@ -64,20 +72,23 @@ endpoint = "https://openrouter.ai/api/v1"
 note = "Answers directly, despite being documented as returning null choices even via curl."
 
 ["gemma-4-31b"]
-id = "google/gemma-4-31b-it:free"
-provider = "openrouter"
+id = "gemma-4-31b-it"
+provider = "google"
 transport = "http"
-gating = "upstream"
-endpoint = "https://openrouter.ai/api/v1"
-note = "TO BE REPINNED to Google's own route (id = \"gemma-4-31b-it\", provider = \"google\", endpoint = \"https://generativelanguage.googleapis.com/v1beta/openai\") - that is where the workers and the corpus's records are. The repin waits for the transport to have a Google route (XLib SBEA654); until then this entry is the only way the instrument can reach the model."
+gating = "open"
+endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
+reasoning = true
+note = "Repinned 2026-10-26 to Google's own route, where the corpus's records and the workers are. Its binding quota metric is not measured, so no rpm/tpm is claimed here; a 429 waits the delay the provider names instead. It answered a direct probe on 2026-10-26 after one transient HTTP 500 ('Internal error encountered'), so a 500 is retried rather than read as unavailable. It thinks in a visible '<thought>' block, so its budget comes from reasoning = true."
 
 ["gemma-4-26b"]
-id = "google/gemma-4-26b-a4b-it:free"
-provider = "openrouter"
+id = "gemma-4-26b-a4b-it"
+provider = "google"
 transport = "http"
-gating = "upstream"
-endpoint = "https://openrouter.ai/api/v1"
-note = "TO BE REPINNED to Google's own route (id = \"gemma-4-26b-a4b-it\", provider = \"google\", endpoint = \"https://generativelanguage.googleapis.com/v1beta/openai\") - that is where the workers and the corpus's records are, and the repin waits for the transport to have a Google route (XLib SBEA654). The 'persistent upstream failure' this note used to carry was measured wrong: the 429 is a 15-requests-per-minute quota on Google's own route (GenerateRequestsPerMinutePerProjectPerModel-FreeTier, measured 2026-10-22), not the provider rationing us."
+gating = "open"
+endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
+tpm = 16000
+reasoning = true
+note = "Repinned 2026-10-26 to Google's own route, where the corpus's records and the workers are. The free tier caps INPUT TOKENS at 16,000 per minute (measured 2026-10-22), so tpm is set and the transport paces to it; the four-tool path's prompts are small enough to fit, which is why this works here and not from opencode. It thinks in a visible '<thought>' block, so its budget comes from reasoning = true rather than a wave's name list."
 
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"

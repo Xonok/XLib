@@ -11,6 +11,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EPISODES = os.path.join(HERE,"episodes")
 REGISTRY = os.path.join(HERE,"models.toml")
 
+# Reasoning models spend thousands of tokens thinking before answering and return EMPTY
+# content when the budget is too small (`finish_reason: length`), which reads as a model
+# that cannot follow instructions. The budget is a property of the model, so it comes
+# from the registry (`reasoning = true`) rather than from a list of names hard-coded in
+# each wave script — that list is how a thinking model was given 4096 and graded
+# `not-capable` (E23).
+DEFAULT_MAX_TOKENS = 4096
+REASONING_MAX_TOKENS = 12288
+
+def budget_for(model):
+	"""The per-call token budget a model needs, from the registry rather than its name."""
+	return REASONING_MAX_TOKENS if model.get("reasoning") else DEFAULT_MAX_TOKENS
+
 def load_episode(name):
 	dir_path = os.path.join(EPISODES,name)
 	with open(os.path.join(dir_path,"REQUEST.md")) as f:
@@ -64,8 +77,15 @@ def episode_hash(dir_path):
 			except OSError: pass
 	return "ep-" + h.hexdigest()[:12]
 
-def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=4096,protocol=None):
-	"""One episode attempt in a throwaway copy of the episode directory."""
+def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=None,protocol=None):
+	"""One episode attempt in a throwaway copy of the episode directory.
+
+	`max_tokens=None` means "whatever this model needs", read from its registry entry, so
+	a caller cannot silently under-budget a thinking model. An explicit number still wins
+	for an experiment that wants one.
+	"""
+	if max_tokens is None:
+		max_tokens = budget_for(model)
 	sandbox = tempfile.mkdtemp(prefix=f"ep-{episode['name']}-",dir=run_root)
 	shutil.copytree(episode["dir"],sandbox,dirs_exist_ok=True)
 	# REQUEST.md is the harness's, not the model's — it is what the agent loop renders into
@@ -133,10 +153,13 @@ def main():
 	p.add_argument("--episode",action="append",help="repeatable; default = all")
 	p.add_argument("--repeats",type=int,default=3)
 	p.add_argument("--max-turns",type=int,default=agent.MAX_TURNS)
-	# Reasoning-heavy models spend thousands of tokens thinking before answering and
-	# return EMPTY content when truncated (finish_reason=length). In a 12-turn episode
-	# that is a budget problem masquerading as a model that cannot follow instructions.
-	p.add_argument("--max-tokens",type=int,default=4096)
+	# Past this only to override what the registry says a model needs; the default is
+	# `None`, resolved per model by `budget_for`. Reasoning-heavy models spend thousands
+	# of tokens thinking before answering and return EMPTY content when truncated
+	# (finish_reason=length). In a 12-turn episode that is a budget problem masquerading
+	# as a model that cannot follow instructions.
+	p.add_argument("--max-tokens",type=int,default=None,
+		help="override the registry-derived per-call budget (default: the model's own)")
 	p.add_argument("--out",required=True)
 	p.add_argument("--registry",default=REGISTRY)
 	p.add_argument("--keep-sandbox",action="store_true")
@@ -178,8 +201,15 @@ def main():
 				# A harness failure must not be recorded as a model result. It is a hole in
 				# the run, kept separate so the report can say which.
 				print(f"  repeat {rep}: HARNESS ERROR {type(e).__name__}: {e}",flush=True)
-				fh.write(json.dumps({"episode":episode["name"],"model":model["id"],
-					"repeat":rep,"harness_error":f"{type(e).__name__}: {e}"})+"\n")
+				row = {"episode":episode["name"],"model":model["id"],"repeat":rep,
+					"harness_error":f"{type(e).__name__}: {e}",
+					# The provider's own body, whole, when the failure had one. A 429's
+					# quota lives past the old 200-character cut, and a hole is only
+					# diagnosable if the metric and the wait reach the record (E31).
+					"provider_body":getattr(e,"body",None),
+					"provider_status":getattr(e,"status",None),
+					"quota":getattr(e,"quota",None) or None}
+				fh.write(json.dumps(row)+"\n")
 				fh.flush()
 				continue
 			result["repeat"] = rep

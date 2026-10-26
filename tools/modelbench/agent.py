@@ -330,6 +330,19 @@ DIRECT_MAPPING = (
 	"transport._http_call",
 	"transport._post",
 	"transport._openrouter_key",
+	"transport._google_key",
+	# The provider table, the refusal parser, and the pacer: each decides what reaches
+	# the model and what a refusal says about it, so each is measurement rather than
+	# plumbing. The quota fields in particular are the difference between a hole with a
+	# reason and a hole without one.
+	"transport._auth_headers",
+	"transport._error_body",
+	"transport.parse_quota",
+	"transport._delay_seconds",
+	"transport._retry_from_message",
+	"transport._refusal_text",
+	"transport._input_tokens",
+	"transport._pace",
 	"transport.provider_error",
 	# The constants the mapping reads.
 	"agent.PROTOCOL",
