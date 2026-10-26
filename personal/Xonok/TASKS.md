@@ -23,12 +23,13 @@ needed when there is no due date.
 	exits. The alternatives and side effects are in the notes.
 - [x] **#225 — skynet: Go and OpenRouter quotas in the first line**
 	(done 2026-10-26, high) — board: epiq `ENXZ4WY` (Done), merged as PR #104,
-	master `5686257`, follow-ups merged as `605329b` (PR #105) and `020851c`
-	(PR #106). Shows the Go and OpenRouter quotas right-aligned on the first
-	line, abbreviating and then dropping fields as the pane narrows. The day
-	pace is measured from UTC midnight and needs the baseline in
-	`~/.local/share/skynet/quota.json`; `today ?` is expected until the next
-	UTC midnight. 97 skynet tests, full suite 15/15, xlint clean.
+	master `5686257`, follow-ups merged as `605329b` (PR #105), `020851c`
+	(PR #106) and `487af87` (PR #107). Shows the Go and OpenRouter quotas
+	right-aligned on the first line, abbreviating and then dropping fields as
+	the pane narrows. The day pace starts at the first reading after UTC
+	midnight, with earlier usage counted as the previous day; the baseline is
+	in `~/.local/share/skynet/quota.json`. 98 skynet tests, full suite 15/15,
+	xlint clean.
 - [x] **#220 — xlint: the previous report survives a Ctrl-C and rerun in tmux**
 	(done 2026-10-25, medium) — board: epiq `D3G54BV` (Done), merged as PR #91,
 	master `65c40c9`. **`ESC[H ESC[2J ESC[3J]`** instead of `3J` first. The same
