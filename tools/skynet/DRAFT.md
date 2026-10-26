@@ -63,22 +63,24 @@ abbreviated form, which keeps every field:
 === Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000
 ```
 
-That is 55 columns. `G` is Go, `p` is pace and `t` is today; `OR` is already
+That is 56 columns. `G` is Go, `p` is pace and `t` is today; `OR` is already
 short. Only when the abbreviated form does not fit are fields dropped, from the
 right:
 
 | Width | Line |
 |------:|------|
 | 70+ | full form |
-| 55–69 | abbreviated form |
-| 42–54 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
-| 35–41 | `=== Skynet === G $1.87/60 3% · p 72` |
-| 28–34 | `=== Skynet === G $1.87/60 3%` |
-| 25–27 | `=== Skynet === G $1.87 3%` |
-| 19–24 | `=== Skynet === G 3%` |
+| 56–69 | abbreviated form |
+| 43–55 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
+| 36–42 | `=== Skynet === G $1.87/60 3% · p 72` |
+| 29–35 | `=== Skynet === G $1.87/60 3%` |
+| 26–28 | `=== Skynet === G $1.87 3%` |
+| 19–25 | `=== Skynet === G 3%` |
 | 14–18 | `=== Skynet ===` |
 
-Widths below 14 are out of scope; the title itself is 14 columns.
+The boundaries are those lines' lengths; the first version of this table
+counted `=== Skynet ===` as 13 columns and was one low in seven rows. Widths
+below 14 are out of scope; the title itself is 14 columns.
 
 The `%/d` in the full form means "percent of the sustainable daily rate", not
 "percent of the quota used today". At 100% the current rate exhausts the quota
@@ -140,9 +142,9 @@ When the Go meter is known but the day baseline is not, `today` becomes `?`
 - **Endpoint:** `GET https://openrouter.ai/api/v1/key`
 - **Auth:** `Authorization: Bearer <key>` where `<key>` is the `key` field of
 	the active `openrouter` row in the same `credential` table.
-- **Response fields used:** `free_model_daily_requests` with `used`, `limit`
-	and `remaining`; also `usage_daily`, `usage_monthly`, `usage` and
-	`is_free_tier`.
+- **Response fields used:** `free_model_daily_requests` (inside the response's
+	`data` object) with `used`, `limit` and `remaining`; also `usage_daily`,
+	`usage_monthly`, `usage` and `is_free_tier`.
 - **Measured values at 2026-10-26 00:55Z:** `free_model_daily_requests`:
 	`{"used": 29, "limit": 1000, "remaining": 971}`; `usage_daily`: `0`;
 	`usage`: `1.028122676`; `is_free_tier`: `false`.
@@ -495,8 +497,9 @@ Decided 2026-10-26.
 
 - `tools/skynet/DRAFT.md` — this document; decisions recorded 2026-10-26.
 - `tools/skynet/SPEC.md` — derived from this draft.
-- `tools/skynet.py` — 519 lines, no network code, untouched.
+- `tools/skynet.py` — implements the quota line, the credential and HTTP
+	readers, the pace math and the day state.
 - `tools/skynet/test/` — `test_render.py`, `test_render_table.py`,
-	`test_terminal.py`; untouched.
-- Ticket `ENXZ4WY` (Todo) — this work; docs merged as `317345f` (PR #102).
-	Implementation has not started.
+	`test_terminal.py` unchanged; `test_quota.py` covers this work.
+- Ticket `ENXZ4WY` — this work; docs merged as `317345f` (PR #102),
+	implementation on `feature/ENXZ4WY-quota`.
