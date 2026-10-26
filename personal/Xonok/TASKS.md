@@ -23,9 +23,10 @@ needed when there is no due date.
 	exits. The alternatives and side effects are in the notes.
 - [x] **#225 — skynet: Go and OpenRouter quotas in the first line**
 	(done 2026-10-26, high) — board: epiq `ENXZ4WY` (Done), merged as PR #104,
-	master `5686257`. Shows `Go $2.56/$60 4% · pace 78%/d · today ? · OR
-	29/1000` on the first line, abbreviating and then dropping fields as the
-	pane narrows. The day pace needs the local midnight baseline in
+	master `5686257`, right-aligned follow-up merged as `605329b` (PR #105).
+	Shows the Go and OpenRouter quotas right-aligned on the first line,
+	abbreviating and then dropping fields as the pane narrows. The day pace
+	needs the local midnight baseline in
 	`~/.local/share/skynet/quota.json`; `today ?` is expected until the next
 	midnight. 56 new xtest cases, full suite 15/15, xlint clean.
 - [x] **#220 — xlint: the previous report survives a Ctrl-C and rerun in tmux**
