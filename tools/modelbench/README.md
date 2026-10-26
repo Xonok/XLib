@@ -221,6 +221,14 @@ model's final files through `trace['root']`, so a record that stored its turns b
 final on-disk state still cannot be reproduced. The tool keeps the state by default; if you
 disable that, the next scoring change costs a re-measurement.
 
+**A harness record also has to say where its session ran.** The harness path once opened
+`opencode run` in the launch directory instead of the sandbox: the run succeeded, the
+checker ran on an untouched tree, and the ledger admitted a grade that was the operator's
+bug (E21, `H01QJF2`). A record now carries the sandbox it meant to use (`trace.root`) and
+the directory opencode recorded for the session (`trace.session_directory`). The ledger
+refuses a contradiction (`session_in_sandbox: wrong directory`); an absent value is
+`unverified` and stays admissible, because only a contradiction is evidence.
+
 ## Measuring a corpus of model-written explanations
 
 The episodes above ask a model to **change code**, and the checker decides pass or fail.
