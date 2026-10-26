@@ -134,7 +134,11 @@ HTTP is the default; the harness path exists only for models that are reachable 
 	allowance names the next midnight Pacific (67,682s measured on 2026-10-26). A wait longer
 	than `MAX_QUOTA_SLEEP`, or a `PerDay` metric, raises `transport.Deferred` with the whole
 	body instead of sleeping — the 2026-10-26 wave slept 21 hours on a day quota, and because
-	the branch slept before raising, the refusal body was lost (E32).
+	the branch slept before raising, the refusal body was lost (E32). The upstream provider's
+	own pool (`temporarily rate-limited upstream`) is a third kind: transient, so it is
+	retried briefly rather than deferred. A `:free` model that answers with a non-zero usage
+	cost is being served from the account's paid deposit — `transport.Refused`, not a
+	measurement (5REVVZE).
 - **Dotted names in `models.toml` must be quoted** — `[qwen3.8-27b]` is a nested TOML table,
 	not a name, and two models silently vanished from the registry that way. Dotted table
 	headers are quoted and `transport.validate_registry()` runs before every run.

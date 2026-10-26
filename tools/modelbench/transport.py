@@ -62,6 +62,14 @@ class Deferred(TransportError):
 	the rest instead of parking the whole run (5REVVZE).
 	"""
 
+class Refused(TransportError):
+	"""A refusal that waiting will not clear.
+
+	The one case today is a `:free` model answered from the account's paid deposit: the
+	human does not top OpenRouter up, so that answer is not a free-tier measurement and
+	retrying it only spends the deposit. Distinct from `Deferred`, which is a wait.
+	"""
+
 class UnseenShape(Exception):
 	"""An event or a field arrived in a shape this tool does not know.
 
@@ -234,16 +242,20 @@ def refusal_kind(quota,body=""):
 	  caller move on.
 	- `minute` — a per-minute limit with a short named wait (1s and 47s measured on
 	  2026-10-22). Sleeping the named delay is right.
+	- `upstream` — another provider's shared pool behind OpenRouter. Transient, per
+	  provider, and waiting for a daily reset does not help it; retry shortly.
 	- `unknown` — no quota named. Retry on the transport's own backoff.
 
 	**The metric is the discriminator, not the delay.** A day quota and a minute quota
 	arrive on the same 429 path, and the body says which (`quotaId` / `quotaMetric`); the
-	OpenRouter text is the fallback for bodies that carry no `details[]` (E32).
+	OpenRouter text is the fallback for bodies that carry no `details[]` (5REVVZE, E32).
 	"""
 	parts = [(quota or {}).get(k) or "" for k in ("quota_id","quota_metric","message")]
 	text = f"{' '.join(str(p) for p in parts)} {body or ''}".lower()
 	if "perday" in text or "per-day" in text or "free-models-per-day" in text:
 		return "daily"
+	if "upstream_provider_shared_pool" in text or "temporarily rate-limited upstream" in text:
+		return "upstream"
 	if (quota or {}).get("quota_id") or (quota or {}).get("retry_delay") is not None:
 		return "minute"
 	return "unknown"
@@ -311,6 +323,15 @@ def _http_call(model,messages,endpoint,headers,max_tokens,temperature,timeout):
 		raise TransportError(f"{model['id']}: {data['error'].get('message',data['error'])}")
 	choice = data["choices"][0]
 	msg = choice["message"]
+	usage = data.get("usage") or {}
+	# A `:free` model that answers with a non-zero cost is being served from the account's
+	# deposit, not from the free tier. The human does not intend to top OpenRouter up, so
+	# that is a refusal rather than a measurement (5REVVZE). Google calls every model
+	# "paid" and is exempt: its free allowance is metered apart from the catalogue price.
+	cost = usage.get("cost")
+	if isinstance(cost,(int,float)) and cost > 0 and model.get("provider") in ("openrouter","zen"):
+		raise Refused(f"{model['id']}: served from the paid deposit (cost {cost}); "
+			"this is not a free-tier measurement")
 	return {
 		"text":msg.get("content") or "",
 		# One name downstream. OpenRouter calls it `reasoning`, Zen `reasoning_content`.
@@ -521,12 +542,15 @@ def call_chat(model,messages,workdir="/tmp/opencode/bench-run",max_tokens=2048,t
 			last = TransportError(text,body=body,status=e.code,quota=quota)
 			if gated or attempt == retries-1:
 				raise last
-			if e.code == 429 and quota.get("retry_delay") is not None:
+			if e.code == 429 and kind != "upstream" and quota.get("retry_delay") is not None:
 				# The provider names the wait, and it slides: 1s on one burst, 47s on the
 				# next. Retrying on our own clock lands inside the same minute window and
 				# turns a two-second refusal into a lost cell (E31).
 				time.sleep(quota["retry_delay"] + 0.5)
 				continue
+		except Refused:
+			# Waiting will not clear a paid-deposit answer; retrying only spends the deposit.
+			raise
 		except (TransportError,urllib.error.URLError,subprocess.TimeoutExpired) as e:
 			last = e
 			if attempt == retries-1:
