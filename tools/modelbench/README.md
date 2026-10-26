@@ -129,6 +129,12 @@ HTTP is the default; the harness path exists only for models that are reachable 
 	the delay the provider names. The transport also paces to `rpm`/`tpm` from the registry
 	before each call. Retrying on our own clock inside the same minute is what turned a
 	two-second refusal into a lost cell (E31).
+	**A minute quota is waited; a day quota is deferred.** Both arrive on the same 429 path,
+	and the body's metric says which: a per-minute refusal names a 1–47s wait, while a day
+	allowance names the next midnight Pacific (67,682s measured on 2026-10-26). A wait longer
+	than `MAX_QUOTA_SLEEP`, or a `PerDay` metric, raises `transport.Deferred` with the whole
+	body instead of sleeping — the 2026-10-26 wave slept 21 hours on a day quota, and because
+	the branch slept before raising, the refusal body was lost (E32).
 - **Dotted names in `models.toml` must be quoted** — `[qwen3.8-27b]` is a nested TOML table,
 	not a name, and two models silently vanished from the registry that way. Dotted table
 	headers are quoted and `transport.validate_registry()` runs before every run.
