@@ -527,6 +527,8 @@ def _findings(result, path, rule):
 		items = list(result)
 	except TypeError as error:
 		raise _RepoRuleError(f"{path}: rule '{rule}' returned {type(result).__name__}, expected findings") from error
+	except (Exception, SystemExit) as error:
+		raise _RepoRuleError(f"{path}: rule '{rule}' raised {type(error).__name__}: {error}") from error
 	found = []
 	for item in items:
 		if not isinstance(item, (tuple, list)) or len(item) != 3:
