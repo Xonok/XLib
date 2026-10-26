@@ -62,13 +62,16 @@ Response fields used:
 |---|---|
 | `product` | `go` or `go-plus`; display `Go` or `Go+` |
 | `access.startsAt` | paid period start |
-| `access.endsAt` | paid period end, which is the reset |
+| `access.endsAt` | paid period end, rounded to the nearest UTC midnight for the pace |
 | `access.meters.month.limitMicroCents` | the period allowance |
 | `access.meters.month.usedMicroCents` | the amount used |
 
 `fiveHour` and `week` are present and are **not** shown (DRAFT Q10 A).
 Microcents are `1 dollar = 100_000_000`; keep the integers and format only at
-render time (DRAFT Q7 A).
+render time (DRAFT Q7 A). The period end is rounded to the nearest UTC
+midnight for the pace, with a tie going to the next midnight (the human's
+2026-10-26 convenience ruling). The raw `access.endsAt` is not used for the
+period length; the meter itself still resets when the provider resets `used`.
 
 The meter is not the local `session_message.data.cost` column. For
 `opencode-go/deepseek-v4.1-flash` the meter runs at `0.75×` the local list
@@ -168,11 +171,17 @@ one response; the DRAFT records it as a known limit.
 
 ## Day baseline
 
-The Go API has no daily history. The day pace needs the meter reading at UTC
-midnight (DRAFT Q2 A, Q3 A). The human ruled UTC midnight on 2026-10-26:
-OpenRouter's free counter and the Go `week` meter reset at 00:00Z, while the
-Go `month` meter resets at `access.endsAt` (16:47:40Z on 2026-11-24), so UTC is
-the consistent day boundary even though it is not the month's reset.
+The Go API has no daily history. The day pace needs a baseline reading. The
+human's 2026-10-26 ruling is deliberately pragmatic: **the first successful
+read of a new UTC day becomes the baseline**, and usage between 00:00Z and that
+read counts as the previous day. The panel therefore does not need to observe
+midnight; a login or a late retry starts `today` at 0% from its first reading,
+which is close enough. `today ?` is only for Go unavailable.
+
+UTC is the day boundary because OpenRouter's free counter and the Go `week`
+meter reset at 00:00Z; the Go `month` meter resets at `access.endsAt`
+(16:47:40Z on 2026-11-24), so the period end is rounded to the nearest UTC
+midnight for the pace rather than treated as the day reset.
 
 **File:** `~/.local/share/skynet/quota.json` (JSON, version 1):
 
@@ -192,21 +201,20 @@ the consistent day boundary even though it is not the month's reset.
 **Update rules**, on every successful Go read:
 
 1. `today` is the UTC date of `now`, formatted `YYYY-MM-DD`.
-2. If the stored `day` is missing or differs from `today`:
-	- If `last_seen` is within 900 seconds of UTC midnight (either side),
-		set `day_start_used` to `last_used`.
-	- Otherwise set `day_start_used` to `None`; the panel shows `today ?`
-		until the next UTC midnight.
-	- Set `day` to `today`.
+2. If the stored `day` differs from `today`, set `day_start_used` to `None`.
+	Set `day` to `today`.
 3. If `period_start` differs from the stored one, set `day_start_used` to
 	`None` (a new paid period).
 4. If `used < last_used`, set `day_start_used` to `None` (the meter reset
 	downward).
-5. If `day_start_used` is already set for `today`, keep it.
-6. Update `last_used`, `last_seen` and `period_start`.
-7. Write atomically: a temporary file in the same directory, then
-	`os.replace`. A write failure is not fatal; the line shows `today ?` and
-	the tables still render.
+5. If `day_start_used` is `None` — a new day, a cold start, a new period or a
+	meter reset — set it to the current `used`. Usage before this read counts
+	as the previous day.
+6. If `day_start_used` is already set for `today`, keep it.
+7. Update `last_used`, `last_seen` and `period_start`.
+8. Write atomically: a temporary file in the same directory, then
+	`os.replace`. A write failure is not fatal: the current render keeps the
+	computed baseline, and the next run starts from its own first reading.
 
 The state file is per-machine and must not be tracked. A missing or corrupt
 file is treated as empty state.
@@ -338,6 +346,9 @@ characters.
 - **R2.7** 401, 403, network, timeout and JSON errors make Go `unavailable`.
 - **R2.8** Do not parse or display `fiveHour` or `week` on the first line
 	(DRAFT Q10 A).
+- **R2.9** Round `access.endsAt` to the nearest UTC midnight for the period
+	length, with a tie to the next midnight; the meter's own reset is
+	unchanged.
 
 ### OpenRouter
 
@@ -369,14 +380,14 @@ characters.
 - **R5.1** The state path is `~/.local/share/skynet/quota.json` (DRAFT Q3 A);
 	create the directory when missing.
 - **R5.2** A missing or corrupt file is empty state.
-- **R5.3** On the first successful read of a new UTC day, use `last_used` as
-	`day_start_used` only when `last_seen` is within 900 seconds of UTC
-	midnight; otherwise `None` (DRAFT Q2 A).
-- **R5.4** A changed `period_start` or a decreasing `used` resets the day
-	baseline.
+- **R5.3** On the first successful read of a new UTC day — or when today's
+	baseline is missing — set `day_start_used` to the current `used`; usage
+	before that read counts as the previous day (DRAFT Q2 A).
+- **R5.4** A changed `period_start` or a decreasing `used` restarts the day
+	baseline at the current `used`.
 - **R5.5** Keep an existing `day_start_used` for the same day.
-- **R5.6** Write atomically; a write failure leaves the line at `today ?` and
-	does not break the tables.
+- **R5.6** Write atomically; a write failure is not fatal — the current
+	render keeps the baseline, and the next run starts from its first reading.
 - **R5.7** The state file is per-machine and untracked.
 
 ### Display
@@ -428,7 +439,7 @@ characters.
 | # | Decision | Answer |
 |---|----------|--------|
 | Q1 | Auth token handling | A — read-only; `Go ?` on 401; no refresh |
-| Q2 | "Today" baseline | A — persist a UTC-midnight baseline; `today ?` without one |
+| Q2 | "Today" baseline | A — the first reading of a UTC day is the baseline; pre-read usage counts as the previous day |
 | Q3 | State location | A — `~/.local/share/skynet/quota.json` |
 | Q4 | Width fallback | B — abbreviate first, then drop |
 | Q5 | Free usage | A — internal only; no free field |
@@ -455,8 +466,9 @@ characters.
 	path or schema change makes Go `?`, not a crash.
 - The access token expires; read-only means the Go field disappears until
 	opencode refreshes the token.
-- The Go meter has no daily history; a cold start mid-day shows `today ?`
-	until the next UTC midnight.
+- The Go meter has no daily history; a cold start mid-day attributes the
+	usage before its first read to the previous day, so `today` starts at 0%
+	from that read rather than covering the whole calendar day.
 - The Go meter may lag; the overall pace is stable, the day pace is noisier.
 - The Go meter is not Zen list price; quota dollars are the meter's unit.
 - OpenRouter's counter is a UTC-day, free-models-only counter.

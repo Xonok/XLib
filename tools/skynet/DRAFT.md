@@ -21,7 +21,7 @@ touched.
 | # | Decision | Recommendation | Your decision |
 |---|----------|----------------|---------------|
 | Q1 | Auth token handling | Read-only. Show `Go ?` when the token is rejected; do not refresh or write credentials. | **A** |
-| Q2 | "Today" baseline | Persist the meter reading at midnight (UTC, per the 2026-10-26 follow-up); show `today ?` when no baseline exists. | **A** |
+| Q2 | "Today" baseline | Persist a baseline; the first reading of a new UTC day becomes it, and usage before that read counts as the previous day. | **A** |
 | Q3 | State location | `~/.local/share/skynet/quota.json`. | **A** |
 | Q4 | Width fallback | Drop whole fields right-to-left: `OR`, `today`, `pace`, then shorten the Go field. | **B — abbreviate first, then drop** |
 | Q5 | Free usage | Keep it internal; do not add a free counter to the first line. | **A** |
@@ -245,9 +245,10 @@ the shape of the number.
 	If skynet runs for a month without opencode refreshing the token, the Go
 	field will disappear until opencode runs again.
 - **The Go meter has no daily history.** "Current day's pace" needs a baseline
-	from UTC midnight. The API cannot supply it retroactively. A state file
-	written by skynet is the only exact source when the panel has been running;
-	otherwise the day number is unavailable.
+	reading. The API cannot supply it retroactively, so the state file records
+	the first reading of each UTC day; usage before that reading counts as the
+	previous day. A cold start therefore starts `today` at 0% from its first
+	read rather than covering the whole calendar day.
 - **The period start is `access.startsAt`.** On the measured account this is
 	the first paid period (2026-10-24 to 2026-11-24), so it is also the last
 	reset. If the API keeps the original subscription start after a renewal
@@ -316,11 +317,11 @@ the shape of the number.
 	 Return `None` when a denominator is zero or negative. Test them with a
 	 fixed clock; no network.
 7. **Day baseline state.** `~/.local/share/skynet/quota.json`, storing the
-	 last meter value and the UTC date. On the first sample of a new UTC day,
-	 set `day_start_used` from the previous reading if that reading is close to
-	 midnight; otherwise `None`. Write atomically (write a temp file, then
-	 `os.replace`). Ignore a corrupt file. Handle the meter resetting downward
-	 as a new period.
+	 last meter value and the UTC date. On the first sample of a new UTC day —
+	 or when today's baseline is missing — set `day_start_used` to the current
+	 meter reading, so usage before it counts as the previous day. Write
+	 atomically (write a temp file, then `os.replace`). Ignore a corrupt file.
+	 Handle the meter resetting downward as a new period.
 8. **Header renderer.** A `quota_line(quota, width)` function that starts from
 	 `=== Skynet ===`. It tries the full form first, then the abbreviated form
 	 (Q4 B), then drops fields right-to-left. It must never return a line
@@ -330,7 +331,10 @@ the shape of the number.
 9. **Watch tick.** The watch loop currently redraws only when the database
 	 changes or the terminal resizes. Add a `last_quota_fetch` timestamp and
 	 redraw when `now - last_quota_fetch >= 60`, even if the database did not
-	 change. Fetch the quota on that tick, not on every database event.
+	 change. Fetch the quota on that tick, not on every database event. The
+	 first successful fetch after UTC midnight sets the new day's baseline; a
+	 failed fetch is retried on the next tick, and the gap counts as the
+	 previous day.
 10. **One-shot mode.** Fetch once before rendering, with the same short
 	 timeout. If the fetch fails, render the tables without the quota.
 11. **Tests.** The tool's tests use `xtest` (`dev/xtest`). Add tests for:
@@ -389,6 +393,15 @@ human's ruling, since OpenRouter's counter and the Go `week` meter reset at
 meter resets at `access.endsAt` (16:47:40Z on 2026-11-24), so the month itself
 is not a UTC-day reset; UTC is the common day boundary for the line, not the
 month's reset.
+
+**Follow-up 2026-10-26 (pragmatic baseline):** the 15-minute window above is
+withdrawn — the human's ruling is that a slightly wrong number is fine. The
+first successful read of a new UTC day becomes the baseline, and usage before
+it counts as the previous day; `today ?` is only for Go unavailable. A missing
+baseline on the current day is filled the same way, so a cold start works from
+its first read. The subscription reset is rounded to the nearest UTC midnight
+for the period length, because the exact `endsAt` (16:47Z) falls in active
+hours.
 
 ### Q3 — State location
 

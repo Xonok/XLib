@@ -174,6 +174,16 @@ def test_go_parses_the_month_meter_as_integers():
 	go = skynet.go_quota(credential, NOW, _Fetch({GO_URL: _go_response(used=300_000_000)}))
 	xtest.equal((go["limit"], go["used"]), (LIMIT, 300_000_000), "microcents stay integers")
 
+def test_the_subscription_reset_rounds_to_the_nearest_utc_midnight():
+	credential = {"state": "ok", "access": ACCESS, "expires": int(NOW.timestamp() * 1000) + 1000, "server": "https://opencode.ai/console"}
+	for end, expected in (
+		("2026-10-31T16:47:40.000Z", datetime.datetime(2026, 11, 1, tzinfo=UTC)),
+		("2026-10-31T09:00:00.000Z", datetime.datetime(2026, 10, 31, tzinfo=UTC)),
+		("2026-10-31T12:00:00.000Z", datetime.datetime(2026, 11, 1, tzinfo=UTC)),
+	):
+		go = skynet.go_quota(credential, NOW, _Fetch({GO_URL: _go_response(end=end)}))
+		xtest.equal(go["end"], expected, f"{end} rounds to the closer midnight")
+
 def test_an_expired_go_token_is_unavailable_without_a_request():
 	credential = {"state": "ok", "access": ACCESS, "expires": int(NOW.timestamp() * 1000) - 1, "server": "https://opencode.ai/console"}
 	fetch = _Fetch({GO_URL: _go_response()})
@@ -314,14 +324,15 @@ def _load(path):
 	with open(path, encoding="utf-8") as file:
 		return json.load(file)
 
-def test_a_first_read_has_no_baseline_and_records_the_meter():
+def test_a_first_read_sets_the_baseline_to_the_current_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
 		state = _load(path)["go"]
-	xtest.equal(baseline, None, "a cold start has no midnight reading")
-	xtest.equal(state["last_used"], 123_000_000, "the meter is recorded for tomorrow's rollover")
-	xtest.equal(state["day"], "2026-10-26", "the local day is recorded")
+	xtest.equal(baseline, 123_000_000, "the first reading of the day starts today at zero")
+	xtest.equal(state["day_start_used"], 123_000_000, "the baseline is persisted")
+	xtest.equal(state["last_used"], 123_000_000, "the meter is recorded for the next read")
+	xtest.equal(state["day"], "2026-10-26", "the UTC day is recorded")
 
 def test_the_state_day_is_the_utc_date():
 	tz = datetime.timezone(datetime.timedelta(hours=2))
@@ -339,56 +350,54 @@ def test_the_baseline_is_kept_within_the_same_day():
 		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _utc(2026, 10, 26, 10))
 	xtest.equal(baseline, 111, "an existing baseline is not replaced")
 
-def test_a_rollover_near_midnight_uses_the_last_reading():
+def test_the_first_read_of_a_new_day_starts_today_at_the_current_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
-		midnight = _utc(2026, 10, 26)
-		_save(path, _state("2026-10-25", last_used=500, last_seen=int(midnight.timestamp()) - 60))
-		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 0, 5))
-	xtest.equal(baseline, 500, "a reading within 15 minutes of midnight is the baseline")
-
-def test_a_rollover_far_from_midnight_has_no_baseline():
-	with tempfile.TemporaryDirectory() as folder:
-		path = Path(folder) / "quota.json"
-		midnight = _utc(2026, 10, 26)
-		_save(path, _state("2026-10-25", last_used=500, last_seen=int(midnight.timestamp()) - 3600))
+		_save(path, _state("2026-10-25", last_used=500_000_000, last_seen=int(_utc(2026, 10, 25, 18).timestamp())))
 		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "a stale reading cannot stand in for midnight")
+	xtest.equal(baseline, 600_000_000, "usage before the first read counts as the previous day")
 
-def test_a_changed_period_resets_the_baseline():
+def test_a_null_baseline_for_today_is_filled_from_the_current_meter():
+	with tempfile.TemporaryDirectory() as folder:
+		path = Path(folder) / "quota.json"
+		_save(path, _state("2026-10-26", day_start_used=None, last_used=500_000_000, last_seen=int(_utc(2026, 10, 26, 1).timestamp())))
+		baseline = skynet.update_day_state(path, _ok_go(used=600_000_000), _utc(2026, 10, 26, 10))
+	xtest.equal(baseline, 600_000_000, "the cold-start day gets a baseline on the next read")
+
+def test_a_changed_period_starts_today_at_the_current_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		_save(path, _state("2026-10-26", day_start_used=111, last_seen=int(_utc(2026, 10, 26, 1).timestamp()), period_start="2026-09-01T00:00:00.000Z"))
 		baseline = skynet.update_day_state(path, _ok_go(used=222_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "a new paid period starts a new baseline")
+	xtest.equal(baseline, 222_000_000, "a new paid period restarts today at the current meter")
 
-def test_a_decreasing_meter_resets_the_baseline():
+def test_a_decreasing_meter_starts_today_at_the_current_meter():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		_save(path, _state("2026-10-26", day_start_used=111, last_used=500_000_000, last_seen=int(_utc(2026, 10, 26, 1).timestamp())))
 		baseline = skynet.update_day_state(path, _ok_go(used=100_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "a meter that went down reset underneath us")
+	xtest.equal(baseline, 100_000_000, "a meter that went down restarts today at the current reading")
 
-def test_a_corrupt_state_file_is_empty_state():
+def test_a_corrupt_state_file_still_gets_a_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		path.write_text("{not json", encoding="utf-8")
 		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "a corrupt file behaves like no file")
+	xtest.equal(baseline, 123_000_000, "a corrupt file behaves like no file and uses the current meter")
 
-def test_a_state_with_wrong_types_is_treated_as_empty():
+def test_a_state_with_wrong_types_still_gets_a_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		_save(path, {"version": 1, "go": {"day": 123, "day_start_used": "x", "last_used": "y", "last_seen": [], "period_start": 42}})
 		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "a value of the wrong type cannot become a baseline")
+	xtest.equal(baseline, 123_000_000, "a value of the wrong type cannot stop the baseline")
 
-def test_a_write_failure_leaves_today_unknown():
+def test_a_write_failure_still_returns_the_baseline():
 	with tempfile.TemporaryDirectory() as folder:
 		path = Path(folder) / "quota.json"
 		path.mkdir()
 		baseline = skynet.update_day_state(path, _ok_go(used=123_000_000), _utc(2026, 10, 26, 10))
-	xtest.equal(baseline, None, "an unwritable state file must not break the tables")
+	xtest.equal(baseline, 123_000_000, "an unwritable state file must not hide today's pace")
 
 # --- display ---------------------------------------------------------------
 
