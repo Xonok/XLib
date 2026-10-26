@@ -10,6 +10,16 @@ needed when there is no due date.
 
 ## Open
 
+- [ ] **#228 — taskview: option to override the task-log location** (by decision
+	needed, medium) — board: epiq `75QSYVF` (Todo). **The one-off override
+	already exists** — both tools take `--csv`/`--data-dir`, and `taskupdate`
+	honours `$TASKVIEW_CSV` — so the ticket is the shared-log gap: `taskview`
+	does not read `$TASKVIEW_CSV`, the tmux panel has no way to choose a store,
+	and `add` mints ids with `read_last_id + 1` and no lock, which two people on
+	a network folder can race. **The first decision is where a persistent
+	override lives** (a key in the existing per-project `.taskview.yaml`, a
+	dedicated config file, or environment only). The use-case is a log on a
+	network folder shared between people.
 - [ ] **#219 — herdr: the four panel tools rerun after a server restart**
 	(by decision needed, medium) — **herdr 0.9.1 is installed and cannot replay a
 	pane's command; 0.9.2 added a self-reported resume command and 0.9.5 is the
