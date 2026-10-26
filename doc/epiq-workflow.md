@@ -2,6 +2,14 @@
 
 Rules specific to how the epiq board is used in this workspace.
 
+## Identity
+
+**Every Epiq action is the agent's, never the human's.** Take the board identity with `epiq_actor_assume` on your own session's MCP server, before the first board call, and again after a server restart. Announcing the name in chat changes nothing: without the assume call, every board write is signed with the human's identity.
+
+- The identity is `opencode/<agent-name>` — the role, **without the slot number**. A name is permanent once it has authored anything; never rename yourself mid-session.
+- **Never take a human name or email as a board identity or contributor address.** Acting under the human's identity signs the agent's actions with their name, and claiming their email links their commits to the agent.
+- **The human's identity is looked up from git identity — `git config user.name` / `user.email` — never assumed from commit logs or history.** Commits are authored under that configured identity and history carries other contributors too, so an author line is not evidence of who did the work; a different address in history stays unconfirmed until the human claims it.
+
 ## Per-actor writes
 
 `epiq_sync` drains **only the calling actor's own** event log. Every actor writes to its own `~pending*.jsonl` in the state worktree, which `.epiq/events/.gitignore` never commits; the drain happens when a process running *as that actor* syncs.
