@@ -457,36 +457,47 @@ def _quota_fields(quota, abbreviated):
 		fields.append("OR ?")
 	return fields
 
-def _quota_text(title, fields):
+def _quota_text(title, fields, width):
+	"""The title and the field block, with the block against the right edge.
+
+	The gap after the title absorbs the spare columns, so the quota reads as
+	a separate block rather than as part of the `=== Skynet ===` title. A
+	candidate that does not fit keeps the minimum one-space gap and is
+	rejected by the caller on its length.
+	"""
 	if not fields:
 		return title
-	return title + " " + " · ".join(fields)
+	block = " · ".join(fields)
+	if len(title) + 1 + len(block) > width:
+		return title + " " + block
+	return title + " " * (width - len(title) - len(block)) + block
 
 def quota_line(quota, width):
 	"""The first line: full form, abbreviated form, then fields dropped.
 
 	Never returns more than `width` characters, and never a newline. The
-	abbreviated form keeps every field; only when it still does not fit are
-	fields dropped, from the right (`OR`, `today`, `pace`), then the Go field
-	is shortened to its percentage alone, then the title.
+	field block is right-aligned against `width`; the abbreviated form keeps
+	every field, and only when it still does not fit are fields dropped, from
+	the right (`OR`, `today`, `pace`), then the Go field is shortened to its
+	percentage alone, then the title.
 	"""
 	title = f"=== {NAME} ==="
 	if quota is None:
 		return title if len(title) <= width else title[:width]
-	line = _quota_text(title, _quota_fields(quota, False))
+	line = _quota_text(title, _quota_fields(quota, False), width)
 	if len(line) <= width:
 		return line
 	fields = _quota_fields(quota, True)
-	line = _quota_text(title, fields)
+	line = _quota_text(title, fields, width)
 	if len(line) <= width:
 		return line
 	while len(fields) > 1:
 		fields = fields[:-1]
-		line = _quota_text(title, fields)
+		line = _quota_text(title, fields, width)
 		if len(line) <= width:
 			return line
 	for variant in _go_variants(quota)[1:]:
-		line = _quota_text(title, [variant])
+		line = _quota_text(title, [variant], width)
 		if len(line) <= width:
 			return line
 	return title if len(title) <= width else title[:width]

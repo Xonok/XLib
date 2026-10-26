@@ -20,13 +20,15 @@ numbers still add up.
 	becomes `Today` / `Window` when the full one no longer fits. Every line is
 	at most the pane width.
 
-- **The first line carries the quotas.** `=== Skynet ===` is followed by
-	`Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000` when both
-	providers are configured. It never wraps: the labels abbreviate (`G`, `p`,
-	`t`) and then fields drop from the right, so the same numbers stay readable
-	in a narrow pane. A configured source that cannot be read shows `?`; one
-	that is not configured is omitted. The read is synchronous with a
-	three-second timeout and a failure never removes a table.
+- **The first line carries the quotas, right-aligned.** `=== Skynet ===` is
+	followed by `Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000` when
+	both providers are configured. The block sits against the pane's right
+	edge, with the space after the title absorbing the spare columns, so it
+	does not read as part of the title. It never wraps: the labels abbreviate
+	(`G`, `p`, `t`) and then fields drop from the right, so the same numbers
+	stay readable in a narrow pane. A configured source that cannot be read
+	shows `?`; one that is not configured is omitted. The read is synchronous
+	with a three-second timeout and a failure never removes a table.
 
 - **No typed input reaches the screen.** Watch mode disables terminal echo so
 	text typed while the watch runs does not appear; control signals such as

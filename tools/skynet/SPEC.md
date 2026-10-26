@@ -211,11 +211,16 @@ file is treated as empty state.
 ## Display
 
 The first line is exactly one line, at most `width` columns, and never wraps
-or contains a newline. The tables below it are unchanged.
+or contains a newline. The field block is **right-aligned against `width`**:
+the space after the title absorbs the spare columns, so the block reads as
+separate from the `=== Skynet ===` title and its right edge is the pane's
+right edge. At the minimum width for a form the gap is one space; a wider pane
+widens the gap, not the block. The tables below it are unchanged.
 
 ### Full form
 
-`=== Skynet === ` + fields joined by ` · `, in this order:
+The title, then the field block right-aligned against `width` (at least one
+space after the title), fields joined by ` · `, in this order:
 
 | Field | `ok` | `unavailable` |
 |---|---|---|
@@ -273,8 +278,10 @@ The acceptance table, with the measured example:
 | 19–25 | `=== Skynet === G 3%` |
 | 14–18 | `=== Skynet ===` |
 
-The boundaries are the lengths of those lines; the earlier draft of this table
-was one column low in the first seven rows, which would have asked for a line
+The boundaries are the lengths of those lines; the table shows each line at
+its minimum width, where the gap after the title is one space, and a wider
+pane keeps the block at the right edge. The earlier draft of this table was
+one column low in the first seven rows, which would have asked for a line
 wider than the pane it was given. Widths below 14 are out of scope; the title
 itself is 14 columns. The function must never return more than `width`
 characters.
@@ -375,6 +382,8 @@ characters.
 	characters, with no newline. Widths below 14 are out of scope.
 - **R6.2** Try the full form first, then the abbreviated form, then the drop
 	order; the acceptance table in *Display* is normative.
+- **R6.7** The chosen field block is right-aligned against `width`, with at
+	least one space after the title; a wider pane widens that gap.
 - **R6.3** `absent` sources contribute no field; `unavailable` sources show
 	`?` (or `G ?` / `OR ?`).
 - **R6.4** When Go is `?`, omit `pace` and `today`; `Go ?` alone is the Go

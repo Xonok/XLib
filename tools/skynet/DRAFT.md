@@ -56,8 +56,11 @@ room, it uses the full form:
 === Skynet === Go $1.87/$60 3% · pace 72%/d · today 94%/d · OR 29/1000
 ```
 
-That is 70 columns. When it does not fit, the line first switches to the
-abbreviated form, which keeps every field:
+That is 70 columns, and it is right-aligned against the pane width: the space
+after the title absorbs the spare columns, so the quota block reads as
+separate from the `=== Skynet ===` title. The sample shows the minimum width,
+where the gap is one space. When it does not fit, the line first switches to
+the abbreviated form, which keeps every field:
 
 ```
 === Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000
