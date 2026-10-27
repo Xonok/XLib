@@ -501,7 +501,7 @@ needed when there is no due date.
 	had been live in the working tree since 2026-10-20; this was the commit,
 	which the commit-msg hook would not take without a ref, and which needed a
 	ticket on the board where the change lands.
-- [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-31, medium)
+- [x] **#151 — Spec: the wide all-tasks priority view** (done 2026-10-27, medium)
 	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
 	wide tool *always orders by due date* — changing the order is simply a
 	result of changing a due date, so a separate priority mechanism is not
@@ -536,6 +536,12 @@ needed when there is no due date.
 	the terminal. **The spec is unblocked**; still to settle are server
 	lifecycle, bind/auth (localhost default), refresh, bump grammar, and
 	whether mark-done is in scope (recommended: no — dates only).
+	**MERGED 2026-10-27** — PR #112, rebase-merged as `5649e59` and `6bf895b`;
+	the spec is `tools/taskboard/SPEC.md`. The three review questions were ruled
+	the same day: **order is due date alone, ties by id** (the view requires no
+	other field); **the board is deliberately unfiltered**; **the name is
+	`taskboard`**. Next is test derivation by the reviewer (pass 1), then
+	implementation as a separate ticket.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
