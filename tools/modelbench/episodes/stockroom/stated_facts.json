@@ -1,0 +1,18 @@
+[
+	{
+		"id": "no-compatibility-modules",
+		"claim": "The old module paths are gone on purpose. A module that re-exports from the new home is not a fix: it hides every reference that was not updated.",
+		"files": ["SPEC.md", "moves.json"],
+		"honoured_case": "old-path-stockroom.units-absent",
+		"watches": "G5",
+		"note": "Adding a shim is the helpful-looking wrong answer: it makes the tree import again without finding the references that still name the old paths. If the model read SPEC.md or moves.json before doing it, that is checking first and the fact is honoured; the gate charges only the guess."
+	},
+	{
+		"id": "items-and-problems-stay",
+		"claim": "stockroom.items and stockroom.problems stay at the top level; other projects import them at those paths.",
+		"files": ["SPEC.md", "stockroom/items.py"],
+		"honoured_case": "items-at-top-level",
+		"watches": "G5",
+		"note": "The move grouped the modules into packages; a model that treats it as 'everything must live in a subpackage' will move or rename these two and break every importer outside the tree. The brief states it, so overriding it is overriding a stated fact."
+	}
+]

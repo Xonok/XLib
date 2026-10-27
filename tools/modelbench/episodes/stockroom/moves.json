@@ -1,0 +1,15 @@
+[
+	{"old": "stockroom.units", "new": "stockroom.core.units", "file": "stockroom/core/units.py", "guard": true},
+	{"old": "stockroom.money", "new": "stockroom.core.money", "file": "stockroom/core/money.py", "guard": true},
+	{"old": "stockroom.paths", "new": "stockroom.config.paths", "file": "stockroom/config/paths.py", "guard": true},
+	{"old": "stockroom.settings", "new": "stockroom.config.settings", "file": "stockroom/config/settings.py", "guard": false},
+	{"old": "stockroom.orders", "new": "stockroom.domain.orders", "file": "stockroom/domain/orders.py", "guard": false},
+	{"old": "stockroom.stock", "new": "stockroom.domain.stock", "file": "stockroom/domain/stock.py", "guard": false},
+	{"old": "stockroom.suppliers", "new": "stockroom.domain.suppliers", "file": "stockroom/domain/suppliers.py", "guard": false},
+	{"old": "stockroom.shipping", "new": "stockroom.domain.shipping", "file": "stockroom/domain/shipping.py", "guard": false},
+	{"old": "stockroom.daily", "new": "stockroom.reporting.daily", "file": "stockroom/reporting/daily.py", "guard": false},
+	{"old": "stockroom.monthly", "new": "stockroom.reporting.monthly", "file": "stockroom/reporting/monthly.py", "guard": false},
+	{"old": "stockroom.formats", "new": "stockroom.reporting.formats", "file": "stockroom/reporting/formats.py", "guard": false},
+	{"old": "stockroom.csvio", "new": "stockroom.io.csvio", "file": "stockroom/io/csvio.py", "guard": false},
+	{"old": "stockroom.jsonio", "new": "stockroom.io.jsonio", "file": "stockroom/io/jsonio.py", "guard": false}
+]
