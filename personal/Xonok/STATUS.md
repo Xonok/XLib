@@ -22,7 +22,7 @@ bottom; this file stays a summary.
 
 ## Snapshot
 
-Basis: `master` at `f77d0f7` (2026-10-27), **snapshot taken 2026-10-27**, **in
+Basis: `master` at `3dfefac` (2026-10-27), **snapshot taken 2026-10-27**, **in
 sync with `origin/master`** — **the root checkout is clean.** **Since the
 previous basis:** four modelbench PRs are merged — `D4FA5B6` (E33, PR #116 as
 `0b03c7b`), `5NBCCT5` (the stockroom episode, PR #114 as `8211c0b` and
