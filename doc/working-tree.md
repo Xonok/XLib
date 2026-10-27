@@ -6,7 +6,7 @@ Don't change files that carry uncommitted changes you did not make. Before your 
 
 `personal/<person>/STATUS.md` and `personal/<person>/HISTORY.md` are exempt from the dirty-file rule. They are shared state files, meant to be updated at the first opportunity, so a dirty copy is their normal condition rather than someone else's work-in-progress to protect.
 
-The exception is about proceeding, not discarding. Edit the working copy as it stands; never restore it from the index or a commit. A commit that touches one of these files may carry another session's pending line, and that is expected — the line is an update at its own first opportunity, not an edit to be unpicked. `TASKS.md` is not exempt.
+The exception is about proceeding, not discarding. Edit the working copy as it stands; never restore it from the index or a commit. A commit that touches one of these files may carry another session's pending line, and that is expected — the line is an update at its own first opportunity, not an edit to be unpicked.
 
 ## The boundary is the worktree
 
