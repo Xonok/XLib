@@ -148,7 +148,14 @@ def _parse_text_protocol(raw):
 		# checker reported. The turn still counted as one clean action, so nothing reported
 		# it. Bounded at the next action header instead, and that second header is recorded
 		# as the batch it is.
-		m = re.search(r"^CONTENT\s*:\s*\n?(.*?)(?=^(?:ACTION|CONTENT)\s*:|\Z)",clean,
+		#
+		# E33 — the loop's OWN messages are in the model's context, and a model may echo them
+		# back. They are not part of the file, and when the echo followed a write's payload it
+		# was written INTO the file: measured on nemotron-ultra (the stockroom calibration,
+		# 2026-10-27) and in two landed billing traces of gemini-3.1-flash-lite. Bound the
+		# payload at those headers too, the same way E18 bounded it at the next action.
+		m = re.search(r"^CONTENT\s*:\s*\n?(.*?)"
+			r"(?=^(?:ACTION|CONTENT|you requested|RESULT)\s*:|\Z)",clean,
 			flags=re.M|re.I|re.S)
 		content = m.group(1) if m else ""
 		# Counted on the whole reply, not on the truncated payload: the lookahead above has
