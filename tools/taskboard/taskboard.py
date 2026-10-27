@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
 		server = _board_server_class(args.host)((args.host, args.port), _Handler, csv_path, token)
 	except StoreMissing as error:
 		return _refuse(str(error))
-	except OSError as error:
+	except (OSError, OverflowError) as error:
 		return _refuse(f"cannot listen on {args.host}:{args.port}: {error}")
 	port = server.server_address[1]
 	print(f"taskboard: {_startup_url(args.host, port, token)} — store {csv_path}, {len(payload['tasks'])} open", flush=True)
@@ -335,7 +335,7 @@ class _Handler(BaseHTTPRequestHandler):
 		if code != 304:
 			self.send_header("Content-Length", str(len(body)))
 		self.end_headers()
-		if code != 304 and body:
+		if self.command != "HEAD" and code != 304 and body:
 			self.wfile.write(body)
 
 if __name__ == "__main__":

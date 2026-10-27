@@ -128,6 +128,8 @@ def read_board(csv_path: Path, now: int) -> dict:
 	if not csv_path.exists():
 		raise StoreMissing(f"the task store {csv_path} does not exist")
 	state = taskview.read_csv(csv_path)
+	if not csv_path.exists():
+		raise StoreMissing(f"the task store {csv_path} vanished while it was being read")
 	selected = taskview.select_tasks(state, None)
 	open_tasks = [task for task in selected.values() if task["status"] == "open"]
 	ordered = order_tasks(open_tasks)
