@@ -1,0 +1,49 @@
+--- a/patchlib/tokenizer.py
++++ b/patchlib/tokenizer.py
+@@ -2,8 +2,12 @@
+ 
+ import re
+ 
+-WORD = re.compile(r"[A-Za-z']+")
++WORD = re.compile(r"\w+")
+ 
+ def words(text):
+ 	"""Words are runs of letters and apostrophes. Digits and underscores are not words."""
+ 	return WORD.findall(text)
++
++def word_count(text):
++	"""How many words the text contains."""
++	return len(words(text))
+--- a/patchlib/slugs.py
++++ b/patchlib/slugs.py
+@@ -2,4 +2,4 @@
+ 
+ def slug(text):
+ 	"""Lowercase, spaces to hyphens. The result has no leading or trailing hyphen."""
+-	return text.strip().lower().replace(" ", "-")
++	return text.lower().replace(" ", "-")
+--- a/patchlib/truncate.py
++++ b/patchlib/truncate.py
+@@ -4,6 +4,6 @@
+ 
+ def truncate(text,limit):
+ 	"""A string at most `limit` characters, with an ellipsis when it was longer."""
+-	if len(text) > limit:
++	if len(text) >= limit:
+ 		return text[:limit - len(ELLIPSIS)] + ELLIPSIS
+ 	return text
+--- a/patchlib/stats.py
++++ b/patchlib/stats.py
+@@ -5,11 +5,9 @@
+ def average_word_length(text):
+ 	"""Mean word length; 0.0 when there are no words."""
+ 	words = tokenizer.words(text)
+-	if not words:
+-		return 0.0
+ 	return sum(len(word) for word in words) / len(words)
+ 
+ def longest_word(text):
+ 	"""The word with the most characters; the first one wins a tie; "" when there are none."""
+ 	words = tokenizer.words(text)
+-	return max(words,key=len) if words else ""
++	return max(words) if words else ""
