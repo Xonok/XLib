@@ -230,6 +230,18 @@ def cases():
 	for name in ("stockroom.items","stockroom.problems"):
 		out.append({"account":f"{name.rsplit('.',1)[1]}-at-top-level","guard":True,
 			"witnesses":f"{name} did not move","run":lambda name=name: top_level(name)})
+	def parses():
+		broken = []
+		for path in _python_files():
+			if os.path.basename(path) == "check.py":
+				continue
+			try:
+				ast.parse(open(path).read(),path)
+			except SyntaxError as e:
+				broken.append(f"{os.path.relpath(path,ROOT)}:{e.lineno}: {e.msg}")
+		return not broken,"; ".join(broken[:12]) if broken else "every file parses"
+	out.append({"account":"python-parses","guard":True,
+		"witnesses":"no file was left with a syntax error","run":parses})
 	def import_all():
 		failures = _import_all()
 		return not failures,"; ".join(failures[:8]) if failures else "every module imports"
@@ -243,8 +255,8 @@ def cases():
 			try:
 				found.extend(f"{os.path.relpath(path,ROOT)}:{line}"
 					for line in _stale(path,olds))
-			except SyntaxError as e:
-				found.append(f"{os.path.relpath(path,ROOT)}:{e.lineno}: syntax error: {e.msg}")
+			except SyntaxError:
+				continue
 		return not found,"; ".join(found[:12]) if found else "no reference to an old module"
 	out.append({"account":"no-stale-imports","guard":False,
 		"witnesses":"no import anywhere names an old path","run":stale_anywhere})
@@ -256,8 +268,8 @@ def cases():
 			try:
 				found.extend(f"{os.path.relpath(path,ROOT)}:{line}"
 					for line in _relative_imports(path))
-			except SyntaxError as e:
-				found.append(f"{os.path.relpath(path,ROOT)}:{e.lineno}: syntax error: {e.msg}")
+			except SyntaxError:
+				continue
 		return not found,"; ".join(found[:12]) if found else "absolute imports only"
 	out.append({"account":"no-relative-imports","guard":True,
 		"witnesses":"the tree stays on absolute imports","run":relative_anywhere})
