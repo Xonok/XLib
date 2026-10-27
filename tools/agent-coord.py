@@ -1124,8 +1124,8 @@ def main():
 	sp.add_argument("--person", default=None, help="override person name")
 	sp.add_argument("--seed", choices=["current", "template"], default="template",
 		help="seed from current root file or template (default: template)")
-	sp.add_argument("--files", default="STATUS.md PLAN.md TASKS.md",
-		help="space-separated list of files (default: STATUS.md PLAN.md TASKS.md)")
+	sp.add_argument("--files", default="STATUS.md PLAN.md",
+		help="space-separated list of files (default: STATUS.md PLAN.md)")
 	p = sub.add_parser("ctx", help="manage subagent context (task_ids, batch queues)")
 	cp = p.add_subparsers(dest="ctx_cmd", required=True)
 	sp = cp.add_parser("status", help="show subagent context status")

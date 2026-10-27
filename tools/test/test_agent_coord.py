@@ -5,7 +5,7 @@ Its state lives in the `.agents` folder of the workspace, and every test here
 points that at a temporary folder: the live one belongs to the machine, and a
 test that wrote to it would take the claims of every agent on it with it.
 """
-import argparse,contextlib,importlib.util,io,json,os,subprocess,tempfile,unittest
+import argparse,contextlib,importlib.util,io,json,os,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from unittest import mock
 
@@ -450,6 +450,31 @@ class TestCheckClean(CoordTestCase):
 		with contextlib.redirect_stdout(out):
 			self.tool.cmd_check_clean(argparse.Namespace(paths=[str(repo / "code.py")], repo=None))
 		self.assertIn("clean", out.getvalue())
+
+class TestPersonalInitDefaultFiles(unittest.TestCase):
+	"""`personal init` must not scaffold a file the workspace has retired.
+
+	`TASKS.md` was removed from the Agents workspace on 2026-10-27 (epiq
+	`F92YYZD`); the taskview store had superseded it and the file had drifted
+	into a stale duplicate. The `--files` default still listed it, and
+	`cmd_personal_init` writes a template **and re-adds the `.gitignore` line**
+	for any file that is missing — so `setup.sh`, which calls this on every run,
+	would have recreated the retired file without saying so. The default is
+	what does it, so the default is what this pins.
+	"""
+
+	def test_the_default_leaves_out_tasks_md(self):
+		with tempfile.TemporaryDirectory() as folder:
+			ws = Path(folder)
+			# The workspace root is found by walking up for `.agents`, so the
+			# temporary folder needs one; without it the tool falls back to the
+			# checkout it lives in and the test would edit XLib's own root files.
+			(ws / ".agents").mkdir()
+			result = subprocess.run([sys.executable, str(TOOL), "personal", "init", "--person", "tester"],
+				cwd=str(ws), capture_output=True, text=True)
+			self.assertEqual(result.returncode, 0, result.stderr)
+			created = sorted(p.name for p in (ws / "personal" / "tester").iterdir())
+			self.assertEqual(created, ["PLAN.md", "STATUS.md"])
 
 if __name__ == "__main__":
 	unittest.main()
