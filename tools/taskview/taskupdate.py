@@ -112,15 +112,22 @@ def read_all(path):
 				}
 	return state
 
-def fmt_due(ts):
-	"""Human form of a due timestamp, matching taskview's pane wording."""
+def fmt_due(ts: int | None, today: datetime.date | None = None) -> str:
+	"""Human form of a due timestamp, in taskview's pane wording.
+
+	`today` pins the reference day so the board can word dates around its own
+	`now`, and so a test does not depend on the wall clock; omitted, it reads
+	the wall clock. The far-date form is `%m-%d`, which is what the pane shows
+	seven or more days out — the two tools word a date identically.
+	"""
 	if not ts:
 		return "no due"
 	try:
 		due_date = datetime.datetime.fromtimestamp(int(ts)).date()
 	except (ValueError, OSError, OverflowError):
 		return f"unparseable due ({ts})"
-	day_diff = (due_date - datetime.date.today()).days
+	reference = today or datetime.date.today()
+	day_diff = (due_date - reference).days
 	if day_diff < 0:
 		return f"overdue {abs(day_diff)}d"
 	if day_diff == 0:
@@ -129,7 +136,7 @@ def fmt_due(ts):
 		return "tomorrow"
 	if day_diff < 7:
 		return f"{day_diff}d"
-	return due_date.strftime("%Y-%m-%d")
+	return due_date.strftime("%m-%d")
 
 def parse_due(arg):
 	if not arg or arg.lower() == "none":

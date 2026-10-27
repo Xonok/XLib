@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>taskboard</title>
+		<link rel="stylesheet" href="board.css">
+	</head>
+	<body>
+		<header>
+			<h1>taskboard</h1>
+			<p id="summary" class="summary">
+				<span class="count"><span class="label">open</span> <span id="summary-open">0</span></span>
+				<span class="count"><span class="label">overdue</span> <span id="summary-overdue">0</span></span>
+				<span class="count"><span class="label">today</span> <span id="summary-today">0</span></span>
+				<span class="count"><span class="label">this week</span> <span id="summary-this-week">0</span></span>
+				<span class="count"><span class="label">later</span> <span id="summary-later">0</span></span>
+				<span class="count"><span class="label">undated</span> <span id="summary-undated">0</span></span>
+			</p>
+			<p class="store">store: <span id="store-path">unknown path</span> · <span id="refresh-age">not refreshed yet</span></p>
+			<p id="banner" class="banner" hidden>connection lost — retrying</p>
+		</header>
+		<main>
+			<table id="board">
+				<thead>
+					<tr>
+						<th scope="col">#</th>
+						<th scope="col">Due</th>
+						<th scope="col">Category</th>
+						<th scope="col">Title</th>
+						<th scope="col">Tags</th>
+					</tr>
+				</thead>
+				<tbody id="rows"></tbody>
+			</table>
+			<p id="empty" class="empty" hidden>No open tasks</p>
+		</main>
+		<noscript>
+			<p>taskboard needs JavaScript enabled to show and edit the task list.</p>
+		</noscript>
+		<script src="board.js"></script>
+	</body>
+</html>
