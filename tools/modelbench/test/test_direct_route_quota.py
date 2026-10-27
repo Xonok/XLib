@@ -236,7 +236,7 @@ def test_run_once_uses_the_model_s_budget():
 		seen["max_tokens"] = max_tokens
 		return {"turns":[],"n_turns":0,"usage":0}
 	agent.run_episode = fake_run
-	episodes_run.trace.analyse = lambda raw,baseline=None: {
+	episodes_run.trace.analyse = lambda raw,baseline=None,**kw: {
 		"detail":{"n_turns":0,"checker":{"cases":[]}},"gates":{},"grade":"not-measurable"}
 	episodes_run.trace.grade = lambda result: ("not-measurable",[])
 	try:

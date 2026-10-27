@@ -177,7 +177,7 @@ def _row(root,src,line,rec,baselines):
 			try:
 				raw = dict(rec["trace"])
 				raw["root"] = state
-				g,_ = trace.grade(trace.analyse(raw,baseline=base))
+				g,_ = trace.grade(trace.analyse(raw,baseline=base,episode=rec.get("episode")))
 				REGREDED[id(row)] = g
 			except Exception as exc:
 				REGREDED[id(row)] = f"error: {exc}"

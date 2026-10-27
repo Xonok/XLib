@@ -56,7 +56,7 @@ def test_the_reason_survives_into_the_stored_row():
 	import episodes_run
 	real = episodes_run.trace.analyse
 	real_stream = transport.harness_stream
-	episodes_run.trace.analyse = lambda raw,baseline=None: {
+	episodes_run.trace.analyse = lambda raw,baseline=None,**kw: {
 		"detail":{"n_turns":0,"checker":{"cases":[]}},"gates":{},"grade":"not-measurable"}
 	transport.harness_stream = lambda model,prompt,workdir,timeout: ([QUOTA_EVENT],
 		{"returncode":0,"timed_out":False,"stderr":"",

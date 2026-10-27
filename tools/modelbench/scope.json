@@ -1,0 +1,303 @@
+{
+	"billing": {
+		"definitions": {
+			"billing.py": [
+				"spanned",
+				"attribute"
+			],
+			"fiscal.py": [
+				"fiscal_year",
+				"quarter_of",
+				"_add_months",
+				"period_bounds",
+				"days_in_period",
+				"period_contains"
+			],
+			"money.py": [
+				"pct",
+				"prorate",
+				"split_evenly"
+			]
+		},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"billing.py",
+			"check.py",
+			"fiscal.py",
+			"money.py",
+			"stated_facts.json"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py",
+			"stated_facts.json"
+		],
+		"work_set": [
+			"billing.py",
+			"fiscal.py",
+			"money.py"
+		]
+	},
+	"invoicer": {
+		"definitions": {
+			"invoicer.py": [
+				"line_total_cents",
+				"discount_cents",
+				"tax_cents",
+				"invoice_total_cents"
+			]
+		},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"invoicer.py"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py"
+		],
+		"work_set": [
+			"invoicer.py"
+		]
+	},
+	"invoicer-nohint": {
+		"definitions": {
+			"invoicer.py": [
+				"line_total_cents",
+				"discount_cents",
+				"tax_cents",
+				"invoice_total_cents"
+			]
+		},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"invoicer.py"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py"
+		],
+		"work_set": [
+			"invoicer.py"
+		]
+	},
+	"patch": {
+		"definitions": {
+			"patchlib/slugs.py": [
+				"slug"
+			],
+			"patchlib/stats.py": [
+				"average_word_length",
+				"longest_word"
+			],
+			"patchlib/tokenizer.py": [
+				"words",
+				"word_count"
+			],
+			"patchlib/truncate.py": [
+				"truncate"
+			],
+			"tests/test_patchlib.py": [
+				"WordTest",
+				"SlugTest",
+				"TruncateTest",
+				"StatsTest"
+			]
+		},
+		"files": [
+			"CHANGES.diff",
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"stated_facts.json",
+			"patchlib/__init__.py",
+			"patchlib/slugs.py",
+			"patchlib/stats.py",
+			"patchlib/tokenizer.py",
+			"patchlib/truncate.py",
+			"tests/__init__.py",
+			"tests/test_patchlib.py"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py",
+			"CHANGES.diff",
+			"stated_facts.json",
+			"patchlib/",
+			"tests/"
+		],
+		"work_set": [
+			"REVIEW.md"
+		]
+	},
+	"rota": {
+		"definitions": {
+			"rota/rules.py": [
+				"payable_minutes",
+				"pay_cents"
+			],
+			"rota/schedule.py": [
+				"Schedule"
+			],
+			"rota/shifts.py": [
+				"Shift"
+			]
+		},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"stated_facts.json",
+			"rota/__init__.py",
+			"rota/rules.py",
+			"rota/schedule.py",
+			"rota/shifts.py",
+			"tests/__init__.py"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py",
+			"stated_facts.json",
+			"rota/"
+		],
+		"work_set": [
+			"tests/"
+		]
+	},
+	"stockroom": {
+		"definitions": {
+			"run_tests.py": [
+				"main"
+			],
+			"scripts/reconcile.py": [
+				"main"
+			],
+			"stockroom/cli.py": [
+				"main"
+			],
+			"stockroom/config/paths.py": [
+				"data_dir",
+				"data_file"
+			],
+			"stockroom/config/settings.py": [
+				"rates_file",
+				"export_file"
+			],
+			"stockroom/core/money.py": [
+				"mul",
+				"pct",
+				"format_cents"
+			],
+			"stockroom/core/units.py": [
+				"to_grams",
+				"from_grams",
+				"to_millimetres"
+			],
+			"stockroom/domain/orders.py": [
+				"Order"
+			],
+			"stockroom/domain/shipping.py": [
+				"shipping_cents"
+			],
+			"stockroom/domain/stock.py": [
+				"Stock"
+			],
+			"stockroom/domain/suppliers.py": [
+				"payable_cents"
+			],
+			"stockroom/io/csvio.py": [
+				"read_items",
+				"stock_from",
+				"write_stock"
+			],
+			"stockroom/io/jsonio.py": [
+				"export_items",
+				"read_item"
+			],
+			"stockroom/items.py": [
+				"StockItem"
+			],
+			"stockroom/problems.py": [
+				"StockError",
+				"UnknownSku"
+			],
+			"stockroom/reporting/daily.py": [
+				"daily_summary",
+				"low_stock"
+			],
+			"stockroom/reporting/formats.py": [
+				"money_line",
+				"count_line"
+			],
+			"stockroom/reporting/monthly.py": [
+				"month_totals",
+				"month_from_days"
+			],
+			"tests/test_io.py": [
+				"CsvTest"
+			],
+			"tests/test_orders.py": [
+				"OrderTest"
+			]
+		},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"moves.json",
+			"run_tests.py",
+			"stated_facts.json",
+			"scripts/reconcile.py",
+			"stockroom/__init__.py",
+			"stockroom/cli.py",
+			"stockroom/items.py",
+			"stockroom/problems.py",
+			"stockroom/config/__init__.py",
+			"stockroom/config/paths.py",
+			"stockroom/config/settings.py",
+			"stockroom/core/__init__.py",
+			"stockroom/core/money.py",
+			"stockroom/core/units.py",
+			"stockroom/data/rates.csv",
+			"stockroom/data/supplier-export.csv",
+			"stockroom/domain/__init__.py",
+			"stockroom/domain/orders.py",
+			"stockroom/domain/shipping.py",
+			"stockroom/domain/stock.py",
+			"stockroom/domain/suppliers.py",
+			"stockroom/io/__init__.py",
+			"stockroom/io/csvio.py",
+			"stockroom/io/jsonio.py",
+			"stockroom/reporting/__init__.py",
+			"stockroom/reporting/daily.py",
+			"stockroom/reporting/formats.py",
+			"stockroom/reporting/monthly.py",
+			"tests/__init__.py",
+			"tests/test_io.py",
+			"tests/test_orders.py"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py",
+			"moves.json",
+			"stated_facts.json",
+			"stockroom/data/"
+		],
+		"work_set": [
+			"stockroom/",
+			"tests/",
+			"scripts/",
+			"run_tests.py"
+		]
+	}
+}
