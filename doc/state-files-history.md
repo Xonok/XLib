@@ -8,6 +8,8 @@ Finished items are appended to `HISTORY.md` and the status file's open list simp
 
 **The state files are written by the secretary, at merge time. A feature branch does not carry them.**
 
+`STATUS.md` and `HISTORY.md` are exempt from the dirty-file check in `doc/working-tree.md`: they are updated at the first opportunity, so a dirty copy is expected. `TASKS.md` is not exempt.
+
 The reason is a collision, not a preference. `STATUS.md` is written by every session in the workspace, so it was the file every branch's diff touched — and that is where the conflicts came from: three branches on one evening each carrying a different `STATUS.md`, and one conflicting hunk. The claim system that was meant to prevent it could not. It keyed claims by absolute path, which a worktree changes without changing the file, so two agents could hold the same file and neither could see the other's claim; and nothing checked a claim at commit time, so it protected nothing that the filesystem was not already protecting.
 
 So the rule is: **a Done ticket does not carry `STATUS.md`, `TASKS.md` or `HISTORY.md`.** The work lands in its own branch and its own commit, and the state files are written afterwards — from the ticket and the commit — by the secretary. The agent that did the work says what changed, and a comment on the ticket is enough.

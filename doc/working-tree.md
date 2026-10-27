@@ -2,6 +2,12 @@
 
 Don't change files that carry uncommitted changes you did not make. Before your first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. A file you created yourself earlier in the session is yours to keep editing. The human can override by explicit instruction.
 
+## Exception: `STATUS.md` and `HISTORY.md`
+
+`personal/<person>/STATUS.md` and `personal/<person>/HISTORY.md` are exempt from the dirty-file rule. They are shared state files, meant to be updated at the first opportunity, so a dirty copy is their normal condition rather than someone else's work-in-progress to protect.
+
+The exception is about proceeding, not discarding. Edit the working copy as it stands; never restore it from the index or a commit. A commit that touches one of these files may carry another session's pending line, and that is expected — the line is an update at its own first opportunity, not an edit to be unpicked. `TASKS.md` is not exempt.
+
 ## The boundary is the worktree
 
 **Work in a worktree, one per ticket.** `git worktree add .work/<ticket>-<slug> -b fix/<ticket>-<slug> master` gives you your own checkout, so two agents cannot edit one file in one place, and a commit in one cannot land on another's branch. The root checkout is shared, and so is its **index**: a commit made there can carry another session's staged work under your subject. That happened on 2026-10-21, and the recovery kept both works.
