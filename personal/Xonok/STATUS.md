@@ -1076,6 +1076,10 @@ tripped on. One false-positive class remains unruled and costs nothing either
 	last-write-wins model the description flagged. **Do not reopen it.** The
 	ruling is on epiq `E5MH4S2` as a comment and in taskview `#151`'s own
 	description; the task is **recorded, not worked on**.
+	**RULED 2026-10-27: the medium is a local web page, not a terminal tool** —
+	a small self-contained server and one page, writing through `taskupdate`'s
+	append path with a `chg_ts` conflict guard; not the webapp framework. The
+	spec is unblocked and due 2026-10-31.
 - **`dev/xconf/`, `dev/xcsv/`, `dev/xschema/`, `dev/xtest/` use `tests/`.** The
 	ruling is `test/`, recorded in `doc/development.md`; the rename is epiq
 	`2VD2XZC`.

@@ -501,7 +501,7 @@ needed when there is no due date.
 	had been live in the working tree since 2026-10-20; this was the commit,
 	which the commit-msg hook would not take without a ref, and which needed a
 	ticket on the board where the change lands.
-- [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-24, medium)
+- [ ] **#151 — Spec: the wide all-tasks priority view** (by 2026-10-31, medium)
 	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
 	wide tool *always orders by due date* — changing the order is simply a
 	result of changing a due date, so a separate priority mechanism is not
@@ -525,6 +525,17 @@ needed when there is no due date.
 	directly (`2026/10/27`) or bump it relative (`+7d`). **Recorded, not
 	worked on**, per the human's instruction; the ruling is on epiq `E5MH4S2`
 	as a comment, and in the task store's own description.
+	**RULED 2026-10-27 — the medium is a local web page, not a terminal tool.**
+	One small self-contained server and one page: read through the existing
+	selection layer, order by due date, edit a row's date (`YYYY-MM-DD` or a
+	relative bump), write through `taskupdate`'s append path with a `chg_ts`
+	conflict guard. **Not the webapp framework** — a one-page server is enough,
+	so the task list does not become the forcing function for phase-4 libs.
+	**Not a TUI:** every terminal tool here is a read-only render loop, so an
+	editing TUI would have to invent the input layer, and the pane already owns
+	the terminal. **The spec is unblocked**; still to settle are server
+	lifecycle, bind/auth (localhost default), refresh, bump grammar, and
+	whether mark-done is in scope (recommended: no — dates only).
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
