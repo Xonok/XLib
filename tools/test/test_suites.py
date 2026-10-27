@@ -35,6 +35,13 @@ NOT_TESTS = [
 	"dev/xhttp/compare/test_working_comprehensive.py",
 ]
 
+# Trees that are benchmark inputs rather than repository code. An episode is a small
+# project the model under test works in, and it carries its own test suite on purpose:
+# that suite is what the model runs and what the episode's checker exercises. Those files
+# are not this repository's tests and no runner here is supposed to reach them, so the
+# whole tree is excluded rather than every episode being listed above.
+NOT_TEST_TREES = ("tools/modelbench/episodes/",)
+
 def test_every_suite_the_runner_lists_exists():
 	for suite in run_tests.SUITES:
 		xtest.true((ROOT / suite).is_dir(), f"{suite} is listed but is not a folder")
@@ -53,6 +60,8 @@ def test_every_test_file_is_in_a_suite_or_a_listed_exception():
 	for path in ROOT.rglob("test_*.py"):
 		relative = str(path.relative_to(ROOT))
 		if "__pycache__" in relative or relative.startswith(".work/"):
+			continue
+		if relative.startswith(NOT_TEST_TREES):
 			continue
 		everywhere.add(relative)
 	stray = everywhere - in_suite - set(NOT_TESTS)
