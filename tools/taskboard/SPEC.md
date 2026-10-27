@@ -6,9 +6,8 @@
 > Written 2026-10-27 from epiq `E5MH4S2` and the human's rulings of 2026-09-27,
 > 2026-10-20, 2026-10-21 and 2026-10-27. There is no separate `DRAFT.md`: the
 > ticket and its comments carry the intent, and the rulings are quoted in the
-> decisions below. Decisions marked **[CONFIRM]** follow the recommendation
-> given; overruling one is a spec-and-test change, which is cheapest before
-> code exists.
+> decisions below. All decisions are ruled; the three that were open at the
+> first review were answered by the human on 2026-10-27.
 
 ## Goal
 
@@ -20,7 +19,7 @@ view exists only as a CSV and a `list` command; Decision 13 in
 `tools/taskview/SPEC.md` rules that it deserves its own renderer over the same
 selection layer. This spec is that renderer: a local web page, not a terminal
 tool (human, 2026-10-27). The pane already owns the terminal, eighty-odd rows
-and six columns are a table, and editing a table is the one job a terminal is
+and five columns are a table, and editing a table is the one job a terminal is
 worst at.
 
 The store stays the single authority. The board reads the CSV through
@@ -60,9 +59,9 @@ current time as a parameter so no test depends on the wall clock.
 	never-show tags exclude a task, `critical`/`emergency` do not rescue a
 	done or cancelled one. No filter file is consulted (R27).
 - **R4** The order is: due date ascending by **local calendar date**, undated
-	tasks last; ties by importance — `high`, `medium`, `low`, none, then any
-	unknown value — then by id ascending. The order is deterministic for equal
-	input and is a pure function. Undated tasks never outrank dated ones.
+	tasks last; ties by id ascending. No other field affects the order. The
+	order is deterministic for equal input and is a pure function. Undated tasks
+	never outrank dated ones.
 - **R5** The summary counts open tasks by calendar day, relative to `now`:
 	`overdue` (due date before today), `today`, `this_week` (1–7 days ahead),
 	`later` (more than 7 days ahead) and `undated`. `open` is their sum. A task
@@ -70,11 +69,11 @@ current time as a parameter so no test depends on the wall clock.
 	between dates, not between timestamps.
 - **R6** A task in the payload has exactly these keys: `id` (int), `title`
 	(string), `due_ts` (int or null), `due_date` (`YYYY-MM-DD` local date, or
-	null), `due_label` (string, from `taskupdate.fmt_due`), `importance`
-	(string, possibly empty), `category` (string, possibly empty), `tags`
-	(sorted list of strings) and `chg_ts` (int). `chg_ts` is the concurrency
-	token; the description is deliberately absent, because the wide view does
-	not show it and it is the largest field.
+	null), `due_label` (string, from `taskupdate.fmt_due`), `category` (string,
+	possibly empty), `tags` (sorted list of strings) and `chg_ts` (int).
+	`chg_ts` is the concurrency token; the description is deliberately absent,
+	because the wide view does not show it and it is the largest field, and
+	`importance` is absent because nothing in this view orders or filters by it.
 
 ### The API
 
@@ -119,7 +118,9 @@ current time as a parameter so no test depends on the wall clock.
 	5. Append one full row with `taskupdate.append_row`, copying `status`,
 		`title`, `category`, `tags`, `importance` and `description` from the row
 		just read, using `new_due_ts` as the due, and setting `chg_ts` to
-		`max(now, old_chg_ts + 1)`. The monotonic step means two writes in one
+		`max(now, old_chg_ts + 1)`. Every field is copied even when the board
+		does not use it, because the store is last-row-wins: a row that omitted
+		`importance` would erase it. The monotonic step means two writes in one
 		second still produce two distinct versions, so the token is a version
 		rather than a clock reading.
 	6. Return the same payload as R7, computed after the append.
@@ -156,10 +157,11 @@ current time as a parameter so no test depends on the wall clock.
 ### The page
 
 - **R15** The page is a semantic table with one row per task and columns
-	`#`, due, importance, category, title and tags. The first column renders
-	`#<id>`, the same handle the pane prints and `taskupdate show` accepts. The
-	title is allowed to wrap; it is the wide column and truncating it is the
-	pane's compromise, not this tool's.
+	`#`, due, category, title and tags. The first column renders `#<id>`, the
+	same handle the pane prints and `taskupdate show` accepts. The title is
+	allowed to wrap; it is the wide column and truncating it is the pane's
+	compromise, not this tool's. The remaining columns are display only: none
+	of them affects order or eligibility.
 - **R16** A summary line above the table shows `open`, `overdue`, `today`,
 	`this_week`, `later` and `undated` counts from R5, the store path, and the
 	age of the last successful refresh. With no open tasks the table is replaced
@@ -274,16 +276,16 @@ current time as a parameter so no test depends on the wall clock.
 	`importance`, and a separate ordering file; the first would collide with
 	the append-only last-write-wins model, and none is needed once order is a
 	consequence of the dates.
-3. **Ties break by importance, then id** — **[CONFIRM]**. Two tasks due the
-	same day need some order, and `importance` is already in the store and
-	already means "how much this matters". It never outranks a date; it only
-	breaks a tie. *Rejected:* id alone (arbitrary in the human's face) and
+3. **Ties break by id** (human, 2026-10-27). The view is ordered by the due
+	date and requires no other field to order it; two tasks due the same day are
+	then in a stable, obvious order. *Rejected:* `importance` as a tie-break —
+	the human did not name it and the wide view should not depend on it — and
 	`chg_ts` (recency is not priority).
-4. **The board is unfiltered and ignores filter files** — **[CONFIRM]**. It is
-	the view with no category restriction; that is what distinguishes it from
-	the pane. *Rejected:* reusing the global `.taskview.yaml`, which is pane
-	configuration and whose category list has been under correction; the board
-	should not inherit that drift.
+4. **The board is unfiltered and ignores filter files** (human, 2026-10-27:
+	"On purpose, yes"). It is the view with no category restriction; that is
+	what distinguishes it from the pane. *Rejected:* reusing the global
+	`.taskview.yaml`, which is pane configuration and whose category list has
+	been under correction; the board should not inherit that drift.
 5. **A due date is a local calendar day, stored at 12:00.** The store already
 	does this (`taskupdate.parse_due` stores noon), and it is what makes
 	"today is not overdue" true at 09:00. *Rejected:* midnight (an off-by-one
@@ -336,9 +338,9 @@ current time as a parameter so no test depends on the wall clock.
 	rolling 7/30-day windows, done counts, and no overdue or undated count.
 	*Rejected:* reusing `compute_metrics` and relabelling its windows, which
 	would put two definitions of "this week" in one tool.
-17. **The name is `taskboard`** — **[CONFIRM]**. It is the board of all tasks;
-	`taskview` stays the pane. *Rejected:* `taskwide` (describes the shape, not
-	the thing).
+17. **The name is `taskboard`** (human, 2026-10-27). It is the board of all
+	tasks; `taskview` stays the pane. *Rejected:* `taskwide` (describes the
+	shape, not the thing).
 18. **Done and cancelled tasks are neither shown nor editable.** The wide view
 	is about work that is still open. *Rejected:* a show-done toggle, which adds
 	a state, a filter and a class of accidental edits for no part of the stated
@@ -365,8 +367,6 @@ current time as a parameter so no test depends on the wall clock.
 
 - Whether to build it, and when. This spec is the deliverable of `E5MH4S2`;
 	implementation is a separate ticket once the spec is approved.
-- The three **[CONFIRM]** decisions above (the tie-break, the unfiltered
-	view and the name).
 
 ## Interfaces
 
