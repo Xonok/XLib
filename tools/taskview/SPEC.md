@@ -267,6 +267,28 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R33** `taskupdate.py` resolves its CSV as `--csv PATH`, else
 	`$TASKVIEW_CSV`, else `<data-dir>/tasks.csv` under R17's resolution. It
 	must not write outside the resolved path.
+- **R51** A written category or tag is first put in house spelling: lowercase,
+	with `_` standing in for a `-` or a space. Case and punctuation are
+	**spelling**, not vocabulary, so `--category XLib` stores `xlib` when `xlib`
+	is listed, and a tag list is de-duplicated after normalising.
+- **R52** When `<data-dir>/vocab.yaml` exists, a category or tag outside its
+	lists is **refused before the row is appended**: exit 1, a message naming
+	the value, the file and the allowed set. A refused write leaves the store
+	byte-identical.
+- **R53** A missing `vocab.yaml` means no vocabulary is configured and every
+	value is accepted — the gate is opt-in per machine. A file that exists but
+	cannot be read as a category/tag mapping is a **hard error on a write**
+	(exit 1), never a silent pass, so a typo in the file cannot switch the gate
+	off. Reads (`show`, `list`) do not load it: a broken vocabulary must not
+	hide the store it describes.
+- **R54** Refusal applies to `add` and `update` only. `done` and `cancel`
+	carry the stored values forward unvalidated, so a legacy row can always be
+	closed; the rows are corrected by an explicit `update`.
+- **R55** `update --keep-chg-ts` reuses the task's current `chg_ts` instead of
+	the write time. A correction (a reclassification, a re-tag) must not read as
+	a completion in PACE, which counts done tasks by `chg_ts`.
+- **R56** `list --category` normalises its filter argument under R51, so a
+	filter typed in the old case finds the row stored in house spelling.
 
 ### Removed
 
@@ -497,6 +519,26 @@ Numbered, each with what was rejected.
 	rejects a new value, so the vocabulary was widening by accretion — one task at
 	a time, per session, invisible until someone counted. Tracked as epiq
 	`SNXBR23`; those tasks are left unchanged because a live session owns that work.
+21. **The vocabulary is enforced by a machine file, not by memory** (human,
+	2026-10-27, epiq `837DFQZ`). After the 2026-10-20 ruling the store still
+	carried `XLib`, `Models`, `Traveller` and a `Bug Fix` category, because
+	nothing rejected a new value or a new spelling; the cleanup is one command,
+	the recurrence is the problem. The allowed categories and tags now live in
+	`<data-dir>/vocab.yaml`, beside the per-machine store and outside this
+	repository for the same reason the store is outside it: the values are one
+	machine's organisation of work. `taskupdate` refuses an unlisted value before
+	writing (R52).
+	*Rejected:* validating on read in `taskview` (old rows must still display,
+	and a read that refuses shows nothing); auto-appending an unknown value
+	(that is accretion with a paper trail, not a gate); free text with a
+	warning (a warning is what "nothing in the toolchain rejects a new value"
+	already meant).
+	*Spelling is not vocabulary* (human, 2026-10-27): a value that differs only
+	in case, `-` or space is normalised and accepted, so the gate refuses
+	unknown words, not fumbled typing.
+	*Corrections keep their time* (R55): the one-time migration rewrote 29
+	rows through `update --keep-chg-ts`, so 28 closed tasks did not re-enter
+	PACE's done counts on the day they were relabelled.
 
 ## Category vocabulary, as ruled 2026-10-20
 
@@ -529,7 +571,9 @@ user's projects — one per project. The values live in the task store, which is
 per user and outside the repository, and a spec that listed them would publish
 a private organisation of work for no gain. **What this spec fixes is the shape
 and the rules**, because those are what the tool implements: the levels, the
-spelling, and the decisions below.
+spelling, and the decisions below. They are written down, and enforced, in the
+machine's `<data-dir>/vocab.yaml` (R51–R53), so the rule no longer depends on
+who remembers it.
 
 **The bucket is the twenty uncategorised tasks, all of them closed** — a
 bucket is no longer needed for anything open.

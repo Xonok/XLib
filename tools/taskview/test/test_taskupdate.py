@@ -99,7 +99,7 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 		self.run_add("Task with category", category="XLib")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][5], "XLib") # category column
+		self.assertEqual(rows[0][5], "xlib") # category column
 
 	def test_add_accepts_tags(self):
 		# R28: add accepts --tags
@@ -113,17 +113,17 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 		self.run_add("Task with both", category="Agents", tags="frontend,ui")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0][5], "Agents")
+		self.assertEqual(rows[0][5], "agents")
 		self.assertEqual(rows[0][6], "frontend,ui")
 
 	def test_update_accepts_category(self):
 		# R28: update accepts --category
-		self.run_add("Original", category="Old")
-		self.run_update(1, category="New")
+		self.run_add("Original", category="old")
+		self.run_update(1, category="new")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 2)
 		# Latest row for id=1 should have new category
-		self.assertEqual(rows[1][5], "New")
+		self.assertEqual(rows[1][5], "new")
 
 	def test_update_accepts_tags(self):
 		# R28: update accepts --tags
@@ -135,11 +135,11 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 
 	def test_update_accepts_both_category_and_tags(self):
 		# R28: update accepts both together
-		self.run_add("Original", category="A", tags="x")
-		self.run_update(1, category="B", tags="y,z")
+		self.run_add("Original", category="a", tags="x")
+		self.run_update(1, category="b", tags="y,z")
 		rows = self.read_rows()
 		self.assertEqual(len(rows), 2)
-		self.assertEqual(rows[1][5], "B")
+		self.assertEqual(rows[1][5], "b")
 		self.assertEqual(rows[1][6], "y,z")
 
 class TestR32AllNineColumnsWritten(unittest.TestCase):
@@ -250,64 +250,64 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 
 	def test_done_preserves_category_and_tags(self):
 		# R29: done on task with category and tags → both survive
-		self.run_add("Task to complete", category="XLib", tags="important,backend")
+		self.run_add("Task to complete", category="xlib", tags="important,backend")
 		latest = self.read_latest(1)
-		self.assertEqual(latest["category"], "XLib")
+		self.assertEqual(latest["category"], "xlib")
 		self.assertEqual(latest["tags"], "important,backend")
 
 		self.run_done(1)
 		latest = self.read_latest(1)
 		self.assertEqual(latest["status"], "done")
-		self.assertEqual(latest["category"], "XLib", "category must survive done")
+		self.assertEqual(latest["category"], "xlib", "category must survive done")
 		self.assertEqual(latest["tags"], "important,backend", "tags must survive done")
 		self.assert_row_has_9_fields(latest)
 
 	def test_cancel_preserves_category_and_tags(self):
 		# R29: cancel on task with category and tags → both survive
-		self.run_add("Task to cancel", category="Agents", tags="frontend,ui")
+		self.run_add("Task to cancel", category="agents", tags="frontend,ui")
 		self.run_cancel(1)
 		latest = self.read_latest(1)
 		self.assertEqual(latest["status"], "cancelled")
-		self.assertEqual(latest["category"], "Agents", "category must survive cancel")
+		self.assertEqual(latest["category"], "agents", "category must survive cancel")
 		self.assertEqual(latest["tags"], "frontend,ui", "tags must survive cancel")
 		self.assert_row_has_9_fields(latest)
 
 	def test_update_status_done_preserves_category_and_tags(self):
 		# R29: update --status done likewise
-		self.run_add("Task to update", category="Maintenance", tags="server,urgent")
+		self.run_add("Task to update", category="maintenance", tags="server,urgent")
 		self.run_update(1, status="done")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["status"], "done")
-		self.assertEqual(latest["category"], "Maintenance", "category must survive update --status done")
+		self.assertEqual(latest["category"], "maintenance", "category must survive update --status done")
 		self.assertEqual(latest["tags"], "server,urgent", "tags must survive update --status done")
 		self.assert_row_has_9_fields(latest)
 
 	def test_update_due_preserves_category(self):
 		# R29: update --due on categorised task → category survives
-		self.run_add("Task with due change", category="ProjectX", tags="tag1")
+		self.run_add("Task with due change", category="projects", tags="tag1")
 		self.run_update(1, due="2026-12-31")
 		latest = self.read_latest(1)
-		self.assertEqual(latest["category"], "ProjectX", "category must survive update --due")
+		self.assertEqual(latest["category"], "projects", "category must survive update --due")
 		self.assertEqual(latest["tags"], "tag1", "tags must survive update --due")
 		self.assert_row_has_9_fields(latest)
 
 	def test_update_title_preserves_category_and_tags(self):
 		# R29: update --title carries forward category and tags
-		self.run_add("Old title", category="CatA", tags="t1,t2")
+		self.run_add("Old title", category="hobby", tags="t1,t2")
 		self.run_update(1, title="New title")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["title"], "New title")
-		self.assertEqual(latest["category"], "CatA")
+		self.assertEqual(latest["category"], "hobby")
 		self.assertEqual(latest["tags"], "t1,t2")
 		self.assert_row_has_9_fields(latest)
 
 	def test_update_importance_preserves_category_and_tags(self):
 		# R29: update --importance carries forward category and tags
-		self.run_add("Task", category="CatB", tags="t3", importance="low")
+		self.run_add("Task", category="hobby", tags="t3", importance="low")
 		self.run_update(1, importance="high")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["importance"], "high")
-		self.assertEqual(latest["category"], "CatB")
+		self.assertEqual(latest["category"], "hobby")
 		self.assertEqual(latest["tags"], "t3")
 		self.assert_row_has_9_fields(latest)
 
@@ -336,7 +336,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 
 	def test_update_category_to_empty_preserves_other_fields(self):
 		# R29: update --category "" clears category but keeps others
-		self.run_add("Task", category="WasSet", tags="keepme", importance="medium")
+		self.run_add("Task", category="xlib", tags="keepme", importance="medium")
 		self.run_update(1, category="")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["category"], "")
@@ -356,9 +356,9 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 
 	def test_all_write_paths_produce_9_columns(self):
 		# R32: sanity check that every subcommand produces 9-column rows
-		self.run_add("Add task", category="Cat", tags="Tag", importance="low")
+		self.run_add("Add task", category="xlib", tags="tag", importance="low")
 		self.run_update(1, status="done")
-		self.run_add("Another", category="Cat2")
+		self.run_add("Another", category="hobby")
 		self.run_done(2)
 		self.run_add("Third", tags="t1")
 		self.run_cancel(3)

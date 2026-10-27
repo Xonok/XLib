@@ -15,8 +15,10 @@ for _p in (str(_root), str(_root / "tools")):
 
 try:
 	from tools.taskview.taskview import resolve_data_dir,resolve_csv
+	from tools.taskview.vocab import VocabError,check_category,check_tags,load_vocab,normalise_tags,normalise_value
 except ImportError:
 	from taskview import resolve_data_dir,resolve_csv
+	from vocab import VocabError,check_category,check_tags,load_vocab,normalise_tags,normalise_value
 
 # Kept for backwards compatibility with existing tests that mock it
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"
@@ -165,6 +167,24 @@ def parse_due(arg):
 	print(f"Invalid due date: {arg}", file=sys.stderr)
 	sys.exit(1)
 
+def clean_category(category: str, vocab: dict | None) -> str:
+	"""The category in house spelling; exits 1 when the vocabulary refuses it."""
+	category = normalise_value(category)
+	refusal = check_category(category, vocab)
+	if refusal:
+		print(refusal, file=sys.stderr)
+		sys.exit(1)
+	return category
+
+def clean_tags(tags: str, vocab: dict | None) -> str:
+	"""The tag list in house spelling, de-duplicated; exits 1 when refused."""
+	tags = normalise_tags(tags)
+	refusal = check_tags(tags, vocab)
+	if refusal:
+		print(refusal, file=sys.stderr)
+		sys.exit(1)
+	return tags
+
 def resolve_csv_path(args) -> Path:
 	"""
 	Resolve CSV path per R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.csv (R17/R18).
@@ -204,6 +224,7 @@ def main():
 	p_upd.add_argument("--tags", default=None)
 	p_upd.add_argument("--importance", default=None, choices=["low", "medium", "high", ""])
 	p_upd.add_argument("--description", default=None)
+	p_upd.add_argument("--keep-chg-ts", action="store_true", help="Keep the task's current change time (a correction, not a change)")
 
 	p_done = sub.add_parser("done", help="Mark task done")
 	p_done.add_argument("id", type=int)
@@ -225,10 +246,19 @@ def main():
 	# Resolve CSV path per R30
 	csv_path = resolve_csv_path(args)
 
+	vocab = None
+	if args.cmd in ("add", "update"):
+		try:
+			vocab = load_vocab()
+		except VocabError as e:
+			print(f"taskupdate: {e}", file=sys.stderr)
+			sys.exit(1)
 	if args.cmd == "add":
 		task_id = read_last_id(csv_path) + 1
 		due_ts = parse_due(args.due) if args.due else ""
-		append_row(csv_path, task_id, args.status, args.title, due_ts, now, args.category, args.tags, args.importance, args.description)
+		category = clean_category(args.category, vocab) if args.category else ""
+		tags = clean_tags(args.tags, vocab) if args.tags else ""
+		append_row(csv_path, task_id, args.status, args.title, due_ts, now, category, tags, args.importance, args.description)
 
 	elif args.cmd == "update":
 		if (args.status is None and args.title is None and args.due is None
@@ -246,7 +276,12 @@ def main():
 		tags = args.tags if args.tags is not None else current["tags"]
 		importance = args.importance if args.importance is not None else current["importance"]
 		description = args.description if args.description is not None else current["description"]
-		append_row(csv_path, args.id, status, title, due_ts, now, category, tags, importance, description)
+		if args.category is not None:
+			category = clean_category(args.category, vocab)
+		if args.tags is not None:
+			tags = clean_tags(args.tags, vocab)
+		chg_ts = current["chg_ts"] if args.keep_chg_ts else now
+		append_row(csv_path, args.id, status, title, due_ts, chg_ts, category, tags, importance, description)
 
 	elif args.cmd == "done":
 		current = read_task(csv_path, args.id)
@@ -293,7 +328,7 @@ def main():
 			t = state[task_id]
 			if args.status and t["status"] != args.status:
 				continue
-			if args.category and t["category"] != args.category:
+			if args.category and t["category"] != normalise_value(args.category):
 				continue
 			rows_out.append(t)
 		if not rows_out:
