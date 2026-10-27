@@ -8,6 +8,10 @@
 > ticket and its comments carry the intent, and the rulings are quoted in the
 > decisions below. All decisions are ruled; the three that were open at the
 > first review were answered by the human on 2026-10-27.
+>
+> **Revised 2026-10-27 after test derivation.** Three claims the tests could not
+> support are corrected: R10's overdue arithmetic, R29's dependency statement,
+> and the `fmt_due` wording in R6 and Decision 9.
 
 ## Goal
 
@@ -69,8 +73,9 @@ current time as a parameter so no test depends on the wall clock.
 	between dates, not between timestamps.
 - **R6** A task in the payload has exactly these keys: `id` (int), `title`
 	(string), `due_ts` (int or null), `due_date` (`YYYY-MM-DD` local date, or
-	null), `due_label` (string, from `taskupdate.fmt_due`), `category` (string,
-	possibly empty), `tags` (sorted list of strings) and `chg_ts` (int).
+	null), `due_label` (string, from `taskupdate.fmt_due` and in the same
+	wording as `taskview.fmt_due`), `category` (string, possibly empty), `tags`
+	(sorted list of strings) and `chg_ts` (int).
 	`chg_ts` is the concurrency token; the description is deliberately absent,
 	because the wide view does not show it and it is the largest field, and
 	`importance` is absent because nothing in this view orders or filters by it.
@@ -105,7 +110,7 @@ current time as a parameter so no test depends on the wall clock.
 	date is accepted because the human wrote the interaction as `2026/10/27`,
 	and the parser normalises it to the store's dash form. A bump from an
 	overdue task is measured from its stored due date, not from today: `+7d` on
-	a task three days overdue leaves it four days overdue.
+	a task three days overdue lands four days ahead of today, not seven.
 - **R11** A write goes through `set_due(csv_path, task_id, new_due_ts,
 	expected_chg_ts, now)`, and the whole read-check-append sequence is one
 	critical section:
@@ -231,9 +236,11 @@ current time as a parameter so no test depends on the wall clock.
 	wins. The `chg_ts` guard narrows that window to the microseconds between
 	the re-read and the append; it does not close it, and the spec does not
 	pretend otherwise.
-- **R29** The only dependencies are the Python standard library and this
-	repository's own modules (`taskview`, `taskupdate`, optionally `xhttp`). No
-	third-party package, and no network access beyond the local socket.
+- **R29** The tool adds no third-party dependency. It imports the Python
+	standard library and this repository's own modules (`taskview`, `taskupdate`,
+	optionally `xhttp`), and no network access beyond the local socket. The one
+	third-party package in the process is `taskview`'s existing PyYAML import,
+	which this tool inherits rather than chooses.
 
 ### Operations
 
@@ -305,8 +312,9 @@ current time as a parameter so no test depends on the wall clock.
 	too; the residual race is the store's documented last-write-wins model, and
 	the guard narrows it, R28).
 9. **The server computes labels and owns the grammar; the page is thin.**
-	`due_label` comes from `fmt_due`, so the board and the pane word dates
-	identically, and the edit grammar is one tested function rather than two
+	`due_label` comes from `taskupdate.fmt_due`, whose far-date form this spec
+	aligns with `taskview.fmt_due` (`%m-%d`), so the board and the pane word
+	dates identically; the edit grammar is one tested function rather than two
 	implementations. *Rejected:* formatting in JavaScript, which would give the
 	repo a second date formatter with its own edge cases.
 10. **A strict content policy with separate asset files.** The page needs no
@@ -403,5 +411,8 @@ def set_due(csv_path: Path, task_id: int, new_due_ts: int | None,
 ```
 
 `taskupdate.fmt_due` gains an optional `today: date | None` argument so R6 and
-its tests can pin the wording; with the argument omitted its output is
-unchanged. That is the only change this spec makes to an existing module.
+its tests can pin the wording. Its far-date form becomes `%m-%d`, matching
+`taskview.fmt_due`; the two disagreed for dates seven or more days out, while
+Decision 9 says the board and the pane word dates identically. With `today`
+omitted it still reads the wall clock. That function is the only existing code
+this spec changes.

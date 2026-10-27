@@ -177,6 +177,14 @@ def test_R6_due_label_comes_from_taskupdate_fmt_due():
 	due = _ts(2026, 11, 10)
 	payload = board.task_payload(_task(1, due), NOW)
 	xtest.equal(payload["due_label"], taskupdate.fmt_due(due, today=TODAY))
+	xtest.equal(payload["due_label"], "11-10")
+
+def test_R6_the_board_and_pane_word_far_dates_identically():
+	from tools.taskview import taskupdate,taskview
+	today = datetime.date.today()
+	due = today + datetime.timedelta(days=14)
+	stamp = int(datetime.datetime(due.year, due.month, due.day, 12, 0).timestamp())
+	xtest.equal(taskupdate.fmt_due(stamp, today=today), taskview.fmt_due(stamp))
 
 def test_R6_chg_ts_is_an_integer():
 	board = load_board()
@@ -195,8 +203,9 @@ def test_fmt_due_accepts_a_pinned_today():
 	xtest.equal(taskupdate.fmt_due(_ts(2026, 10, 27), today=TODAY), "today")
 	xtest.equal(taskupdate.fmt_due(_ts(2026, 10, 28), today=TODAY), "tomorrow")
 	xtest.equal(taskupdate.fmt_due(_ts(2026, 10, 24), today=TODAY), "overdue 3d")
+	xtest.equal(taskupdate.fmt_due(_ts(2026, 11, 10), today=TODAY), "11-10")
 
-def test_fmt_due_keeps_its_old_output_when_today_is_omitted():
+def test_fmt_due_omitting_today_still_uses_the_wall_clock():
 	from tools.taskview import taskupdate
 	today = datetime.date.today()
 	stamp = int(datetime.datetime(today.year, today.month, today.day, 12, 0).timestamp())
