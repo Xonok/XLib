@@ -7,13 +7,17 @@
 # is created up front with the agent bound, then attached to.
 AGENT="$1"
 
-# The names `oc-agent <name>` accepts, asked of opencode itself: an agent may
-# come from a file under .opencode/agent/, from a built-in, or from a plugin, so
-# reading one directory would list names the launcher rejects and miss names it
-# takes. Only primary-capable agents can head a session. Prints nothing if
-# opencode cannot answer, which callers read as "unknown".
+# The agent list, asked of opencode itself: an agent may come from a file under
+# .opencode/agent/, from a built-in, or from a plugin, so reading one directory
+# would list names the launcher rejects and miss names it takes. Both the name
+# check and the model lookup read this one answer. Empty when opencode cannot
+# answer, which callers read as "unknown".
+agents_json=$(opencode api get /api/agent 2>/dev/null)
+
+# The names `oc-agent <name>` accepts. Only primary-capable agents can head a
+# session.
 agent_names() {
-	opencode api get /api/agent 2>/dev/null \
+	printf '%s' "$agents_json" \
 		| jq -r '.data[] | select(.mode=="all") | .name' 2>/dev/null \
 		| sort -u
 }
@@ -122,14 +126,26 @@ trap cleanup EXIT
 # asking it would label every session with the wrong workspace.
 project_dir="$PWD"
 
-# Create the session with the agent already bound, so the window opens on the
-# right agent without a switch. Location is explicit because the service
-# resolves it from its own working directory otherwise, not this terminal's.
+# The session stores its own model: binding an agent does not select that
+# agent's model (opencode v2, Agents → Model), and a session created with
+# `agent` alone runs the global default — which makes the agent file's pin
+# silently do nothing. `/api/agent` reports the resolved Model.Ref, so hand it
+# to the session. `null` when the agent has none, which keeps the global
+# default, exactly as before.
+agent_model=$(printf '%s' "$agents_json" | jq -c --arg name "$AGENT" \
+	'.data[] | select(.name==$name) | .model // empty' 2>/dev/null | head -n 1)
+[ -n "$agent_model" ] || agent_model=null
+
+# Create the session with the agent and its model already bound, so the window
+# opens on the right agent without a switch and on the model the file pins.
+# Location is explicit because the service resolves it from its own working
+# directory otherwise, not this terminal's.
 created=$(opencode api post /api/session --data "$(jq -nc \
 	--arg agent "$AGENT" \
 	--arg title "$TITLE" \
 	--arg dir "$project_dir" \
-	'{agent:$agent,title:$title,location:{directory:$dir}}')" 2>/dev/null)
+	--argjson model "$agent_model" \
+	'{agent:$agent,title:$title,model:$model,location:{directory:$dir}}')" 2>/dev/null)
 
 session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 [ -n "$session_id" ] || die "could not create a session for '$AGENT' (is the opencode service running? try: opencode service status)"
