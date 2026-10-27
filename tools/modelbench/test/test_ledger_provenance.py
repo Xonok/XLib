@@ -92,7 +92,7 @@ def test_run_once_carries_both_directories_into_the_record():
 			"usage":0,"raw":"","provider_error":"","stderr":"","timed_out":False,
 			"returncode":0,"turn_budget":40,"over_budget":False}
 	episodes_run.agent.run_episode_harness = fake_run
-	episodes_run.trace.analyse = lambda raw,baseline=None: {
+	episodes_run.trace.analyse = lambda raw,baseline=None,**kw: {
 		"detail":{"n_turns":0,"checker":{"cases":[]}},"gates":{}}
 	episodes_run.trace.grade = lambda result: ("not-measurable",[])
 	episodes_run.session_directory = lambda session: "/tmp/opencode/ep-billing-x"

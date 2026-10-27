@@ -208,7 +208,7 @@ def regrade(db,record,state_dir,episode,model=None):
 		agent._harness_prompt = saved_prompt
 		agent._plant_agent_definition = saved_plant
 	raw["root"] = state_dir
-	result = trace.analyse(raw,baseline=episode["baseline"])
+	result = trace.analyse(raw,baseline=episode["baseline"],episode=episode["name"])
 	grade,failed = trace.grade(result)
 	return grade,failed,raw,result
 

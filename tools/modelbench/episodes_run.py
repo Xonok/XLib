@@ -131,7 +131,7 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=None,pr
 	else:
 		raw = agent.run_episode(model,episode["request"],sandbox,
 			max_turns=max_turns,max_tokens=max_tokens)
-	result = trace.analyse(raw,baseline=episode["baseline"])
+	result = trace.analyse(raw,baseline=episode["baseline"],episode=episode["name"])
 	grade,failed = trace.grade(result)
 	return {"episode":episode["name"],"model":model["id"],"transport":model.get("transport"),
 		"sandbox":sandbox,"grade":grade,"failed_gates":failed,
