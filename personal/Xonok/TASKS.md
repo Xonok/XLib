@@ -502,7 +502,7 @@ needed when there is no due date.
 	which the commit-msg hook would not take without a ref, and which needed a
 	ticket on the board where the change lands.
 - [x] **#151 — Spec: the wide all-tasks priority view** (done 2026-10-27, medium)
-	— board: epiq `E5MH4S2` (Todo). **The human's own framing, 2026-10-20:** the
+	— board: epiq `E5MH4S2` (Done), `BHWCJ86` (closed). **The human's own framing, 2026-10-20:** the
 	wide tool *always orders by due date* — changing the order is simply a
 	result of changing a due date, so a separate priority mechanism is not
 	needed and the priority sweep of all 77 open tasks is not wanted. **The
@@ -540,8 +540,11 @@ needed when there is no due date.
 	the spec is `tools/taskboard/SPEC.md`. The three review questions were ruled
 	the same day: **order is due date alone, ties by id** (the view requires no
 	other field); **the board is deliberately unfiltered**; **the name is
-	`taskboard`**. Next is test derivation by the reviewer (pass 1), then
-	implementation as a separate ticket.
+	`taskboard`**. **The implementation followed the same day** — 191 derived
+	tests, then `tools/taskboard/` itself, merged as PR #117 (`3bb8f99`,
+	`581650d`, `4f5d2f0`, `0324e73`), with epi `BHWCJ86` closed on the human's
+	call. The only change to existing code is `taskupdate.fmt_due` gaining
+	`today` and the `%m-%d` far-date form.
 - [x] **#139 — xlint: add html support** (done 2026-10-19, medium) — board: epiq
 	`YFJZRYC` (Done). **Implemented and merged** — PR #42, on master as `5c1865e`,
 	merged on the human's own instruction so they could run it over Traveller.
