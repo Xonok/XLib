@@ -17,16 +17,30 @@ and, on what the repository is for:
 > oversteps that goal by bringing in details that don't matter to the task, or
 > are overly revealing should not be included here.
 
+**Narrowed on 2026-10-28, value by value, when the check began refusing commits
+in the private workspace.** What he owns is his to publish: *"My private projects
+are fine to mention"*, and his email address is allowed *"because it's in git
+anyway"*. What is not: his legal name (*"My name no, internet name yes"*), his
+colleagues' names, and anything belonging to the employer — a private project is
+excluded when it is *work*, not when it is private. Machine-local paths leave for
+a different reason: *"that's just because they should be in machine info"*.
+
 ## What may not appear in a tracked file, a ticket, or a commit message
 
-1. **Anything related to the owner's work** — private projects, employment, the
-		shape of their task system, the projects a tool was written for.
+1. **Anything that belongs to someone else's work** — the employer, its
+		workspace, the projects in it, and anything a tool was written for under an
+		employer. **The owner's own private projects are his to name** (his ruling,
+		2026-10-28: *"My private projects are fine to mention"*); work is not his to
+		publish.
 2. **Anything that identifies another person** — a colleague's name is personal
 		data too, and it was published here without their knowing.
-3. **A project that is not open source.** Measured, not assumed: `gh repo view`
-		says Space-Traveller and XLib are public and the rest are private.
+3. **The owner's legal name.** His handle is not personal data and is allowed,
+		and so is his email address, which is already in every commit in the public
+		history.
 4. **Anything that only makes sense on this machine** — a home path, an account
-		name, a private domain.
+		name, a private domain. This one is a placement rule rather than a privacy
+		rule: those values belong in the git-ignored `machine-info.md` of the
+		workspace, never in a tracked file.
 5. **Anything that does not matter to the task, or is overly revealing.** A
 		repository for public libraries and tools carries the tools' own subject
 		matter, not the owner's surroundings.
@@ -50,9 +64,9 @@ The record keeps the meaning and drops the value:
 > the tool hardcoded the account, the workspace and the repo list, and a public
 > repository that states them states whose it is
 
-not the three of them. The same holds for a document that used a private
-project as an example: it says what the example was *for*, and the example is
-one anybody could have written.
+not the three of them. The same holds for a document that used a project of
+someone else's as an example: it says what the example was *for*, and the example
+is one anybody could have written.
 
 ## The check
 

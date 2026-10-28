@@ -3,8 +3,8 @@ Personal identifiers in tracked files, and the token list they are checked again
 
 The rule this implements is in `doc/personal-data.md`: a public repository for
 public libraries and tools carries nothing that identifies the person who owns
-it, the private projects they work on, the colleagues they work with, or the
-machine they work on.
+it, the work an employer owns, the colleagues they work with, or the machine
+they work on.
 
 **The token list lives outside the repository**, in
 `~/.config/xlib/personal-details.txt` — one literal per line, `#` for a
