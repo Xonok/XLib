@@ -2,11 +2,9 @@
 
 Don't change files that carry uncommitted changes you did not make. Before your first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. A file you created yourself earlier in the session is yours to keep editing. The human can override by explicit instruction.
 
-## Exception: `STATUS.md` and `HISTORY.md`
+## No state-file exception here
 
-`personal/<person>/STATUS.md` and `personal/<person>/HISTORY.md` are exempt from the dirty-file rule. They are shared state files, meant to be updated at the first opportunity, so a dirty copy is their normal condition rather than someone else's work-in-progress to protect.
-
-The exception is about proceeding, not discarding. Edit the working copy as it stands; never restore it from the index or a commit. A commit that touches one of these files may carry another session's pending line, and that is expected — the line is an update at its own first opportunity, not an edit to be unpicked.
+The per-person state files live in the private Agents workspace at `personal/<person>/XLib/`; this checkout carries none, so there is nothing here to exempt from the dirty-file rule. The exemption and its reasoning are in that workspace's own working-tree rule (`KK8RRNQ`, 2026-10-28).
 
 ## The boundary is the worktree
 
@@ -18,7 +16,7 @@ The exception is about proceeding, not discarding. Edit the working copy as it s
 
 ## Who writes the state files
 
-**Not a feature branch.** `personal/<person>/{STATUS,TASKS,HISTORY}.md` are written by the secretary, at merge time. A Done ticket does not carry them — the rule and its reason are in `doc/state-files-history.md`.
+**Not a feature branch.** The state files are written by the secretary, at merge time, in the Agents workspace. A Done ticket does not carry them — the rule and its reason are in `doc/state-files-history.md`.
 
 ## `git checkout` is banned
 

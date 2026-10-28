@@ -479,5 +479,25 @@ class TestPersonalInitDefaultFiles(unittest.TestCase):
 			created = sorted(p.name for p in (ws / "personal" / "tester").iterdir())
 			self.assertEqual(created, ["PLAN.md", "STATUS.md"])
 
+	def test_root_scaffolds_the_named_workspace(self):
+		# An installer runs from the workspace it is bootstrapping, but an agent
+		# session's `workspace_root()` resolves the session's cwd instead. The
+		# explicit root is what keeps `personal init` out of the wrong repo.
+		with tempfile.TemporaryDirectory() as folder:
+			target = Path(folder) / "target"
+			other = Path(folder) / "other"
+			target.mkdir()
+			other.mkdir()
+			(target / ".agents").mkdir()
+			(other / ".agents").mkdir()
+			tool = load_tool()
+			tool.workspace_root = lambda: str(other)
+			argv = ["agent-coord.py", "personal", "init", "--person", "tester", "--root", str(target)]
+			with mock.patch.object(sys, "argv", argv):
+				tool.main()
+			created = sorted(p.name for p in (target / "personal" / "tester").iterdir())
+			self.assertEqual(created, ["PLAN.md", "STATUS.md"])
+			self.assertFalse((other / "personal").exists())
+
 if __name__ == "__main__":
 	unittest.main()

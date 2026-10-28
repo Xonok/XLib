@@ -83,22 +83,20 @@ description and to a comment.
 	the hook rejects the state branch's `[sync|branch:…]` subjects, and the
 	branch is up to date on the remote anyway, so epiq pushes past it.
 
-## What is exempt, and until when
+## What is exempt
 
 - **The git history.** By the human's ruling: *"it's fine if careful checking
 	of git logs can reveal them."* Rewriting published history would also
 	rewrite every commit hash the board's commit-linking reads.
-- **`personal/<person>/{STATUS,HISTORY,TASKS}.md`**, until epiq `KK8RRNQ` is
-	ruled on. Those files are the owner's work log *about private work* — an
-	entry records which private repository's proxy discards a request, and it is
-	worthless without it — so scrubbing them in place would gut forty-odd
-	records to satisfy a rule. The answer is structural: the folder belongs in
-	the private Agents repository. The exemption ends with that ticket.
+
+**Nothing in the tracked tree is exempt.** The per-person state files moved to
+the private Agents workspace on 2026-10-28 (`KK8RRNQ`); the folder and the
+in-repo exemption went with them. The check has no `personal/` exemption left.
 
 ## Where this came from
 
 `PNAJ6D0` removed the hardcoded settings from `tools/bbprs/bbprs.py`, and the
-record of that fix kept them — one line of `personal/Xonok/HISTORY.md` quoted
+record of that fix kept them — one line of the then-tracked `HISTORY.md` quoted
 the reviewer's real name, the private workspace slug and the private repo
 names, in a public repository. The rule is the answer to that: the values live
 outside the repository, the record says what they were for, and the check

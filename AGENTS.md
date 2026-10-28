@@ -4,7 +4,7 @@ These rules apply to all code written in this repository. AI assistants must fol
 
 `.agents/agent-notes-<id>.md` is a per-agent, git-ignored file for session state. `.agents/shared-notes.md` is a shared, cross-agent file for user preferences and cross-cutting context. Both survive `/new`.
 
-Multiple agents may work in this repo at once. **A worktree per ticket is the boundary** — each agent works in its own checkout, so two agents cannot edit one file in one place. Before a first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. **`personal/<person>/STATUS.md` and `HISTORY.md` are exempt**: they are updated at the first opportunity, so edit the working copy as it stands and never restore it (`doc/working-tree.md`). **There is no file-claim mechanism**: the one this repository had until 2026-10-21 keyed claims by absolute path, which a worktree changes without changing the file, so one file had two claim keys that could not collide, and nothing checked a claim at commit time, so it protected nothing the filesystem was not already protecting.
+Multiple agents may work in this repo at once. **A worktree per ticket is the boundary** — each agent works in its own checkout, so two agents cannot edit one file in one place. Before a first edit, run `python3 tools/agent-coord.py check-clean <path>` — `clean` means proceed, `dirty` means stop and name the blocked file. **The state files are not in this repository**: they live in the private Agents workspace at `personal/<person>/XLib/`, so this checkout has none to exempt (`doc/state-files-history.md`). **There is no file-claim mechanism**: the one this repository had until 2026-10-21 keyed claims by absolute path, which a worktree changes without changing the file, so one file had two claim keys that could not collide, and nothing checked a claim at commit time, so it protected nothing the filesystem was not already protecting.
 
 **Testing**: the repository's testing solution is `xtest` (`dev/xtest/`), and
 standardising on it means eventually using only xtest. Two rules: **rewrite to
@@ -34,8 +34,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 | `doc/style/prose.md` | How to explain technical things so the human can check them |
 | `doc/plans/*.md` | Cross-cutting design docs, roadmap, pipeline maps; index in `doc/plans/README.md` |
 | `<library>/SPEC.md` | Library map: modules, data flow, invariants, decisions |
-| `personal/<person>/STATUS.md` (tracked); root `STATUS.md` is a per-person symlink (gitignored, created by `agent-coord.py personal init`). **Written by the secretary at merge time, not carried on feature branches** — a Done ticket does not carry the state files. |
-| `personal/<person>/HISTORY.md` (tracked) — the append-only record of what happened and when. STATUS.md states the present and only the present; anything worth reading in six weeks goes in HISTORY.md instead. **Also written by the secretary at merge time**, for the same reason. |
+| Agents workspace `personal/<person>/XLib/{STATUS,HISTORY}.md` (tracked there) — this repository's state files, moved out on 2026-10-28 because this repository is public. `STATUS.md` states the present; `HISTORY.md` is the append-only record. **Written by the secretary at merge time, not carried on feature branches** — a Done ticket does not carry them. |
 
 The following rules live in dedicated docs files and are also linked from the table above:
 

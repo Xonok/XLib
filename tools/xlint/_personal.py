@@ -23,15 +23,6 @@ from pathlib import Path
 DEFAULT_TOKEN_FILE = "~/.config/xlib/personal-details.txt"
 ENV_TOKEN_FILE = "XPERSONAL_DETAILS"
 
-# Files under these prefixes are exempt while epiq `KK8RRNQ` is open. The
-# per-person state files are the owner's work log *about private work* — an
-# entry records which private repository's proxy discards a request, and it is
-# worthless without it — so scrubbing them in place would gut forty-odd
-# records to satisfy a rule. The exemption ends when that ticket is ruled on:
-# the folder moves to the private Agents repository, or the records are
-# scrubbed and the exemption goes with them.
-EXEMPT_PREFIXES = ("personal/",)
-
 # A word character for the boundary test: a letter, a digit, and the four
 # characters that join a word into a longer name. A short token must not match
 # inside a longer name that begins with it, and a path token must not match
@@ -72,14 +63,6 @@ def _pattern(token: str):
 	return re.compile(r"(?<![" + _WORD + r"])" + re.escape(token) + r"(?![" + _WORD + r"])",
 		re.IGNORECASE)
 
-def is_exempt(path) -> bool:
-	"""True when the file is under an exempt prefix, relative to the repository."""
-	text = str(path)
-	for prefix in EXEMPT_PREFIXES:
-		if prefix in text or text.startswith(prefix.rstrip("/")):
-			return True
-	return False
-
 def find(lines, tokens) -> list:
 	"""The personal identifiers in `lines`, as (line number, token) pairs."""
 	report = []
@@ -89,7 +72,7 @@ def find(lines, tokens) -> list:
 				report.append((index, token))
 	return report
 
-def check(lines, path) -> list:
+def check(lines) -> list:
 	"""The personal identifiers in a tracked file, as xlint problems.
 
 	Only tracked files: an untracked file is not published, and a draft is
@@ -97,8 +80,6 @@ def check(lines, path) -> list:
 	"""
 	tokens = load_tokens()
 	if not tokens:
-		return []
-	if is_exempt(path):
 		return []
 	return [(index, "personal identifier in a tracked file — this repository is public; "
 		"keep the value out of it and say what it was")
