@@ -1356,12 +1356,12 @@ def check_absolute_paths(lines, exempt_lines, path):
 	`~/` would have meant rewriting correct code to point at a machine-info
 	file, which is a rule that makes the code worse.
 
-	Known exempt paths (AGENTS.md, plans/, personal/*/HISTORY.md) are skipped
-	entirely at the file level.
+	Known exempt paths (AGENTS.md, plans/) are skipped entirely at the file
+	level.
 	"""
 	# File-level exemptions: known paths where absolute paths are the content
 	path_str = str(path)
-	if path_str == "AGENTS.md" or path_str.startswith("plans/") or path_str.startswith("doc/plans/") or re.match(r"personal/[^/]+/HISTORY\.md$", path_str):
+	if path_str == "AGENTS.md" or path_str.startswith("plans/") or path_str.startswith("doc/plans/"):
 		return []
 
 	report = []
@@ -1681,7 +1681,7 @@ def check_file(path, args):
 	if not args.no_personal and _is_tracked_file(path):
 		# A tracked file is published with the repository, and this repository is
 		# public. The check asks for the personal identifiers to stay out of it.
-		problems.extend((line, msg) for line, msg in _personal.check(text_lines, path))
+		problems.extend((line, msg) for line, msg in _personal.check(text_lines))
 	return problems
 
 class _InotifyWatcher:

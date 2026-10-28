@@ -17,7 +17,6 @@ specific locations belong in the Agents workspace's `.agents/machine-info.md`.
 | `xlib_dev/` | override: same import names as `xlib`, resolved from `dev/` |
 | `tools/<tool>/` | tools and scripts, developed like libraries but never released |
 | `doc/` | process, style rules, plans, reviews, audits |
-| `personal/<person>/` | `STATUS.md`, `TASKS.md`, `HISTORY.md` |
 | `xlib_legacy/` | prior art, reference only — nothing imports it |
 
 ## A library's dev folder

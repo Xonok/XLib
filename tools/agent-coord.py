@@ -115,7 +115,10 @@ def cmd_personal_init(args):
 		sys_stderr("person id resolved to empty after sanitization")
 		raise SystemExit(1)
 	files = args.files.split(" ") if isinstance(args.files, str) else args.files
-	ws_root = workspace_root()
+	ws_root = os.path.abspath(args.root) if args.root else workspace_root()
+	if not os.path.isdir(ws_root):
+		sys_stderr("--root is not a directory: %s" % ws_root)
+		raise SystemExit(1)
 	person_dir = os.path.join("personal", pid)
 	for fname in files:
 		fn = fname.strip(" ")
@@ -1042,7 +1045,7 @@ def nearest_git(path):
 def repo_forms(repo, path):
 	"""The path as the repository names it, and the name behind a symlink.
 
-	The root of a workspace holds a symlink to the tracked file it stands for
+	A workspace root may hold a symlink to the tracked file it stands for
 	(`STATUS.md` -> `personal/<person>/STATUS.md`), and git reports the tracked
 	name, so a check that used the symlink's own name matched nothing and called a
 	dirty file clean.
@@ -1122,6 +1125,8 @@ def main():
 	sp.add_argument("--person", default=None, help="override person name")
 	sp = cp.add_parser("init", help="initialize personal files and root symlinks")
 	sp.add_argument("--person", default=None, help="override person name")
+	sp.add_argument("--root", default=None,
+		help="workspace to scaffold (default: the caller's workspace; an installer passes its own)")
 	sp.add_argument("--seed", choices=["current", "template"], default="template",
 		help="seed from current root file or template (default: template)")
 	sp.add_argument("--files", default="STATUS.md PLAN.md",

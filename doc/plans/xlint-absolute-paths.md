@@ -2,6 +2,8 @@
 
 Status: **planned** — epi `7HP67R2`. The rule in `AGENTS.md:66-68` exists as prose only; the check that would enforce it does not.
 
+> **Note, 2026-10-28:** the check landed under `7HP67R2`; the status line above was never updated. The `personal/<person>/HISTORY.md` exemption named below was removed with `KK8RRNQ`, when the per-person state left this repository — the check no longer has that path allowlist.
+
 ## Problem
 
 - A tracked file is versioned *and* synced between machines, so an absolute path is wrong in the ordinary way (it means nothing on another machine) and in the git way (it records one machine's layout as if it were the project's).

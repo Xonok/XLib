@@ -1,5 +1,7 @@
 # Per-Person Operational Files
 
+> **Superseded 2026-10-28 (epi `KK8RRNQ`).** The per-person files no longer live in this repository — it is public. This repository's state is at `personal/<person>/XLib/` in the private Agents workspace. The rest of this document is kept as the record of the 2026-09-20 layout that produced the in-repo folder.
+
 ## Goal
 
 Make the per-project master files (`STATUS.md`, `PLAN.md`, `TASKS.md`) *tracked but

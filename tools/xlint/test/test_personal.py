@@ -110,7 +110,7 @@ class TestTheCheck(unittest.TestCase):
 			path = _token_file(folder)
 			os.environ["XPERSONAL_DETAILS"] = str(path)
 			try:
-				problems = _personal.check(["the %s project" % TOKEN], Path("notes.md"))
+				problems = _personal.check(["the %s project" % TOKEN])
 				self.assertEqual(len(problems), 1)
 				self.assertIn("personal identifier", problems[0][1])
 			finally:
@@ -121,27 +121,14 @@ class TestTheCheck(unittest.TestCase):
 			path = _token_file(folder)
 			os.environ["XPERSONAL_DETAILS"] = str(path)
 			try:
-				self.assertEqual(_personal.check(["a clean line"], Path("notes.md")), [])
-			finally:
-				del os.environ["XPERSONAL_DETAILS"]
-
-	def test_the_per_person_state_files_are_exempt_while_the_ticket_is_open(self):
-		# epi `KK8RRNQ`: the state files are the owner's work log about private
-		# work, and scrubbing them in place would gut forty-odd records. The
-		# exemption ends with that ticket.
-		with tempfile.TemporaryDirectory() as folder:
-			path = _token_file(folder)
-			os.environ["XPERSONAL_DETAILS"] = str(path)
-			try:
-				problems = _personal.check(["the %s project" % TOKEN], Path("personal/someone/STATUS.md"))
-				self.assertEqual(problems, [])
+				self.assertEqual(_personal.check(["a clean line"]), [])
 			finally:
 				del os.environ["XPERSONAL_DETAILS"]
 
 	def test_a_machine_without_a_list_has_no_findings(self):
 		os.environ["XPERSONAL_DETAILS"] = "/nonexistent/personal-details.txt"
 		try:
-			self.assertEqual(_personal.check(["the %s project" % TOKEN], Path("notes.md")), [])
+			self.assertEqual(_personal.check(["the %s project" % TOKEN]), [])
 		finally:
 			del os.environ["XPERSONAL_DETAILS"]
 
