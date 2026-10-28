@@ -466,13 +466,16 @@ class TestPersonalInitDefaultFiles(unittest.TestCase):
 	def test_the_default_leaves_out_tasks_md(self):
 		with tempfile.TemporaryDirectory() as folder:
 			ws = Path(folder)
-			# The workspace root is found by walking up for `.agents`, so the
-			# temporary folder needs one; without it the tool falls back to the
-			# checkout it lives in and the test would edit XLib's own root files.
 			(ws / ".agents").mkdir()
-			result = subprocess.run([sys.executable, str(TOOL), "personal", "init", "--person", "tester"],
-				cwd=str(ws), capture_output=True, text=True)
-			self.assertEqual(result.returncode, 0, result.stderr)
+			tool = load_tool()
+			# Pin the workspace rather than letting the tool find it. In a
+			# subprocess the session's OPENCODE_SESSION_ID wins over cwd, so
+			# this used to resolve XLib's real root and write personal/tester
+			# there. `CoordTestCase` pins it the same way.
+			tool.workspace_root = lambda: str(ws)
+			argv = ["agent-coord.py", "personal", "init", "--person", "tester"]
+			with mock.patch.object(sys, "argv", argv):
+				tool.main()
 			created = sorted(p.name for p in (ws / "personal" / "tester").iterdir())
 			self.assertEqual(created, ["PLAN.md", "STATUS.md"])
 
