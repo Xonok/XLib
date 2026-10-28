@@ -510,38 +510,87 @@ def quota_line(quota, width):
 			return line
 	return title if len(title) <= width else title[:width]
 
+# The values a render needs from one assistant message, in the order `aggregate`
+# unpacks them. The window filters on the `time_created` column rather than on
+# the JSON copy of it: both hold the same number, but only the column is
+# indexed, and a `json_extract` filter must parse every row in the table
+# before it can reject one.
+_STATS_FIELDS = """json_extract(data, '$.model.id'),
+		time_created/1000.0,
+		json_extract(data, '$.tokens.input'),
+		json_extract(data, '$.tokens.output'),
+		COALESCE(
+			json_extract(data, '$.tokens.total'),
+			(COALESCE(json_extract(data, '$.tokens.input'), 0) +
+			 COALESCE(json_extract(data, '$.tokens.output'), 0) +
+			 COALESCE(json_extract(data, '$.tokens.reasoning'), 0) +
+			 COALESCE(json_extract(data, '$.tokens.cache.read'), 0) +
+			 COALESCE(json_extract(data, '$.tokens.cache.write'), 0))
+		),
+		json_extract(data, '$.tokens.reasoning'),
+		json_extract(data, '$.tokens.cache.read'),
+		json_extract(data, '$.tokens.cache.write'),
+		json_extract(data, '$.error.data.statusCode'),
+		json_extract(data, '$.error.name'),
+		json_extract(data, '$.finish'),
+		session_id"""
+_WINDOW_ROWS_QUERY = f"SELECT {_STATS_FIELDS} FROM session_message WHERE type = 'assistant' AND time_created >= ? ORDER BY time_created"
+_WINDOW_STAMPS_QUERY = "SELECT id, time_updated FROM session_message WHERE type = 'assistant' AND time_created >= ?"
+_CHANGED_ROWS_QUERY = f"SELECT id, time_updated, {_STATS_FIELDS} FROM session_message WHERE id IN "
+
+def _connect():
+	"""A read-only connection to the message database; nothing here writes it."""
+	return sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+
 def load_stats(limit_seconds):
-	conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+	"""The window's assistant messages, oldest first."""
 	cutoff = (time.time() - limit_seconds) * 1000
-	rows = conn.execute(
-		"""
-		SELECT json_extract(data, '$.model.id'),
-			time_created/1000.0,
-			json_extract(data, '$.tokens.input'),
-			json_extract(data, '$.tokens.output'),
-			COALESCE(
-				json_extract(data, '$.tokens.total'),
-				(COALESCE(json_extract(data, '$.tokens.input'), 0) +
-				 COALESCE(json_extract(data, '$.tokens.output'), 0) +
-				 COALESCE(json_extract(data, '$.tokens.reasoning'), 0) +
-				 COALESCE(json_extract(data, '$.tokens.cache.read'), 0) +
-				 COALESCE(json_extract(data, '$.tokens.cache.write'), 0))
-			),
-			json_extract(data, '$.tokens.reasoning'),
-			json_extract(data, '$.tokens.cache.read'),
-			json_extract(data, '$.tokens.cache.write'),
-			json_extract(data, '$.error.data.statusCode'),
-			json_extract(data, '$.error.name'),
-			json_extract(data, '$.finish'),
-			session_id
-		FROM session_message
-		WHERE type = 'assistant' AND json_extract(data, '$.time.created') >= ?
-		ORDER BY time_created
-		""",
-		(cutoff,),
-	).fetchall()
-	conn.close()
+	conn = _connect()
+	try:
+		return conn.execute(_WINDOW_ROWS_QUERY, (cutoff,)).fetchall()
+	finally:
+		conn.close()
+
+def _rows_by_id(conn, ids):
+	"""The complete rows for `ids`, in batches small enough for SQLite's variable limit."""
+	rows = []
+	for start in range(0, len(ids), 500):
+		batch = ids[start:start + 500]
+		placeholders = ",".join("?" for _ in batch)
+		rows += conn.execute(_CHANGED_ROWS_QUERY + f"({placeholders})", batch).fetchall()
 	return rows
+
+class StatsCache:
+	"""The window's parsed rows, kept between watch redraws.
+
+	A redraw is dominated by unpacking the message JSON: the 28-day window is
+	about 45k rows and 300 MB of JSON, near 0.8 s, while the `(id, time_updated)`
+	scan that says what changed is about 60 ms. An assistant message is written
+	once and then updated in place while it streams, so the watch keeps what it
+	parsed and re-reads only the ids whose `time_updated` moved — during a burst,
+	usually the single message being written.
+	"""
+
+	def __init__(self):
+		self._rows = {}
+		self._stamps = {}
+
+	def load(self, limit_seconds):
+		"""The window's rows now, parsing only the ones new or changed since the last call."""
+		cutoff = (time.time() - limit_seconds) * 1000
+		conn = _connect()
+		try:
+			stamps = dict(conn.execute(_WINDOW_STAMPS_QUERY, (cutoff,)))
+			changed = [message_id for message_id, stamp in stamps.items() if self._stamps.get(message_id) != stamp]
+			fetched = _rows_by_id(conn, changed)
+		finally:
+			conn.close()
+		self._rows = {message_id: row for message_id, row in self._rows.items() if message_id in stamps}
+		for message_id, stamp, *row in fetched:
+			self._rows[message_id] = tuple(row)
+			stamps[message_id] = stamp
+		self._stamps = {message_id: stamp for message_id, stamp in stamps.items() if message_id in self._rows}
+		return list(self._rows.values())
 
 def human_age(seconds):
 	if seconds < 0:
@@ -828,8 +877,9 @@ def db_stamp():
 			values.append(0)
 	return tuple(values)
 
-def build_report(window_hours, now, height=None, width=None, quota=None):
-	rows = load_stats(window_hours * 3600)
+def build_report(window_hours, now, height=None, width=None, quota=None, cache=None):
+	"""The whole display; `cache` keeps the watch from re-parsing the window each frame."""
+	rows = cache.load(window_hours * 3600) if cache is not None else load_stats(window_hours * 3600)
 	return render(rows, now, height, width, quota)
 
 def draw(text):
@@ -876,7 +926,8 @@ def watch(window_hours):
 	with _fullscreen():
 		quota = sample_quota()
 		quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
-		draw(build_report(window_hours, time.time(), quota=quota))
+		cache = StatsCache()
+		draw(build_report(window_hours, time.time(), quota=quota, cache=cache))
 		# The terminal's size is part of what is watched: a pane that was resized
 		# has to redraw, or the old layout stays and runs off the edge. The pace
 		# also changes with time, so the quota timer wakes the loop even when the
@@ -895,7 +946,7 @@ def watch(window_hours):
 					quota = sample_quota()
 					quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
 				size = current_size
-				draw(build_report(window_hours, time.time(), quota=quota))
+				draw(build_report(window_hours, time.time(), quota=quota, cache=cache))
 		finally:
 			if watcher is not None:
 				watcher.close()
