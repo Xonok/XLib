@@ -10,6 +10,12 @@ Rules specific to how the epiq board is used in this workspace.
 - **Never take a human name or email as a board identity or contributor address.** Acting under the human's identity signs the agent's actions with their name, and claiming their email links their commits to the agent.
 - **The human's identity is looked up from git identity — `git config user.name` / `user.email` — never assumed from commit logs or history.** Commits are authored under that configured identity and history carries other contributors too, so an author line is not evidence of who did the work; a different address in history stays unconfirmed until the human claims it.
 
+## Lanes
+
+- `Todo` — not started. `In progress` — being worked, assigned to the agent doing it.
+- `Done` — **in a pull request, awaiting review**. The human approves by commenting on the PR.
+- `Closed` — **merged** (or abandoned). **A merged ticket is closed, not left in `Done`** (human, 2026-10-28): the merge is the gate and release is not a second one. A non-breaking change committed directly to `master` skips `Done` and goes straight to `Closed`. An agent closes a merged ticket; abandoning one stays the human's call.
+
 ## Per-actor writes
 
 `epiq_sync` drains **only the calling actor's own** event log. Every actor writes to its own `~pending*.jsonl` in the state worktree, which `.epiq/events/.gitignore` never commits; the drain happens when a process running *as that actor* syncs.
