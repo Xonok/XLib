@@ -103,11 +103,14 @@ class WebSocketFrameTest(unittest.TestCase):
 		self.assertEqual(op, 1)
 
 	def test_recv_close_frame(self):
-		"""Close frame (opcode 0x8) signals connection end.
-
-		BUG: xhttp.read_exact returns bytearray but websocket._recv
-		treats it as bytes/int.
-		"""
+		"""Close frame (opcode 0x8) is returned as op 8, with no message."""
+		mask = b"\x12\x34\x56\x78"
+		frame = b"\x88\x80" + mask
+		client = self._make_client_with_data(frame)
+		ctx = {"data": {}, "_send": queue.Queue(), "req": {"leftover": bytearray()}, "send_ws": lambda m: None}
+		msg,op = websocket._recv(client,ctx)
+		self.assertEqual(op,8)
+		self.assertEqual(msg,"")
 
 	def test_recv_ping_frame_triggers_pong(self):
 		"""Ping frame (opcode 0x9) queues a complete pong frame.
@@ -180,16 +183,6 @@ class WebSocketContextTest(unittest.TestCase):
 		self.assertIn("send_ws", ctx)
 		self.assertIs(ctx["req"], req)
 		self.assertIsInstance(ctx["_send"], queue.Queue)
-
-	def test_send_ws_closure_captures_client(self):
-		"""
-		serve_websocket creates send_ws that captures the client socket.
-		This is the integration point between xhttp and websocket.
-
-		BUG: serve_websocket calls websocket.send(client, msg)
-		but websocket.send expects a context dict, not a socket. This is a
-		bug in xhttp.py:292. The closure should call websocket._send(client, msg).
-		"""
 
 class WebSocketSenderTest(unittest.TestCase):
 	"""The sender thread: reads from queue, writes frames."""
@@ -392,6 +385,42 @@ class WebSocketIntegrationTest(unittest.TestCase):
 		# The request timeout is cleared on upgrade: an upgraded socket is long-lived,
 		# and the 60s idle expiry from wrap_handler would kill a healthy connection.
 		self.assertIsNone(client.timeout)
+		req["client"].close()
+
+	def test_send_ws_from_on_message_reaches_the_socket(self):
+		"""
+		The send_ws closure is the application's only way to push a frame.
+
+		A client frame carrying "HELLO" is answered by an on_message that calls
+		ctx["send_ws"], and the reply must arrive as one complete text frame.
+		This exercises the closure serve_websocket actually installs; a local
+		stand-in would prove only that the test can call websocket.send itself.
+		"""
+		mask = b"\x12\x34\x56\x78"
+		payload = b"HELLO"
+		masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+		first_frame = b"\x81\x85" + mask + masked
+		close_frame = b"\x88\x80" + mask
+		raw = self._websocket_upgrade_request() + first_frame + close_frame
+		client = harness.ScriptedSocket(raw)
+		req = xhttp.read_request(client, ("127.0.0.1", 5000))
+
+		opened = []
+		def on_open(c, ctx):
+			opened.append(True)
+		def on_message(c, ctx, msg):
+			ctx["send_ws"]("reply")
+		def on_close(c, ctx):
+			pass
+
+		result = xhttp.serve_websocket(req, on_message=on_message, on_open=on_open, on_close=on_close)
+
+		self.assertIs(result,True)
+		self.assertTrue(opened)
+		self.assertIn(
+			b"\x81\x05reply",bytes(client.written),
+			"the handler's send_ws call never reached the peer as a framed message"
+		)
 		req["client"].close()
 
 	def test_serve_websocket_rejects_non_get(self):
