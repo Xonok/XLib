@@ -1335,3 +1335,5 @@
 {"v":1,"id":["01M60J51G3XYDRFYG3NWQTYZBF","01M60J51G2M2NPQHW33FTJAQKE"],"add.issue.tag":{"id":"01M60J51FYQ0C6YXZTQ99M7TAK","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
 {"v":1,"id":["01M60J51G4E3E91X7T1MBXV4SM","01M60J51G3XYDRFYG3NWQTYZBF"],"add.issue.assignee":{"id":"01M60J51FYQ0C6YXZTQ99M7TAK","assignee":"G3EADTNG57JJEEP7B2C7FASVA7"}}
 {"v":1,"id":["01M60J550QD1BE0NWWZVXZ6MT1","01M60J51G4E3E91X7T1MBXV4SM"],"move.node":{"id":"01M60J51FYQ0C6YXZTQ99M7TAK","parent":"01M3BVED413TBXCFAEK193PBS7","rank":"fbffffffffffffffffffffff"}}
+{"v":1,"id":["01M60J5KBKA4NGGTB1480T2D0P","01M60J550QD1BE0NWWZVXZ6MT1"],"add.issue.comment":{"id":"01M60J5KBKVCVJYFKB2TFCVSRE","issue":"01M60J51FYQ0C6YXZTQ99M7TAK","md":"Solution: `bfff600` on master, committed on the human's instruction (\"You can commit the xlintignore too\"). The only change is the final newline the house rule requires; nothing else in the file moved.","author":"G3EADTNG57JJEEP7B2C7FASVA7"}}
+{"v":1,"id":["01M60J5KCGPCBE5FQNT8BQZQMY","01M60J5KBKA4NGGTB1480T2D0P"],"move.node":{"id":"01M60J51FYQ0C6YXZTQ99M7TAK","parent":"01M3BVED413TBXCFAEK193PBS8","rank":"fffbffffffffffffffffffff"}}
