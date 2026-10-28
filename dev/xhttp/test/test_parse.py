@@ -251,6 +251,43 @@ class ParseJsonTest(harness.HttpErrorAssertions,unittest.TestCase):
 			msg = "Empty payload is not valid JSON"
 		)
 
+class ParseStrTest(harness.HttpErrorAssertions,unittest.TestCase):
+	"""
+	read_str must return text, and an undecodable body must be an HTTPError.
+
+	read_json has the same contract one layer up; a caller that reads a plain
+	text body needs the same "bad request, not broken server" distinction.
+	"""
+
+	def test_valid_utf8_is_decoded(self):
+		body = "héllo".encode("utf-8")
+		req = xhttp.read_str(
+			harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\n" % len(body) + body),
+			("127.0.0.1",5000)
+		)
+		self.assertIsInstance(req["payload"],str)
+		self.assertEqual(req["payload"],"héllo")
+
+	def test_invalid_utf8_raises_http_error(self):
+		# A byte sequence that cannot be UTF-8 is a client error, not a crash.
+		body = b"\xff\xfe"
+		self.assert_http_error(
+			xhttp.read_str,
+			harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\n" % len(body) + body),
+			("127.0.0.1",5000),
+			expected = err.StrDecodeError,
+			msg = "Invalid UTF-8 must raise StrDecodeError, an HTTPError, so the "
+			"caller can answer 400 instead of 500."
+		)
+
+	def test_empty_payload_is_empty_string(self):
+		# Unlike read_json, an empty body is a valid empty string.
+		req = xhttp.read_str(
+			harness.ScriptedSocket(b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n"),
+			("127.0.0.1",5000)
+		)
+		self.assertEqual(req["payload"],"")
+
 class ParseTransferEncodingTest(harness.HttpErrorAssertions,unittest.TestCase):
 	"""
 	Chunked bodies are refused, so the check has to actually catch them.

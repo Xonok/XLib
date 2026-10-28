@@ -253,6 +253,40 @@ class WrapHandlerTest(unittest.TestCase):
 			except OSError:
 				pass
 
+	def _status_for(self,raw):
+		"""The status wrap_handler sends for a request the parser refuses."""
+		a,b = socket.socketpair()
+		b.settimeout(2)
+		handled = []
+		try:
+			b.sendall(raw)
+			xhttp.wrap_handler(lambda req,*a: handled.append(req),(),None,a,("1.2.3.4",9))
+			self.assertEqual(handled,[],"the handler ran for a request the parser should have refused")
+			return harness.status_code(b.recv(65536))
+		finally:
+			b.close()
+			try:
+				a.close()
+			except OSError:
+				pass
+
+	@harness.edge
+	def test_unsupported_version_answers_505(self):
+		# read_request raises HTTPHeaderVersion. What the client sees is the
+		# mapping in wrap_handler, which the parse-level test cannot prove.
+		self.assertEqual(
+			self._status_for(b"GET / HTTP/9.9\r\nHost: x\r\n\r\n"),
+			505
+		)
+
+	@harness.edge
+	def test_double_dot_answers_400(self):
+		# The parser refuses the decoded traversal; the client is told why.
+		self.assertEqual(
+			self._status_for(b"GET /../../etc/passwd HTTP/1.1\r\nHost: x\r\n\r\n"),
+			400
+		)
+
 class WrapHandlerEdgeTest(unittest.TestCase):
 	"""
 	Needs a specific socket-level failure. `python3 dev/xhttp/test/run.py` to
