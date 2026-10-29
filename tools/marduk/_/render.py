@@ -1,6 +1,7 @@
 """Draw the panel into the pane it is given."""
 
 import re,time
+from collections import Counter
 from . import store
 
 _ANSI=re.compile(r"\033\[[0-9;]*m")
@@ -46,14 +47,14 @@ def format_age(seconds:float)->str:
 		return f"{int(seconds/3600)}h{int(seconds%3600/60):02d}m"
 	return f"{int(seconds/86400)}d"
 
-def render(config,sources,snapshot:dict,now:float,height:int,width:int,compact:bool=False,notices:list[str]|None=None)->list[str]:
+def render(sources,snapshot:dict,now:float,height:int,width:int,compact:bool=False,notices:list[str]|None=None)->list[str]:
 	"""Return the frame's lines, capped to the pane it is given."""
 	compact=compact or width<46
 	head=["=== Marduk ==="]
 	for notice in notices or []:
 		head.append(fit(f"! {notice}",width))
-	head.append(fit(_feeds_line(config,sources,snapshot,now,width),width))
-	health=["","HEALTH"]+_health_lines(config,sources,snapshot,now,width,compact)
+	head.append(fit(_feeds_line(sources,snapshot,now,width),width))
+	health=["","HEALTH"]+_health_lines(sources,snapshot,now,width,compact)
 	news=["","NEWS"]+_news_lines(snapshot,width)
 	lines=head+health+news
 	if len(lines)<=height:
@@ -79,13 +80,13 @@ def _trim(items:list[str],keep:int)->list[str]:
 		return items
 	return items[:keep-1]+[f"… +{len(items)-keep+1} more"]
 
-def _feeds_line(config,sources,snapshot:dict,now:float,width:int)->str:
+def _feeds_line(sources,snapshot:dict,now:float,width:int)->str:
 	parts=[]
 	for source in sources:
-		record=snapshot["sources"].get(source.NAME)
-		state=store.source_state(record,now,source.stale_after(config))
+		record=snapshot["sources"].get(source.id)
+		state=store.source_state(record,now,source.stale_after())
 		age=format_age(store.source_age(record,now)) if record else "--"
-		text=f"{source.NAME} {color_state(state)} {age}"
+		text=f"{source.id} {color_state(state)} {age}"
 		if record and record.get("last_error"):
 			text+=f" ({record['last_error']})"
 		parts.append(text)
@@ -93,21 +94,18 @@ def _feeds_line(config,sources,snapshot:dict,now:float,width:int)->str:
 		return "feeds: (none)"
 	return "feeds: "+", ".join(parts)
 
-def _health_lines(config,sources,snapshot:dict,now:float,width:int,compact:bool)->list[str]:
-	by_key={condition.key:condition for condition in snapshot["conditions"]}
-	source_by_name={source.NAME:source for source in sources}
-	site=source_by_name.get("site")
-	stale=site.stale_after(config) if site else 180.0
-	record=snapshot["sources"].get("site")
-	state=store.source_state(record,now,stale)
+def _health_lines(sources,snapshot:dict,now:float,width:int,compact:bool)->list[str]:
+	conditions={condition.key:condition for condition in snapshot["conditions"] if condition.kind=="health"}
+	rows=_health_rows(sources,conditions)
+	counts=Counter(name for _,_,name in rows)
 	lines=[]
 	if compact:
-		lines.append(fit(f" {'site':12} {'state':5} {'for':>5}",width))
+		lines.append(fit(f" {'name':12} {'state':5} {'for':>5}",width))
 	else:
-		lines.append(fit(f"  {'site':22} {'state':6} {'for':>7}",width))
-	for site_config in config.sites:
-		name=site_config["name"]
-		condition=by_key.get(f"site:{name}")
+		lines.append(fit(f"  {'name':22} {'state':6} {'for':>7}",width))
+	for source,key,name in rows:
+		display=f"{source.id}/{name}" if source is not None and counts[name]>1 else name
+		condition=conditions.get(key)
 		if condition is None:
 			state_text="?"
 			age="--"
@@ -116,13 +114,33 @@ def _health_lines(config,sources,snapshot:dict,now:float,width:int,compact:bool)
 			age=format_age(now-condition.since)
 			state_text=condition.state
 			detail=condition.detail
-			if state!="ok":
+			if source is None:
+				state_text="?"
+				detail=f"source {condition.source} is not configured"
+			elif store.source_state(snapshot["sources"].get(source.id),now,source.stale_after())!="ok":
 				state_text="?"
 				detail=f"last {condition.state}: {condition.detail}" if condition.detail else f"last {condition.state}"
-		lines.append(_health_line(name,state_text,age,detail,width,compact))
-	if not config.sites:
+		lines.append(_health_line(display,state_text,age,detail,width,compact))
+	if not rows:
 		lines.append(fit("  no checks configured",width))
 	return lines
+
+def _health_rows(sources,snapshot_conditions:dict):
+	"""The rows to draw: declared keys first, then stored health keys."""
+	rows=[]
+	seen=set()
+	for source in sources:
+		for key,name in source.keys():
+			if key in seen:
+				continue
+			rows.append((source,key,name))
+			seen.add(key)
+	for key,condition in snapshot_conditions.items():
+		if key in seen:
+			continue
+		source=next((item for item in sources if item.id==condition.source),None)
+		rows.append((source,key,condition.name))
+	return rows
 
 def _health_line(name:str,state:str,age:str,detail:str,width:int,compact:bool)->str:
 	if compact:

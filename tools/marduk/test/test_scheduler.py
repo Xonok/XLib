@@ -9,25 +9,24 @@ sys.path.insert(0, REPO)
 import xtest
 from tools.marduk._ import event,scheduler,store
 
-class Config:
-	site_interval = 60.0
-
 class Source:
-	NAME = "fake"
-
-	def __init__(self, results=None, error=None, interval=60.0):
+	def __init__(self, id="fake", results=None, error=None, interval=60.0):
+		self.id = id
 		self.results = results or []
 		self.error = error
 		self._interval = interval
 		self.calls = 0
 
-	def interval(self, config):
+	def interval(self):
 		return self._interval
 
-	def stale_after(self, config):
+	def stale_after(self):
 		return 180.0
 
-	def check(self, config, now):
+	def keys(self):
+		return []
+
+	def check(self, now):
 		self.calls += 1
 		if self.error:
 			raise self.error
@@ -39,18 +38,18 @@ def _condition(state, checked):
 def _scheduler(folder, source):
 	state = store.Store(os.path.join(folder, "state.json"))
 	state.load()
-	return scheduler.Scheduler(state, Config(), [source])
+	return scheduler.Scheduler(state, [source])
 
 def test_the_first_run_is_due():
 	with tempfile.TemporaryDirectory() as folder:
-		source = Source([_condition(event.STATE_OK, 1000.0)])
+		source = Source(results=[_condition(event.STATE_OK, 1000.0)])
 		run = _scheduler(folder, source)
 		run.run_due(1000.0)
 		xtest.equal(source.calls, 1, "the first run happens at once")
 
 def test_a_second_run_waits_for_the_interval():
 	with tempfile.TemporaryDirectory() as folder:
-		source = Source([_condition(event.STATE_OK, 1000.0)])
+		source = Source(results=[_condition(event.STATE_OK, 1000.0)])
 		run = _scheduler(folder, source)
 		run.run_due(1000.0)
 		run.run_due(1030.0)
@@ -60,7 +59,7 @@ def test_a_second_run_waits_for_the_interval():
 
 def test_force_runs_every_source():
 	with tempfile.TemporaryDirectory() as folder:
-		source = Source([_condition(event.STATE_OK, 1000.0)])
+		source = Source(results=[_condition(event.STATE_OK, 1000.0)])
 		run = _scheduler(folder, source)
 		run.run_due(1000.0, force=True)
 		run.run_due(1000.0, force=True)
@@ -87,7 +86,7 @@ def test_a_successful_run_clears_the_previous_error():
 
 def test_the_store_is_saved_after_a_run():
 	with tempfile.TemporaryDirectory() as folder:
-		source = Source([_condition(event.STATE_ALERT, 1000.0)])
+		source = Source(results=[_condition(event.STATE_ALERT, 1000.0)])
 		run = _scheduler(folder, source)
 		run.run_due(1000.0)
 		again = store.Store(os.path.join(folder, "state.json"))

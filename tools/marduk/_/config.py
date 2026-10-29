@@ -5,15 +5,14 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH="~/.config/marduk/config.json"
 DEFAULT_STATE_PATH="~/.local/share/marduk/state.json"
+_GLOBAL_KEYS={"sources","news_retention_days","state_path"}
 
 class Config:
 	"""The panel's settings, loaded from one JSON file."""
 
 	def __init__(self,path:Path|str|None=None):
 		self.path=Path(path).expanduser() if path else Path(DEFAULT_CONFIG_PATH).expanduser()
-		self.sites=[]
-		self.site_interval=60.0
-		self.site_timeout=10.0
+		self.sources=[]
 		self.news_retention_days=7.0
 		self.state_path=Path(DEFAULT_STATE_PATH).expanduser()
 		self.error=""
@@ -37,23 +36,30 @@ class Config:
 	def _read(self,data:object)->None:
 		if not isinstance(data,dict):
 			raise ValueError("the config must be an object")
-		sites=data.get("sites",[])
-		if not isinstance(sites,list):
-			raise ValueError("sites must be a list")
-		self.sites=[_site(entry) for entry in sites]
-		self.site_interval=float(data.get("site_interval_seconds",self.site_interval))
-		self.site_timeout=float(data.get("site_timeout_seconds",self.site_timeout))
+		unknown=sorted(set(data)-_GLOBAL_KEYS)
+		if unknown:
+			raise ValueError(f"unknown config key: {', '.join(unknown)}")
+		self.sources=[_source(entry) for entry in _as_list(data.get("sources",[]),"sources")]
+		names=[entry["id"] for entry in self.sources]
+		if len(set(names))!=len(names):
+			raise ValueError("source ids must be unique")
 		self.news_retention_days=float(data.get("news_retention_days",self.news_retention_days))
 		if "state_path" in data:
 			self.state_path=Path(data["state_path"]).expanduser()
 
-def _site(entry:object)->dict:
-	"""Turn one site entry into a name and a URL."""
-	if isinstance(entry,str):
-		return {"name":entry,"url":f"https://{entry}/"}
-	if isinstance(entry,dict):
-		name=entry.get("name") or entry.get("url")
-		if not name:
-			raise ValueError("a site needs a name or a URL")
-		return {"name":str(name),"url":str(entry.get("url") or f"https://{name}/")}
-	raise ValueError("a site must be a string or an object")
+def _as_list(value:object,name:str)->list:
+	if not isinstance(value,list):
+		raise ValueError(f"{name} must be a list")
+	return value
+
+def _source(entry:object)->dict:
+	"""Normalise one source entry: a kind, an id and that kind's own options."""
+	if not isinstance(entry,dict):
+		raise ValueError("a source must be an object")
+	kind=entry.get("kind")
+	if not isinstance(kind,str) or not kind:
+		raise ValueError("a source needs a kind")
+	name=entry.get("id",kind)
+	if not isinstance(name,str) or not name:
+		raise ValueError(f"source {kind}: id must be a non-empty string")
+	return {**entry,"kind":kind,"id":name}

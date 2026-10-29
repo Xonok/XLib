@@ -5,11 +5,15 @@
 
 ## Goal
 
-Marduk is a terminal panel that tells the human what they need to know without
+Marduk is a terminal panel that tells its user what they need to know without
 being checked. It has a **health** section — a fixed list, always evaluated —
 and a **news** section of rare events that happened once and are worth knowing.
 It replaces the agent-status monitor; that purpose is retired (epiq `4V9DAKB`,
 human, 2026-10-29).
+
+The core knows nothing about any particular kind of check. A user gets a panel
+by writing a config that names the sources they want and their options; the
+repository carries no one's sites, feeds or paths.
 
 ## Requirements
 
@@ -31,11 +35,14 @@ is stable across runs. (ticket: *The shape*)
 the view, retained for `news_retention_days` (default 7) and capped by the pane,
 not by the store. (ticket: *The shape*)
 
-**R4 — Sources.** A source is a Python module under `_/sources/` with `NAME`,
-`interval(config)`, `stale_after(config)` and `check(config, now)`, returning a
-complete list of conditions for the keys it owns. A key it no longer returns is
-dropped. An exception is a failed run: the last conditions are kept and the
-source is marked failed. (ticket: *The shape*, *Candidate sources*)
+**R4 — Sources.** A source kind is a class under `_/sources/` with `id`,
+`interval()`, `stale_after()`, `keys()` and `check(now)`, constructed from its
+config entry. `check` returns a complete list of conditions for the keys it
+owns; `keys` returns the `(key, name)` health rows to show before the first
+check. A key it no longer returns is dropped. An exception is a failed run: the
+last conditions are kept and the source is marked failed. A kind is registered
+in `_/sources/__init__.py`; the config chooses and parameterizes the instances.
+(ticket: *The shape*, *Candidate sources*)
 
 **R5 — Scheduling.** Each source runs on its own interval in a background
 thread. The panel renders on its own timer and never waits for a source. A
@@ -50,19 +57,41 @@ known state, not a current one. A source whose normal silence is long (the
 weekly digest) declares a `stale_after` longer than its interval, so a normal
 week is not stale. (ticket: *The requirement that decides whether it works*)
 
-**R7 — The site source.** It checks each configured site over HTTPS with a
+**R7 — The site source.** It checks each configured target over HTTPS with a
 timeout. Any HTTP response means the server answered: `ok` for 2xx/3xx, `warn`
 for 4xx, `alert` for 5xx. DNS, connection, TLS and timeout failures are `alert`,
-and the detail names the failure and the elapsed time. The key is
-`site:<name>`; the name is the configured label. The detail carries the status
-code or the failure and the elapsed time. (ticket: *Initial health list*,
-*Examples*)
+and the detail names the failure and the elapsed time. Options: `targets` (a
+host string, or an object with `name` and `url`), `interval_seconds` (default
+60), `timeout_seconds` (default 10) and `stale_after_seconds` (default
+`max(3 × interval, 180)`). The key is `<id>:<name>`, where `id` defaults to
+`site`; the name is the configured label. The detail carries the status code or
+the failure and the elapsed time. (ticket: *Initial health list*, *Examples*)
 
 **R8 — Configuration.** The default is `~/.config/marduk/config.json`,
-overridable with `--config`. It holds the site list, the site interval and
-timeout, the news retention and the state path. A missing or malformed config is
-a visible error, not a silent empty list. The real config is outside the
-repository. (ticket: *Initial health list*)
+overridable with `--config`. Its only source-independent keys are
+`news_retention_days` and `state_path`; `sources` is a list of source instances,
+each with a `kind`, an optional `id` (default: the kind) and that kind's own
+options. An unknown top-level key is a visible error, so an old or misspelled
+config is not silently empty. A missing or malformed config file is a visible
+error. An unknown kind or a malformed source entry is a visible notice, and the
+other sources still run. The real config is outside the repository. A complete
+example:
+
+```json
+{
+	"sources": [
+		{
+			"kind": "site",
+			"interval_seconds": 60,
+			"timeout_seconds": 10,
+			"targets": [{"name": "example.com", "url": "https://example.com/"}]
+		}
+	],
+	"news_retention_days": 7
+}
+```
+
+(ticket: *Initial health list*, *Shape*)
 
 **R9 — State.** The default is `~/.local/share/marduk/state.json`, overridable
 with `--state` or the config's `state_path`. It is written atomically (a temp
@@ -70,13 +99,18 @@ file and a rename) after each check cycle and on exit. A corrupt state file is
 reported and replaced, not crashed on. (ticket: *The shape*)
 
 **R10 — Display.** Two sections, health then news, plus a feeds footer. The
-health section always shows every configured key in config order, even before
-the first check; a key with no condition yet shows `?`. The age column is how
-long the key has been known in its current state (`since`), so a down site
-carries its downtime rather than its last check; the feeds footer carries the
-age of the last successful check. The news section shows the newest transitions
-first, or `nothing yet`; it caps to the room and shows `… +N more`. The frame
-obeys `TERMINAL.md`. (ticket: *The shape*)
+health section shows every key the configured sources declare, in source then
+config order, even before the first check; a key with no condition yet shows
+`?`. A stored health condition whose key is not declared is shown after them, so
+a source that discovers keys is not hidden. The renderer knows no source by
+name. The age column is how long the key has been known in its current state
+(`since`), so a down target carries its downtime rather than its last check; a
+row from a stale or failed source is `?` with its last known state, and the
+feeds footer carries the age of each source's last successful check. When two
+sources declare a row with the same name, the row shows `<source-id>/<name>` so
+the two instances stay distinguishable. The news
+section shows the newest transitions first, or `nothing yet`; it caps to the
+room and shows `… +N more`. The frame obeys `TERMINAL.md`. (ticket: *The shape*)
 
 **R11 — No interaction in v1.** No key handling, no dismissal, no
 acknowledgement. News ages out. The panel is read-only. (ticket: *Why*)
@@ -88,8 +122,9 @@ join are deleted with their tests. The `oc-agent` registry and the
 because removing them widens the blast radius. (ticket: *Old purpose retired*)
 
 **R13 — Tests.** New tests in `tools/marduk/test/` in xtest's idiom cover the
-transition rules, the store roundtrip and corruption, the site outcomes, the
-scheduler and staleness, the render fitting and its empty states, and the
+config's source entries and their visible failures, the transition rules, the
+store roundtrip and corruption, the site outcomes, the scheduler and staleness,
+the generic health view, the render fitting and its empty states, and the
 terminal contract.
 
 ## Decisions
@@ -99,7 +134,7 @@ matters, and xcsv is being rewritten by hand. Rejected: SQLite (more machinery
 than the data needs); CSV (a schema change would be painful).
 
 **D2 — In-process sources, not external commands.** A source is a small Python
-function; the scheduler runs it in a thread, so a slow check cannot block the
+class; the scheduler runs it in a thread, so a slow check cannot block the
 render. Rejected: a subprocess/JSON protocol (more moving parts for a handful of
 sources).
 
@@ -130,12 +165,25 @@ The `oc-agent` side is left alone.
 input handling, dismissal and scrolling are a later ticket.
 
 **D9 — Config and state are XDG paths outside the repo.** The repository is
-public and the paths are machine-specific. The site list is the human's, not the
-repository's.
+public and the paths are machine-specific. The configured checks are the user's,
+not the repository's.
 
 **D10 — The panel renders from the store, never from a live check.** A check
 that hangs changes nothing on screen except the source's age; the last known
 state is always available.
+
+**D11 — Sources are configured instances, not a fixed list.** The config names
+the kind and carries that kind's options, so a user selects the checks they want
+without editing code, two instances of one kind can run side by side, and a new
+kind is a new class plus one registry entry. Rejected: a hardcoded source list
+(the first increment had one source wired into the config schema); a declarative
+protocol for arbitrary HTTP feeds (it cannot express the classification and the
+editorial judgement a feed needs).
+
+**D12 — A bad source entry is a notice, not a fatal error.** An unknown kind or
+a malformed option is shown on the panel, and the other sources keep running;
+one typo should not blank the whole panel. A missing or unparseable config file
+is still fatal, because there is no source list at all.
 
 ## What is removed
 
