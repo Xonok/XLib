@@ -27,13 +27,16 @@ state or when its state changes; an unchanged check appends nothing.
 **R2 — The condition record.** It carries `source`, `key`, `kind` (`health` or
 `news`), `name` (the stable display name), `state` (`ok`, `warn`, `alert`,
 `info`), `title` (the one-line headline for a non-ok state), `detail`, `since`
-(when this state began) and `checked` (the last check that observed it). The key
-is stable across runs. (ticket: *The shape*)
+(when this state began), `checked` (the last check that observed it) and an
+optional `replace` flag (default false) that says this source's news keeps only
+its newest record. The key is stable across runs. (ticket: *The shape*)
 
 **R3 — The transition record.** It carries `id`, `source`, `key`, `state`,
 `title`, `detail`, `at` and `recovered`. It is append-only and newest-first in
 the view, retained for `news_retention_days` (default 7) and capped by the pane,
-not by the store. (ticket: *The shape*)
+not by the store. A condition with `replace` set is the exception: the store
+removes that source's older news records before appending, so the source shows
+exactly one. (tickets: *The shape*, *The daily digest*)
 
 **R4 — Sources.** A source kind is a class under `_/sources/` with `id`,
 `interval()`, `stale_after()`, `keys()` and `check(now, memory=None)`,
@@ -161,24 +164,24 @@ pretend metadata is a ranking). Options: `powerful`, `interval_seconds`
 `max(3 × interval, 180)`) and `prices_refresh_seconds` (default 21600).
 (ticket: *The model-catalogue feed*)
 
-**R16 — The news-digest source.** Two model tiers. An hourly **pull** sends the feed
-items not seen before to `pull_model` (default
+**R16 — The daily news source.** Two model tiers, one run a day. The run fetches
+the configured feeds, sends the items not seen before to `pull_model` (default
 `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`) and stores the validated
-candidates in memory; a failed pull is a source error and leaves the items
-unseen, so the next run retries them. Every `evaluate_interval_seconds`
-(default 86400) the candidates go to the first **evaluation** model that
-answers, in order (`opencode/big-pickle`, then
-`opencode/deepseek-v4.1-flash`); the evaluation returns at most two items, the
-second only when it is marked exceptional, and a quiet evaluation publishes
-nothing. A published item is one `info` condition keyed `<id>:<ISO-week>:<n>`;
-a re-check returns the week's published items so the store does not drop and
-re-announce the key, and a new week drops the old keys silently. The first run
-announces the current week, not an archive. Options: `feeds` (a non-empty list
-of `{name, url}` RSS/Atom sources), `pull_model`, `eval_models`,
-`interval_seconds` (default 3600), `evaluate_interval_seconds` (default 86400),
+candidates with the day each item was published; a failed pull is a source
+error and leaves the items unseen, so the next run retries them. It then takes
+the candidates whose publication day is the previous day and asks the first
+**evaluation** model that answers, in order (`opencode/big-pickle`, then
+`opencode/deepseek-v4.1-flash`), for exactly one item — the most interesting
+or important. Candidates published today stay in memory and are evaluated when
+that day becomes the previous day. A day with no candidates publishes nothing,
+and a day is never evaluated twice. The published item is one `info` condition
+keyed `<id>:<day>`; a re-check returns the latest pick so the store does not
+drop and re-announce the key, and a new day's pick drops the old key silently.
+Options: `feeds` (a non-empty list of `{name, url}` RSS/Atom sources),
+`pull_model`, `eval_models`, `interval_seconds` (default 86400),
 `timeout_seconds` (default 180), `max_items_per_feed`, `max_new_items`,
 `max_candidates`, `max_seen`, `max_age_days` and `candidate_days`. The repo
-carries no feed list. (ticket: *The weekly world-news digest*)
+carries no feed list. (ticket: *The daily world-news digest*)
 
 ## Decisions
 
@@ -201,8 +204,8 @@ mean the server is reachable. Rejected: treating every non-2xx as down (it would
 report a reachable server as unreachable).
 
 **D5 — Staleness is per source and visible.** `stale_after` is declared by the
-source, not fixed globally, because the weekly digest is legitimately silent for
-a week. The health section marks a condition from a stale source with `?`.
+source, not fixed globally, because a source's normal silence can be long (the
+digest runs once a day). The health section marks a condition from a stale source with `?`.
 Rejected: one global timeout (it either nags about the weekly digest or misses a
 dead site check).
 
@@ -250,15 +253,22 @@ using the conditions as the memory (they are the current state, not the history
 of what was seen).
 
 **D14 — Two model tiers, not one.** The cheap model compresses many feed items
-into candidates; only the daily evaluation uses a better model. That keeps the
-hourly pull cheap and the evaluation rare enough to afford a preference order.
-Big pickle is preferred and DeepSeek is the fallback because big pickle's daily
+into candidates; only the once-a-day pick uses a better model. That keeps the
+daily pull cheap and the pick rare enough to afford a preference order. Big
+pickle is preferred and DeepSeek is the fallback because big pickle's daily
 quota runs out. The transport is `opencode run --format json` in a scratch
 directory, so the panel uses the machine's existing provider auth and opens no
-session in the project. Rejected: one weekly model call (it loses the day's
-news), and a direct HTTP client (a second auth path). The panel must not spend
+session in the project. Rejected: one weekly model call (it cannot produce a
+daily pick), and a direct HTTP client (a second auth path). The panel must not spend
 silently: the models are named in the config, and an evaluation that cannot
 reach any of them is a source error.
+
+**D15 — The daily digest replaces its own news.** A daily entry would otherwise
+accumulate seven near-identical rows and bury the other sources. The `replace`
+flag is opt-in per condition, and the store removes only that source's records,
+so the append-only rule still holds for every other source. Rejected: a global
+"latest only" view (it would hide the model and apt history) and a digest-only
+field in the renderer (the store should own the rule).
 
 ## What is removed
 

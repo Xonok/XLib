@@ -1,4 +1,4 @@
-"""The news digest: a cheap pull, a daily evaluation, and one item a week."""
+"""The daily digest: pull once, pick one item from yesterday, keep today's for tomorrow."""
 import os,sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
@@ -13,6 +13,8 @@ from tools.marduk._.sources import digest
 FEEDS = [{"name": "A", "url": "https://a.example/rss"}]
 PULL = "cheap"
 EVAL = ["good", "fallback"]
+NOW = 1793270400.0
+YESTERDAY = NOW - 86400
 
 def _source(**options):
 	options.setdefault("feeds", FEEDS)
@@ -20,13 +22,13 @@ def _source(**options):
 	options.setdefault("eval_models", EVAL)
 	return digest.Digest("digest", options)
 
-def _item(n, title, source="A", published=1000.0):
+def _item(n, title, published, source="A"):
 	return {"title": title, "summary": f"summary {n}",
 		"url": f"https://a.example/{n}", "source": source, "published": published}
 
-def _candidate(n, title="A candidate"):
-	return {"title": title, "summary": "why it matters", "url": f"https://a.example/{n}",
-		"source": "A", "at": 1000.0}
+def _candidate(n, title, day, summary="why it matters"):
+	return {"title": title, "summary": summary, "url": f"https://a.example/{n}",
+		"source": "A", "day": day, "at": NOW}
 
 def _call(pull=None, evaluate=None):
 	calls = []
@@ -48,137 +50,130 @@ def _pull_json(*entries):
 
 def _eval_json(*entries):
 	return '{"items":[' + ",".join(
-		'{"candidate":%d,"title":"%s","why":"why","exceptional":%s}' % (index, title, "true" if exceptional else "false")
-		for index, title, exceptional in entries) + "]}"
+		'{"candidate":%d,"title":"%s","why":"why"}' % (index, title)
+		for index, title in entries) + "]}"
 
-def test_the_first_pull_sends_new_items_to_the_cheap_model():
-	call,calls = _call(pull=_pull_json((0, "The quake")))
+def test_a_today_only_pull_keeps_candidates_and_does_not_evaluate():
+	call,calls = _call(pull=_pull_json((0, "Today candidate")))
 	memory = {}
-	conditions = _source().check(1000.0, memory, items=[_item(0, "Quake"), _item(1, "Football")], call=call)
-	xtest.equal(conditions, [], "the pull is not news")
-	xtest.equal(len(calls), 1, "one cheap call for the batch")
-	xtest.equal(calls[0][0], PULL, "the cheap model does the pulling")
-	xtest.contains("Quake", calls[0][1], "the prompt carries the item")
-	xtest.contains("Football", calls[0][1], "the prompt carries every new item")
-	xtest.equal(len(memory["candidates"]), 1, "only the model's candidate is kept")
-	xtest.equal(memory["candidates"][0]["title"], "The quake", "the model's title is used")
-	xtest.equal(len(memory["seen"]), 2, "every new item is marked seen, including the dropped one")
+	conditions = _source().check(NOW, memory, items=[_item(0, "Today story", NOW)], call=call)
+	xtest.equal(conditions, [], "today's items are not shown yet")
+	xtest.equal(memory["version"], 2, "the daily memory shape is recorded")
+	xtest.equal(len(memory["candidates"]), 1, "the candidate is kept")
+	xtest.equal(memory["candidates"][0]["day"], digest._day(NOW), "the candidate's day is the publication day")
+	xtest.equal([entry[0] for entry in calls], [PULL], "only the cheap pull ran")
 
-def test_an_item_seen_before_is_not_sent_again():
-	memory = {"seen": {"https://a.example/0": 1000.0}}
-	call,calls = _call()
-	conditions = _source().check(1000.0, memory, items=[_item(0, "Quake")], call=call)
-	xtest.equal(conditions, [], "nothing is news")
-	xtest.equal(calls, [], "no model call without a new item")
-
-def test_an_old_item_is_marked_seen_without_a_call():
+def test_the_daily_run_picks_one_item_from_yesterday_and_keeps_today():
+	call,calls = _call(pull=_pull_json((0, "Yesterday pick"), (1, "Today candidate")),
+		evaluate=_eval_json((0, "Yesterday pick")))
 	memory = {}
-	call,calls = _call()
-	_source(max_age_days=1.0).check(100000.0, memory,
-		items=[_item(0, "Old", published=1000.0)], call=call)
-	xtest.equal(calls, [], "an old item is not worth a model call")
-	xtest.equal("https://a.example/0" in memory["seen"], True, "the old item is not retried")
-
-def test_the_evaluation_waits_for_its_interval():
-	memory = {"candidates": [_candidate(0)], "last_eval": 80000.0}
-	call,calls = _call(evaluate=_eval_json((0, "The quake", False)))
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(conditions, [], "one item is not due yet")
-	xtest.equal(calls, [], "the better model is not called before its interval")
-
-def test_a_due_evaluation_publishes_one_item():
-	memory = {"candidates": [_candidate(0)], "last_eval": 0.0}
-	call,calls = _call(evaluate=_eval_json((0, "The quake", False)))
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(len(conditions), 1, "one item is published")
+	items = [_item(0, "Yesterday story", YESTERDAY), _item(1, "Today story", NOW)]
+	conditions = _source().check(NOW, memory, items=items, call=call)
+	xtest.equal(len(conditions), 1, "exactly one item is published")
 	condition = conditions[0]
-	xtest.equal(condition.state, event.STATE_INFO, "a digest item is information")
-	xtest.equal(condition.kind, "news", "a digest item is not a health row")
-	xtest.equal(condition.title, "The quake", "the model's title is the headline")
-	xtest.contains("why", condition.detail, "the why is in the detail")
+	xtest.equal(condition.state, event.STATE_INFO, "a daily pick is information")
+	xtest.equal(condition.kind, "news", "a daily pick is not a health row")
+	xtest.equal(condition.key, f"digest:{digest._day(YESTERDAY)}", "the key is the day")
+	xtest.equal(condition.title, "Yesterday pick", "the model's title is the headline")
+	xtest.equal(condition.checked, digest._day_end(NOW), "the entry is dated to the day it covers")
+	xtest.contains("Pick for", condition.detail, "the detail says which day it is for")
 	xtest.contains("https://a.example/0", condition.detail, "the link is in the detail")
-	xtest.equal(calls[0][0], "good", "the first evaluation model is preferred")
-	xtest.equal(memory["last_model"], "good", "the model that answered is remembered")
+	xtest.equal(memory["last_eval_day"], digest._day(YESTERDAY), "the day is remembered")
+	xtest.equal([item["day"] for item in memory["candidates"]], [digest._day(NOW)],
+		"today's candidate is kept for tomorrow")
+	xtest.equal([entry[0] for entry in calls], [PULL, "good"], "the pull then the better model")
+
+def test_exactly_one_item_even_if_the_model_returns_two():
+	call,calls = _call(pull=_pull_json((0, "First")),
+		evaluate=_eval_json((0, "First"), (0, "Second")))
+	memory = {}
+	conditions = _source().check(NOW, memory,
+		items=[_item(0, "Yesterday story", YESTERDAY)], call=call)
+	xtest.equal(len(conditions), 1, "a second item is ignored")
+	xtest.equal(conditions[0].title, "First", "the first item is the pick")
+
+def test_a_day_with_no_candidates_publishes_nothing():
+	call,calls = _call()
+	conditions = _source().check(NOW, {"version": 2}, items=[], call=call)
+	xtest.equal(conditions, [], "a quiet day has no entry")
+	xtest.equal(calls, [], "no model is called without candidates")
+
+def test_a_same_day_recheck_does_not_evaluate_again():
+	memory = {"version": 2, "last_eval_day": digest._day(YESTERDAY),
+		"published": [{"title": "Yesterday pick", "why": "why",
+			"url": "https://a.example/0", "day": digest._day(YESTERDAY), "at": NOW}]}
+	call,calls = _call()
+	conditions = _source().check(NOW, memory, items=[], call=call)
+	xtest.equal(len(conditions), 1, "the published pick is still returned")
+	xtest.equal(conditions[0].title, "Yesterday pick", "the same pick")
+	xtest.equal(calls, [], "no second evaluation on the same day")
+
+def test_a_new_day_evaluates_the_new_previous_day():
+	memory = {"version": 2, "last_eval_day": digest._day(YESTERDAY),
+		"published": [{"title": "Old pick", "why": "why",
+			"url": "https://a.example/0", "day": digest._day(YESTERDAY), "at": NOW}],
+		"candidates": [_candidate(1, "Held today", digest._day(NOW))],
+		"seen": {"https://a.example/1": NOW}}
+	call,calls = _call(pull=_pull_json((0, "New yesterday")),
+		evaluate=_eval_json((0, "New pick")))
+	conditions = _source().check(NOW + 86400, memory,
+		items=[_item(2, "New yesterday story", NOW)], call=call)
+	xtest.equal(len(conditions), 1, "the new day has one entry")
+	xtest.equal(conditions[0].key, f"digest:{digest._day(NOW)}", "the key moves to the new day")
+	xtest.equal(conditions[0].title, "New pick", "the new pick is published")
+	xtest.equal([entry[0] for entry in calls], [PULL, "good"], "the new day is evaluated")
 
 def test_big_pickle_is_preferred_and_the_fallback_is_used_when_it_fails():
 	def evaluate(model, prompt):
 		if model == "good":
 			raise ValueError("quota exhausted")
-		return _eval_json((0, "The quake", False))
-	memory = {"candidates": [_candidate(0)], "last_eval": 0.0}
+		return _eval_json((0, "Fallback pick"))
+	memory = {"version": 2, "candidates": [_candidate(0, "Yesterday", digest._day(YESTERDAY))]}
 	call,calls = _call(evaluate=evaluate)
-	conditions = _source().check(90000.0, memory, items=[], call=call)
+	conditions = _source().check(NOW, memory, items=[], call=call)
 	xtest.equal(len(conditions), 1, "the fallback still publishes")
 	xtest.equal([entry[0] for entry in calls], ["good", "fallback"], "the preferred model is tried first")
 	xtest.equal(memory["last_model"], "fallback", "the fallback is named in the memory")
-
-def test_a_quiet_evaluation_publishes_nothing():
-	memory = {"candidates": [_candidate(0)], "last_eval": 0.0}
-	call,calls = _call(evaluate='{"items":[]}')
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(conditions, [], "a quiet week adds no item")
-	xtest.equal(memory["last_eval"], 90000.0, "the evaluation is remembered")
-	xtest.equal(memory["published"], [], "nothing is published")
-
-def test_a_second_item_needs_to_be_exceptional():
-	memory = {"week": digest._week(90000.0), "candidates": [_candidate(0), _candidate(1)],
-		"last_eval": 0.0, "published": [{"title": "First", "why": "why",
-			"url": "https://a.example/0", "candidate": 0, "exceptional": False, "at": 1000.0}]}
-	call,calls = _call(evaluate=_eval_json((0, "First", False), (1, "Second", False)))
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(len(conditions), 1, "a non-exceptional second is not shown")
-	memory["last_eval"] = 0.0
-	call,calls = _call(evaluate=_eval_json((1, "Second", True)))
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(len(conditions), 2, "an exceptional second is shown")
-	xtest.equal(conditions[1].title, "Second", "the second item is the exceptional one")
-
-def test_two_items_on_the_first_evaluation_need_the_second_exceptional():
-	memory = {"candidates": [_candidate(0), _candidate(1)], "last_eval": 0.0}
-	call,calls = _call(evaluate=_eval_json((0, "First", False), (1, "Second", False)))
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(len(conditions), 1, "only the first is published")
-	xtest.equal(memory["published"][0]["title"], "First", "the first item is kept")
-
-def test_a_recheck_returns_the_published_conditions_and_does_not_duplicate_news():
-	memory = {"week": digest._week(90000.0), "last_eval": 90000.0,
-		"published": [{"title": "The quake", "why": "why", "url": "https://a.example/0",
-			"candidate": 0, "exceptional": False, "at": 1000.0}]}
-	call,calls = _call()
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(len(conditions), 1, "the published item is still returned")
-	xtest.equal(calls, [], "no model call on a recheck")
-	xtest.equal(len(memory["published"]), 1, "the item is not published twice")
-
-def test_a_new_week_drops_the_old_keys():
-	memory = {"week": "2025-W01", "last_eval": 90000.0,
-		"published": [{"title": "Old", "why": "why", "url": "https://a.example/0",
-			"candidate": 0, "exceptional": False, "at": 1000.0}]}
-	call,calls = _call()
-	conditions = _source().check(90000.0, memory, items=[], call=call)
-	xtest.equal(conditions, [], "the old week is not returned")
-	xtest.equal(memory["published"], [], "the old week's items are cleared")
 
 def test_a_malformed_pull_is_a_source_error_and_the_items_are_not_marked_seen():
 	call,calls = _call(pull="not json")
 	memory = {}
 	raised = False
 	try:
-		_source().check(1000.0, memory, items=[_item(0, "Quake")], call=call)
+		_source().check(NOW, memory, items=[_item(0, "Today story", NOW)], call=call)
 	except ValueError as exc:
 		raised = "JSON" in str(exc)
 	xtest.true(raised, "the malformed answer is a source error")
 	xtest.equal(memory.get("seen", {}), {}, "the failed pull does not mark the items seen")
 
 def test_a_malformed_evaluation_is_a_source_error():
-	memory = {"candidates": [_candidate(0)], "last_eval": 0.0}
+	memory = {"version": 2, "candidates": [_candidate(0, "Yesterday", digest._day(YESTERDAY))]}
 	call,calls = _call(evaluate="not json")
 	raised = False
 	try:
-		_source().check(90000.0, memory, items=[], call=call)
+		_source().check(NOW, memory, items=[], call=call)
 	except ValueError as exc:
 		raised = "JSON" in str(exc)
 	xtest.true(raised, "the malformed evaluation is a source error")
+
+def test_a_model_that_picks_nothing_is_a_source_error():
+	memory = {"version": 2, "candidates": [_candidate(0, "Yesterday", digest._day(YESTERDAY))]}
+	call,calls = _call(evaluate='{"items":[]}')
+	raised = False
+	try:
+		_source().check(NOW, memory, items=[], call=call)
+	except ValueError as exc:
+		raised = "did not pick" in str(exc)
+	xtest.true(raised, "an empty pick is a source error, not a silent day")
+
+def test_old_weekly_memory_is_reset():
+	memory = {"week": "2026-W44", "last_eval": 1000.0,
+		"published": [{"title": "Old weekly", "why": "why", "url": "https://a.example/0"}]}
+	call,calls = _call()
+	conditions = _source().check(NOW, memory, items=[], call=call)
+	xtest.equal(conditions, [], "the old weekly condition is not returned")
+	xtest.equal(memory.get("version"), 2, "the memory is migrated")
+	xtest.equal("week" in memory, False, "the weekly fields are gone")
 
 def test_the_pull_model_defaults_to_openrouter_nemotron_ultra():
 	source = digest.Digest("digest", {"feeds": FEEDS})

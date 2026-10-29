@@ -36,6 +36,24 @@ def test_an_unchanged_check_keeps_since_and_adds_no_news():
 			"since is the start of the state, not the last check")
 		xtest.equal(state.conditions["site:a"].checked, 1060.0, "checked moves with the check")
 
+def test_a_replace_condition_removes_the_source_older_news():
+	def news(source, key, title, checked):
+		return event.Condition(source, key, "news", "World news", event.STATE_INFO,
+			title, checked=checked, replace=True)
+	with tempfile.TemporaryDirectory() as folder:
+		state = _store(folder)
+		state.apply("site", [_condition(event.STATE_ALERT)], 1000.0)
+		state.apply("digest", [news("digest", "digest:day-1", "Day one", 1000.0)], 1000.0)
+		state.apply("digest", [news("digest", "digest:day-2", "Day two", 2000.0)], 2000.0)
+		titles = [item["title"] for item in state.news if item["source"] == "digest"]
+		xtest.equal(titles, ["Day two"], "only the newest digest item remains")
+		xtest.equal(len([item for item in state.news if item["source"] == "site"]), 1,
+			"another source's news is untouched")
+		state.apply("digest", [news("digest", "digest:day-2", "Day two", 3000.0)], 3000.0)
+		digest_news = [item for item in state.news if item["source"] == "digest"]
+		xtest.equal(len(digest_news), 1, "a recheck still leaves one digest item")
+		xtest.equal(digest_news[0]["at"], 3000.0, "the one item is refreshed with the check")
+
 def test_a_recovery_updates_the_state_and_adds_news():
 	with tempfile.TemporaryDirectory() as folder:
 		state = _store(folder)

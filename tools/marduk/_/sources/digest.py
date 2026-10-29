@@ -1,8 +1,8 @@
-"""Pull world-news feeds with a cheap model, then evaluate them for the digest."""
+"""Pull world-news feeds once a day and publish one item from yesterday."""
 
 import json,os,subprocess,time,urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime,timezone
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from .. import event
 
@@ -10,16 +10,15 @@ DEFAULT_PULL_MODEL="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 DEFAULT_EVAL_MODELS=("opencode/big-pickle","opencode/deepseek-v4.1-flash")
 
 class Digest:
-	"""Two stages: a cheap pull for candidates, a better daily evaluation."""
+	"""One daily run: pull the feeds, then pick yesterday's most important item."""
 
 	def __init__(self,id:str,options:dict):
 		self.id=id
 		self.feeds=_feeds(options.get("feeds"))
 		self.pull_model=_model(options.get("pull_model",DEFAULT_PULL_MODEL),"pull_model")
 		self.eval_models=_models(options.get("eval_models",list(DEFAULT_EVAL_MODELS)))
-		self.interval_seconds=float(options.get("interval_seconds",3600.0))
-		self.evaluate_seconds=float(options.get("evaluate_interval_seconds",86400.0))
-		self.stale_seconds=float(options.get("stale_after_seconds",max(self.interval_seconds*3,self.evaluate_seconds*2)))
+		self.interval_seconds=float(options.get("interval_seconds",86400.0))
+		self.stale_seconds=float(options.get("stale_after_seconds",max(self.interval_seconds*3,180.0)))
 		self.timeout_seconds=float(options.get("timeout_seconds",180.0))
 		self.max_items=int(options.get("max_items_per_feed",20))
 		self.max_new=int(options.get("max_new_items",60))
@@ -40,10 +39,10 @@ class Digest:
 		return []
 
 	def check(self,now:float,memory:dict|None=None,items=None,call=None)->list[event.Condition]:
-		"""Pull new items, evaluate when due, and return this week's published items."""
+		"""Pull new items, evaluate yesterday's candidates, and return the latest pick."""
 		memory={} if memory is None else memory
+		self._migrate(memory)
 		call=(lambda model,prompt,timeout: _run_model(model,prompt,timeout,self.run_dir)) if call is None else call
-		self._roll_week(now,memory)
 		items=_fetch(self.feeds,self.timeout_seconds,self.max_items) if items is None else items
 		fresh=self._fresh(items,now,memory)
 		if fresh:
@@ -51,6 +50,14 @@ class Digest:
 		self._prune(now,memory)
 		self._evaluate(now,memory,call)
 		return self._conditions(now,memory)
+
+	def _migrate(self,memory:dict)->None:
+		"""A weekly-state memory has no day field; start clean rather than guess."""
+		if memory.get("version")==2:
+			return
+		if memory:
+			memory.clear()
+		memory["version"]=2
 
 	def _fresh(self,items:list[dict],now:float,memory:dict)->list[dict]:
 		"""The items not seen before and not older than the age limit."""
@@ -88,6 +95,7 @@ class Digest:
 				"summary":_text(entry.get("summary")),
 				"url":item["url"],
 				"source":item["source"],
+				"day":_day(float(item.get("published") or now)),
 				"at":now,
 			})
 		seen=memory.setdefault("seen",{})
@@ -96,73 +104,58 @@ class Digest:
 		return result
 
 	def _evaluate(self,now:float,memory:dict,call)->None:
-		"""One better-model call a day; it may publish one item, or two exceptional ones."""
-		published=memory.setdefault("published",[])
-		if now-memory.get("last_eval",0)<self.evaluate_seconds:
+		"""Pick exactly one candidate from yesterday, once that day has ended."""
+		target=_day(now-86400)
+		if memory.get("last_eval_day")==target:
 			return
-		candidates=memory.get("candidates") or []
+		candidates=[item for item in memory.get("candidates") or [] if item.get("day")==target]
 		if not candidates:
 			return
-		if len(published)>=2:
-			memory["last_eval"]=now
-			return
-		allowed=2-len(published)
-		prompt=_eval_prompt(candidates,published)
+		prompt=_eval_prompt(candidates)
 		text,model=_eval_with_fallback(self.eval_models,prompt,self.timeout_seconds,call)
 		data=_json(text)
 		items=data.get("items")
-		if not isinstance(items,list):
-			raise ValueError(f"{model} returned no items list")
-		chosen=[]
+		if not isinstance(items,list) or not items:
+			raise ValueError(f"{model} did not pick an item")
+		chosen=None
 		for entry in items:
-			if len(chosen)>=allowed:
-				break
 			if not isinstance(entry,dict):
 				continue
 			index=_index(entry.get("candidate"),len(candidates))
 			if index is None:
 				continue
-			title=_text(entry.get("title")) or candidates[index]["title"]
-			why=_text(entry.get("why"))
-			if not why:
-				continue
-			if published and not entry.get("exceptional"):
-				continue
-			chosen.append({
-				"title":title,
+			why=_text(entry.get("why")) or candidates[index].get("summary") or "picked from yesterday's candidates"
+			chosen={
+				"title":_text(entry.get("title")) or candidates[index]["title"],
 				"why":why,
 				"url":candidates[index]["url"],
-				"candidate":index,
-				"exceptional":bool(entry.get("exceptional")),
+				"day":target,
 				"at":now,
-			})
-		if len(chosen)==2 and not chosen[1]["exceptional"]:
-			chosen=chosen[:1]
-		published.extend(chosen)
-		memory["last_eval"]=now
+			}
+			break
+		if chosen is None:
+			raise ValueError(f"{model} returned no usable item")
+		memory["published"]=[chosen]
+		memory["last_eval_day"]=target
 		memory["last_model"]=model
-		if chosen:
-			memory["candidates"]=_without(memory.get("candidates") or [],chosen)
+		memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
 
 	def _conditions(self,now:float,memory:dict)->list[event.Condition]:
-		"""Every item published this week, so a re-check does not drop the store's keys."""
-		week=_week(now)
-		conditions=[]
-		for index,item in enumerate(memory.get("published") or [],1):
-			key=f"{self.id}:{week}:{index}"
-			conditions.append(event.Condition(self.id,key,"news","World news",event.STATE_INFO,
-				item["title"],f"{item['why']} — {item['url']}",checked=now))
-		return conditions
-
-	def _roll_week(self,now:float,memory:dict)->None:
-		week=_week(now)
-		if memory.get("week")!=week:
-			memory["week"]=week
-			memory["published"]=[]
+		"""The latest daily pick, so a re-check does not drop its store key."""
+		published=memory.get("published") or []
+		if not published:
+			return []
+		item=published[-1]
+		key=f"{self.id}:{item['day']}"
+		return [event.Condition(self.id,key,"news","World news",event.STATE_INFO,
+			item["title"],f"Pick for {item['day']}. {item['why']} — {item['url']}",
+			checked=_day_end(now),replace=True)]
 
 	def _prune(self,now:float,memory:dict)->None:
 		cutoff=now-self.candidate_days*86400
-		candidates=[item for item in memory.get("candidates") or [] if item.get("at",0)>=cutoff]
+		target=_day(now-86400)
+		candidates=[item for item in memory.get("candidates") or []
+			if item.get("at",0)>=cutoff and item.get("day","")>=target]
 		memory["candidates"]=candidates[-self.max_candidates:]
 		seen=memory.get("seen") or {}
 		if len(seen)>self.max_seen:
@@ -262,12 +255,12 @@ def _date(value:str)->float:
 		except ValueError:
 			return time.time()
 	if parsed.tzinfo is None:
-		parsed=parsed.replace(tzinfo=timezone.utc)
+		parsed=parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
 	return parsed.timestamp()
 
 def _pull_prompt(items:list[dict])->str:
 	lines=[
-		"Compress these world-news feed items into candidates for a weekly digest.",
+		"Compress these world-news feed items into candidates for a daily digest.",
 		"Return only JSON: {\"candidates\":[{\"item\": <number>, \"title\": \"<one line>\", \"summary\": \"<one sentence>\"}]}.",
 		"Keep every item that reports a real world event; merge duplicates; drop sport, celebrity, routine market moves and opinion.",
 		"Items:",
@@ -278,19 +271,15 @@ def _pull_prompt(items:list[dict])->str:
 			lines.append(item["summary"][:400])
 	return "\n".join(lines)
 
-def _eval_prompt(candidates:list[dict],published:list[dict])->str:
+def _eval_prompt(candidates:list[dict])->str:
 	lines=[
-		"You are the editor of a weekly world-news digest.",
-		"Choose at most two candidates that will still matter in a week. Prefer structural change: war, election, disaster, economy, law.",
-		"Reject routine politics, sport, celebrity, market noise and anything forgotten by next week. One item is normal; a second only if it is clearly exceptional.",
-		"If nothing qualifies, return {\"items\":[]}.",
-		"Return only JSON: {\"items\":[{\"candidate\": <number>, \"title\": \"<one line>\", \"why\": \"<one sentence>\", \"exceptional\": true|false}]}.",
+		"You are the editor of a daily world-news digest.",
+		"Pick exactly one candidate — the most interesting or important story from yesterday.",
+		"Prefer structural change: war, election, disaster, economy, law, science, public health. Reject sport, celebrity, routine market moves, routine weather and opinion.",
+		"Return only JSON: {\"items\":[{\"candidate\": <number>, \"title\": \"<one line>\", \"why\": \"<one sentence>\"}]}.",
+		"One item, not zero and not two.",
+		"Candidates (all published yesterday):",
 	]
-	if published:
-		lines.append("Already published this week (do not repeat):")
-		for item in published:
-			lines.append(f"- {item['title']}")
-	lines.append("Candidates:")
 	for index,item in enumerate(candidates):
 		lines.append(f"[{index}] {item['title']} — {item.get('summary','')} ({item['source']})")
 	return "\n".join(lines)
@@ -324,13 +313,13 @@ def _index(value:object,length:int)->int|None:
 def _text(value:object)->str:
 	return value.strip() if isinstance(value,str) else ""
 
-def _without(candidates:list[dict],chosen:list[dict])->list[dict]:
-	urls={item["url"] for item in chosen}
-	return [item for item in candidates if item["url"] not in urls]
+def _day(now:float)->str:
+	return datetime.fromtimestamp(now).strftime("%Y-%m-%d")
 
-def _week(now:float)->str:
-	iso=datetime.fromtimestamp(now,tz=timezone.utc).isocalendar()
-	return f"{iso.year}-W{iso.week:02d}"
+def _day_end(now:float)->float:
+	"""The last second of yesterday, so the entry is dated to the day it covers."""
+	start=datetime.fromtimestamp(now).replace(hour=0,minute=0,second=0,microsecond=0)
+	return start.timestamp()-1.0
 
 def _default_run_dir()->str:
 	return os.path.join(os.path.expanduser("~"),".cache","marduk","model-run")

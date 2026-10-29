@@ -66,7 +66,11 @@ class Store:
 				old=self.conditions.get(condition.key)
 				condition.since=old.since if old is not None and old.state==condition.state else now
 				record=event.transition(old,condition)
-				if record is not None:
+				if condition.replace:
+					self.news=[item for item in self.news if item.get("source")!=source_name]
+					if condition.state!=event.STATE_OK:
+						self.news.append(event.record(condition))
+				elif record is not None:
 					self.news.append(record)
 				self.conditions[condition.key]=condition
 			for key in list(self.conditions):

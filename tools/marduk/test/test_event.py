@@ -45,5 +45,13 @@ def test_the_condition_roundtrips():
 	copy = event.Condition.from_dict(original.to_dict())
 	xtest.equal(copy.to_dict(), original.to_dict(), "the record survives a roundtrip")
 
+def test_replace_is_optional_and_roundtrips():
+	plain = _condition(event.STATE_WARN)
+	xtest.equal(plain.replace, False, "a condition is not replacing by default")
+	replacing = event.Condition("digest", "digest:a", "news", "World news",
+		event.STATE_INFO, checked=1234.5, replace=True)
+	copy = event.Condition.from_dict(replacing.to_dict())
+	xtest.equal(copy.replace, True, "the replace flag survives a roundtrip")
+
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
