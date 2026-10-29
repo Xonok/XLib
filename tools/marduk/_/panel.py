@@ -2,7 +2,7 @@
 
 import contextlib,shutil,signal,sys,termios,threading,time
 from . import config,render,scheduler,store
-from .sources import SOURCES
+from .sources import build
 
 _ENTER_WATCH="\033[?25l\033[?1049h"
 _LEAVE_WATCH="\033[?25h\033[?1049l"
@@ -40,14 +40,17 @@ class Panel:
 
 	def __init__(self,config_path=None,state_path=None,compact:bool=False,poll_seconds:float=1.0,clock=time.time):
 		self.config=config.Config(config_path)
+		self.sources=[]
+		self.source_notices=[]
+		if not self.config.error:
+			self.sources,self.source_notices=build(self.config.sources)
 		self.store=store.Store(str(state_path or self.config.state_path))
 		self.store.load()
 		self.store.retention_seconds=self.config.news_retention_days*86400
 		self.compact=compact
 		self.poll_seconds=poll_seconds
 		self.clock=clock
-		self.sources=list(SOURCES) if not self.config.error else []
-		self.scheduler=scheduler.Scheduler(self.store,self.config,self.sources,clock)
+		self.scheduler=scheduler.Scheduler(self.store,self.sources,clock)
 
 	def render_lines(self,height:int|None=None,width:int|None=None)->list[str]:
 		if height is None or width is None:
@@ -55,8 +58,8 @@ class Panel:
 			height=size.lines if height is None else height
 			width=size.columns if width is None else width
 		now=self.clock()
-		notices=[notice for notice in (self.config.error,self.store.load_error) if notice]
-		return render.render(self.config,self.sources,self.store.snapshot(now),now,height,width,self.compact,notices)
+		notices=[notice for notice in (self.config.error,*self.source_notices,self.store.load_error) if notice]
+		return render.render(self.sources,self.store.snapshot(now),now,height,width,self.compact,notices)
 
 	def run_once(self)->None:
 		self.scheduler.run_due(self.clock(),force=True)
