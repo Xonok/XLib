@@ -101,6 +101,10 @@ def _health_lines(config,sources,snapshot:dict,now:float,width:int,compact:bool)
 	record=snapshot["sources"].get("site")
 	state=store.source_state(record,now,stale)
 	lines=[]
+	if compact:
+		lines.append(fit(f" {'site':12} {'state':5} {'for':>5}",width))
+	else:
+		lines.append(fit(f"  {'site':22} {'state':6} {'for':>7}",width))
 	for site_config in config.sites:
 		name=site_config["name"]
 		condition=by_key.get(f"site:{name}")
@@ -109,7 +113,7 @@ def _health_lines(config,sources,snapshot:dict,now:float,width:int,compact:bool)
 			age="--"
 			detail="waiting for the first check"
 		else:
-			age=format_age(now-condition.checked)
+			age=format_age(now-condition.since)
 			state_text=condition.state
 			detail=condition.detail
 			if state!="ok":
