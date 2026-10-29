@@ -14,10 +14,12 @@ fi
 # Collect staged .py, .md and .sh files. The shell scripts carry no style rules,
 # but they are files a personal identifier can be pasted into, and the
 # personal-identifier check is what catches that.
-staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' '*.md' '*.sh' | tr '\n' ' ')
-if [ -z "$staged" ]; then
-	exit 0
-fi
+#
+# The list is NUL-separated and handed to xlint with `xargs -0`, because a
+# filename may contain a space: a newline-joined list expanded as `$staged`
+# word-splits into half a filename, and xlint then reports "not found" for a path
+# that was never a path — the commit is refused with a style message naming
+# nothing real. `-r` keeps a run with nothing staged from invoking xlint at all.
 
 # Find xlint without assuming this checkout holds it. A workspace that borrows
 # the tools reaches them through a symlinked tools/; one that installs them gets
@@ -42,7 +44,8 @@ fi
 
 # Run xlint from the repo root, so the staged paths resolve.
 cd "$root"
-if ! python3 "$xlint" $staged; then
+if ! git diff --cached --name-only --diff-filter=ACM -z -- '*.py' '*.md' '*.sh' \
+	| xargs -0 -r python3 "$xlint" --; then
 	echo "xlint-hook: commit blocked by style violations above." >&2
 	echo "xlint-hook: run 'python3 $xlint <files>' to see details." >&2
 	echo "xlint-hook: bypass with 'git commit --no-verify' (not recommended)." >&2
