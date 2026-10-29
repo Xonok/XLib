@@ -42,6 +42,7 @@ def test_a_200_is_ok():
 	xtest.equal(conditions[0].state, event.STATE_OK, "a 200 is ok")
 	xtest.equal(conditions[0].key, "site:a", "the key names the site")
 	xtest.contains("HTTP 200", conditions[0].detail, "the status code is in the detail")
+	xtest.contains(" ms)", conditions[0].detail, "the elapsed time is in milliseconds")
 
 def test_a_404_is_a_warning():
 	conditions = site.check(Config(), now=1000.0, opener=_opener(404))
