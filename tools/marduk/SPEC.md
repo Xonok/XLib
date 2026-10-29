@@ -161,6 +161,25 @@ pretend metadata is a ranking). Options: `powerful`, `interval_seconds`
 `max(3 × interval, 180)`) and `prices_refresh_seconds` (default 21600).
 (ticket: *The model-catalogue feed*)
 
+**R16 — The news-digest source.** Two model tiers. An hourly **pull** sends the feed
+items not seen before to `pull_model` (default
+`openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`) and stores the validated
+candidates in memory; a failed pull is a source error and leaves the items
+unseen, so the next run retries them. Every `evaluate_interval_seconds`
+(default 86400) the candidates go to the first **evaluation** model that
+answers, in order (`opencode/big-pickle`, then
+`opencode/deepseek-v4.1-flash`); the evaluation returns at most two items, the
+second only when it is marked exceptional, and a quiet evaluation publishes
+nothing. A published item is one `info` condition keyed `<id>:<ISO-week>:<n>`;
+a re-check returns the week's published items so the store does not drop and
+re-announce the key, and a new week drops the old keys silently. The first run
+announces the current week, not an archive. Options: `feeds` (a non-empty list
+of `{name, url}` RSS/Atom sources), `pull_model`, `eval_models`,
+`interval_seconds` (default 3600), `evaluate_interval_seconds` (default 86400),
+`timeout_seconds` (default 180), `max_items_per_feed`, `max_new_items`,
+`max_candidates`, `max_seen`, `max_age_days` and `candidate_days`. The repo
+carries no feed list. (ticket: *The weekly world-news digest*)
+
 ## Decisions
 
 **D1 — A JSON store, not SQLite or xcsv.** The data is small, inspection
@@ -230,6 +249,17 @@ sidecar file per feed (a second store, written behind the panel's back), and
 using the conditions as the memory (they are the current state, not the history
 of what was seen).
 
+**D14 — Two model tiers, not one.** The cheap model compresses many feed items
+into candidates; only the daily evaluation uses a better model. That keeps the
+hourly pull cheap and the evaluation rare enough to afford a preference order.
+Big pickle is preferred and DeepSeek is the fallback because big pickle's daily
+quota runs out. The transport is `opencode run --format json` in a scratch
+directory, so the panel uses the machine's existing provider auth and opens no
+session in the project. Rejected: one weekly model call (it loses the day's
+news), and a direct HTTP client (a second auth path). The panel must not spend
+silently: the models are named in the config, and an evaluation that cannot
+reach any of them is a source error.
+
 ## What is removed
 
 Files: `_/service.py`, `_/sse_client.py`, `_/session_watcher.py`,
@@ -240,5 +270,5 @@ loses the inotify requirement. The new tests cover what replaces them.
 
 ## Out of scope
 
-The remaining feeds (Traveller players, the weekly world-news digest), the
-digest's model call, and interaction. Each is its own ticket.
+The remaining feed is Traveller players; interaction is also out. Each is its
+own ticket.
