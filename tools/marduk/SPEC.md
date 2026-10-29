@@ -36,9 +36,12 @@ the view, retained for `news_retention_days` (default 7) and capped by the pane,
 not by the store. (ticket: *The shape*)
 
 **R4 — Sources.** A source kind is a class under `_/sources/` with `id`,
-`interval()`, `stale_after()`, `keys()` and `check(now)`, constructed from its
-config entry. `check` returns a complete list of conditions for the keys it
-owns; `keys` returns the `(key, name)` health rows to show before the first
+`interval()`, `stale_after()`, `keys()` and `check(now, memory=None)`,
+constructed from its config entry. `memory` is a small dict the source owns,
+round-tripped with the state and empty on the source's first run, so a source
+that must remember what it saw last time has somewhere to put it; a failed run
+leaves it unchanged. `check` returns a complete list of conditions for the keys
+it owns; `keys` returns the `(key, name)` health rows to show before the first
 check. A key it no longer returns is dropped. An exception is a failed run: the
 last conditions are kept and the source is marked failed. A kind is registered
 in `_/sources/__init__.py`; the config chooses and parameterizes the instances.
@@ -140,6 +143,23 @@ it. A missing candidate or a failed command is a source error. It checks the
 panel's host; a remote host is not in this increment. (ticket: *apt package
 versions*)
 
+**R15 — The model-catalogue source.** It reads the opencode console's catalogue
+(`opencode models`) and OpenRouter's `/api/v1/models`, and joins the console's
+entries to the model database's costs (`models.dev`) so a free model is a price
+of zero in either catalogue. A model is identified by its id with a leading
+`openrouter/` removed, so the same model seen through the console's OpenRouter
+route and directly from OpenRouter is one entry. **The first run is a seed**:
+it records the catalogue in the source's memory and announces nothing. After
+that, a model id not in memory is one `info` news item, and a model that was
+paid and is now free is one if it matches the `powerful` list; free→paid is
+silent but updates the memory, and an unchanged catalogue adds nothing. A model
+that disappears is not news and leaves the memory, so its return is not "new".
+`powerful` is a list of id substrings (the user's judgement; the tool does not
+pretend metadata is a ranking). Options: `powerful`, `interval_seconds`
+(default 3600), `timeout_seconds` (default 30), `stale_after_seconds` (default
+`max(3 × interval, 180)`) and `prices_refresh_seconds` (default 21600).
+(ticket: *The model-catalogue feed*)
+
 ## Decisions
 
 **D1 — A JSON store, not SQLite or xcsv.** The data is small, inspection
@@ -198,6 +218,16 @@ a malformed option is shown on the panel, and the other sources keep running;
 one typo should not blank the whole panel. A missing or unparseable config file
 is still fatal, because there is no source list at all.
 
+**D13 — A source may keep memory in the store.** A catalogue feed's news is an
+*event*, not a state: the transition rules cannot express "this id appeared"
+without turning the next run into a recovery, and the rule that drops a key the
+source no longer returns cannot remember a model that has left the catalogue.
+So a source owns a small dict that the store round-trips with the rest of its
+state, empty on the first run; the source decides what goes in it. Rejected: a
+sidecar file per feed (a second store, written behind the panel's back), and
+using the conditions as the memory (they are the current state, not the history
+of what was seen).
+
 ## What is removed
 
 Files: `_/service.py`, `_/sse_client.py`, `_/session_watcher.py`,
@@ -208,6 +238,6 @@ loses the inotify requirement. The new tests cover what replaces them.
 
 ## Out of scope
 
-The remaining feeds (free models, Traveller players, the weekly world-news
-digest), the digest's model call, interaction, and the `oc-agent`/plugin
-cleanup. Each is its own ticket.
+The remaining feeds (Traveller players, the weekly world-news digest), the
+digest's model call, interaction, and the `oc-agent`/plugin cleanup. Each is
+its own ticket.

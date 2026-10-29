@@ -16,6 +16,7 @@ class Source:
 		self.error = error
 		self._interval = interval
 		self.calls = 0
+		self.seen = []
 
 	def interval(self):
 		return self._interval
@@ -26,8 +27,11 @@ class Source:
 	def keys(self):
 		return []
 
-	def check(self, now):
+	def check(self, now, memory=None):
 		self.calls += 1
+		self.seen.append(dict(memory or {}))
+		if memory is not None:
+			memory["runs"] = memory.get("runs", 0) + 1
 		if self.error:
 			raise self.error
 		return self.results
@@ -93,6 +97,27 @@ def test_the_store_is_saved_after_a_run():
 		again.load()
 		xtest.equal(len(again.conditions), 1, "the result reached the file")
 		xtest.equal(len(again.news), 1, "the transition reached the file")
+
+def test_the_source_memory_is_passed_back_and_persisted():
+	with tempfile.TemporaryDirectory() as folder:
+		source = Source(results=[_condition(event.STATE_OK, 1000.0)])
+		run = _scheduler(folder, source)
+		run.run_due(1000.0)
+		xtest.equal(source.seen[0], {}, "the first run gets empty memory")
+		xtest.equal(run.store.sources["fake"]["memory"], {"runs": 1}, "the change is stored")
+		run.run_due(1060.0)
+		xtest.equal(source.seen[1], {"runs": 1}, "the second run gets the last memory")
+		again = store.Store(os.path.join(folder, "state.json"))
+		again.load()
+		xtest.equal(again.memory("fake"), {"runs": 2}, "the memory survives the file")
+
+def test_a_failed_run_does_not_persist_the_memory():
+	with tempfile.TemporaryDirectory() as folder:
+		source = Source(error=RuntimeError("boom"))
+		run = _scheduler(folder, source)
+		run.run_due(1000.0)
+		xtest.equal(run.store.sources["fake"].get("memory"), None,
+			"a run that raised leaves no memory behind")
 
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))

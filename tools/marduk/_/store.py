@@ -1,6 +1,6 @@
 """The on-disk state: conditions, transitions and source health."""
 
-import json,os,tempfile,threading
+import copy,json,os,tempfile,threading
 from . import event
 
 STATE_VERSION=1
@@ -57,7 +57,7 @@ class Store:
 				pass
 			raise
 
-	def apply(self,source_name:str,conditions:list[event.Condition],now:float)->None:
+	def apply(self,source_name:str,conditions:list[event.Condition],now:float,memory:dict|None=None)->None:
 		"""Fold one complete check into the store and keep the transitions."""
 		with self._lock:
 			seen=set()
@@ -76,6 +76,14 @@ class Store:
 			self.news=[item for item in self.news if item.get("at",0)>=cutoff]
 			self.news.sort(key=lambda item:item.get("at",0),reverse=True)
 			self._mark_source(source_name,now,None)
+			if memory is not None:
+				self.sources[source_name]["memory"]=memory
+
+	def memory(self,source_name:str)->dict:
+		"""The source's own memory, copied so a failed run changes nothing."""
+		with self._lock:
+			record=self.sources.get(source_name) or {}
+			return copy.deepcopy(record.get("memory") or {})
 
 	def fail(self,source_name:str,now:float,error:str)->None:
 		"""Record a failed run; the last conditions stay where they are."""

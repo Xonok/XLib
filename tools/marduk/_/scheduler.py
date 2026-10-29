@@ -29,15 +29,16 @@ class Scheduler:
 	def _run(self,source,now:float)->None:
 		self._running.add(source.id)
 		self._last_run[source.id]=now
+		memory=self.store.memory(source.id)
 		try:
-			conditions=source.check(now)
+			conditions=source.check(now,memory=memory)
 		except Exception as exc:
 			self._running.discard(source.id)
 			self.store.fail(source.id,now,f"{type(exc).__name__}: {exc}")
 			self.store.save()
 			return
 		self._running.discard(source.id)
-		self.store.apply(source.id,conditions,now)
+		self.store.apply(source.id,conditions,now,memory)
 		self.store.save()
 
 	def run_forever(self)->None:

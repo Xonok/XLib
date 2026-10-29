@@ -1,8 +1,8 @@
 """The built-in source kinds and the configured instances built from them."""
 
-from . import apt,site
+from . import apt,models,site
 
-KINDS={"apt":apt.Apt,"site":site.Site}
+KINDS={"apt":apt.Apt,"models":models.Models,"site":site.Site}
 
 def build(entries:list[dict])->tuple[list,list[str]]:
 	"""Build one source per configured entry, in config order.

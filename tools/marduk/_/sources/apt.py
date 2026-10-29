@@ -23,7 +23,7 @@ class Apt:
 		"""A package's state is news, not a health row."""
 		return []
 
-	def check(self,now:float,policy=None,compare=None)->list[event.Condition]:
+	def check(self,now:float,policy=None,compare=None,memory:dict|None=None)->list[event.Condition]:
 		"""Check every watched package against its fixed version."""
 		policy=_policy(self.timeout_seconds) if policy is None else policy
 		compare=version_at_least if compare is None else compare

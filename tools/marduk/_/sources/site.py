@@ -27,7 +27,7 @@ class Site:
 		"""The health keys, so the panel names every target before the first check."""
 		return [(target["key"],target["name"]) for target in self.targets]
 
-	def check(self,now:float,opener=None)->list[event.Condition]:
+	def check(self,now:float,opener=None,memory:dict|None=None)->list[event.Condition]:
 		"""Check every target; any HTTP answer means the server is up."""
 		opener=OPENER if opener is None else opener
 		return [_check_one(self.id,target,self.timeout_seconds,now,opener) for target in self.targets]
