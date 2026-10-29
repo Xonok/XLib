@@ -27,6 +27,7 @@ Plans are living documents. When a plan becomes reality, the plan file is delete
 - [logdb.md](logdb.md) — log-based database, project details via schema configuration.
 - [dnd-math.md](dnd-math.md) — dice and similar math.
 - [loot-tables.md](loot-tables.md) — loot tables with recursion and configuration.
+- [marduk-weekly-digest.md](marduk-weekly-digest.md) — one durable world-news item a week, with "nothing" allowed; a Marduk source, not a core change. Draft; decisions on feeds, route and budget are open.
 - [file-handling.md](file-handling.md) — file handling helpers.
 - [js-libraries.md](js-libraries.md) — an "xlib for JS": versioned JS bundles, opt-in serving.
 - [webapp.md](webapp.md) — minimal Py/JS webapp framework with lazy views.
