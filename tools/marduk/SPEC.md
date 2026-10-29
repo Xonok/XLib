@@ -123,9 +123,22 @@ because removing them widens the blast radius. (ticket: *Old purpose retired*)
 
 **R13 — Tests.** New tests in `tools/marduk/test/` in xtest's idiom cover the
 config's source entries and their visible failures, the transition rules, the
-store roundtrip and corruption, the site outcomes, the scheduler and staleness,
-the generic health view, the render fitting and its empty states, and the
-terminal contract.
+store roundtrip and corruption, the site and apt outcomes, the scheduler and
+staleness, the generic health view, the render fitting and its empty states, and
+the terminal contract.
+
+**R14 — The apt source.** It watches configured packages and reports when the
+candidate version reaches the version that fixes a known issue. Options:
+`packages` (a list of `{name, fixed}`; the user sets the threshold),
+`interval_seconds` (default 3600), `timeout_seconds` (default 30) and
+`stale_after_seconds` (default `max(3 × interval, 180)`). The candidate is read
+from `apt-cache policy <name>`; versions are compared with
+`dpkg --compare-versions`, so Debian ordering is the system's, not a
+reimplementation. The record is `news`, keyed `<id>:<name>`: `info` with "X can
+be fixed by apt upgrade" when the candidate is at or above the fix, `ok` below
+it. A missing candidate or a failed command is a source error. It checks the
+panel's host; a remote host is not in this increment. (ticket: *apt package
+versions*)
 
 ## Decisions
 
@@ -195,6 +208,6 @@ loses the inotify requirement. The new tests cover what replaces them.
 
 ## Out of scope
 
-The other feeds (free models, Traveller players, the weekly world-news digest),
-the digest's model call, interaction, and the `oc-agent`/plugin cleanup. Each is
-its own ticket.
+The remaining feeds (free models, Traveller players, the weekly world-news
+digest), the digest's model call, interaction, and the `oc-agent`/plugin
+cleanup. Each is its own ticket.
