@@ -32,7 +32,7 @@ def _check_one(site:dict,timeout:float,now:float,opener)->event.Condition:
 	except (urllib.error.URLError,OSError,ValueError) as exc:
 		elapsed=time.monotonic()-start
 		reason=getattr(exc,"reason",exc)
-		return event.Condition(NAME,key,"health",name,event.STATE_ALERT,f"{name} is down",f"{reason} ({elapsed:.1f}s)",checked=now)
+		return event.Condition(NAME,key,"health",name,event.STATE_ALERT,f"{name} is down",f"{reason} ({elapsed*1000:.0f} ms)",checked=now)
 	elapsed=time.monotonic()-start
 	if code>=500:
 		state,title=event.STATE_ALERT,f"{name} is down"
@@ -40,4 +40,4 @@ def _check_one(site:dict,timeout:float,now:float,opener)->event.Condition:
 		state,title=event.STATE_WARN,f"{name} is degraded"
 	else:
 		state,title=event.STATE_OK,f"{name} is up"
-	return event.Condition(NAME,key,"health",name,state,title,f"HTTP {code} ({elapsed:.1f}s)",checked=now)
+	return event.Condition(NAME,key,"health",name,state,title,f"HTTP {code} ({elapsed*1000:.0f} ms)",checked=now)
