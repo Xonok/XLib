@@ -121,8 +121,9 @@ acknowledgement. News ages out. The panel is read-only. (ticket: *Why*)
 **R12 — The old purpose is removed.** The agent registry, the shared event
 stream, the session and port watchers, the process helpers and the instance
 join are deleted with their tests. The `oc-agent` registry and the
-`instance-report` plugin are left in place; their cleanup is a separate ticket,
-because removing them widens the blast radius. (ticket: *Old purpose retired*)
+`instance-report` plugin are gone too: herdr's own `opencode` plugin reports
+session state through its own socket, and nothing else read either.
+(tickets: *Old purpose retired*, `CEB5YY2`)
 
 **R13 — Tests.** New tests in `tools/marduk/test/` in xtest's idiom cover the
 config's source entries and their visible failures, the transition rules, the
@@ -192,7 +193,8 @@ needs input and persistence); permanent history (it defeats "rare").
 
 **D7 — The old modules are deleted, not flagged.** Keeping the agent path behind
 a flag would keep the code and its tests alive for a purpose the human retired.
-The `oc-agent` side is left alone.
+The `oc-agent` registry and plugin were removed once herdr's own plugin was
+confirmed to report through its socket and nothing else read them (`CEB5YY2`).
 
 **D8 — No interaction in v1.** The value is the aggregation and the filtering;
 input handling, dismissal and scrolling are a later ticket.
@@ -239,5 +241,4 @@ loses the inotify requirement. The new tests cover what replaces them.
 ## Out of scope
 
 The remaining feeds (Traveller players, the weekly world-news digest), the
-digest's model call, interaction, and the `oc-agent`/plugin cleanup. Each is
-its own ticket.
+digest's model call, and interaction. Each is its own ticket.

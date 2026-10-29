@@ -1,10 +1,10 @@
 #!/bin/bash
 # Named-agent launcher for opencode.
 #
-# Registers each launch in ~/.opencode/agents/<sessionID>.json, which is what
-# `tools/marduk` watches. OpenCode v2 removed the per-process `--port 0` server
-# that the old port files recorded, so the session id is the durable handle: it
-# is created up front with the agent bound, then attached to.
+# Creates the session with the agent and its model bound, then attaches the TUI
+# to it. OpenCode v2 removed the per-process `--port 0` server that the old port
+# files recorded, so the session id is the handle: it is created up front with
+# the agent bound, then attached to.
 AGENT="$1"
 
 # The agent list, asked of opencode itself: an agent may come from a file under
@@ -25,21 +25,6 @@ agent_names() {
 die() {
 	echo "oc-agent: $1" >&2
 	exit 1
-}
-
-# Clock ticks since boot at which a process started — field 22 of
-# /proc/PID/stat. Paired with the pid, this names one specific process rather
-# than whatever inherits the number later; marduk reaps an entry when the pair no
-# longer matches. Prints nothing when /proc cannot answer.
-start_ticks_of() {
-	local stat rest
-	IFS= read -r stat < "/proc/$1/stat" 2>/dev/null || return 0
-	# Strip through the last ')' to drop the pid and the parenthesised comm,
-	# which may itself contain spaces. What is left starts at field 3, so the
-	# start time in field 22 is the 20th word of it.
-	rest=${stat##*) }
-	read -r -a _marduk_ticks <<< "$rest"
-	echo "${_marduk_ticks[19]:-}"
 }
 
 if [ -z "$AGENT" ]; then
@@ -95,28 +80,7 @@ else
 fi
 export OPENCODE_AGENT_ROLE="$AGENT"
 
-registry_dir="$HOME/.opencode/agents"
-mkdir -p "$registry_dir"
-registry_file=""
-
-# The opencode process has to report which session it is on, or marduk cannot
-# tell a window's session from the one it left behind: a `/new` replaces the
-# session while the process lives on, and the registry — written once, here —
-# still names the old one. The plugin that does the reporting lives in this
-# repository, and the config directory links to it the way `agent` is linked to
-# the Agents workspace, so every machine gets the same one. It is linked, not
-# copied, and only when nothing is there already: a link the human made
-# themselves is left alone.
-script_path="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-plugin_source="$(dirname "$script_path")/marduk/plugin/instance-report"
-plugin_link="$HOME/.config/opencode/plugins/instance-report"
-if [ -d "$plugin_source" ] && [ ! -e "$plugin_link" ]; then
-	mkdir -p "$(dirname "$plugin_link")"
-	ln -s "$plugin_source" "$plugin_link"
-fi
-
 cleanup() {
-	[ -n "$registry_file" ] && rm -f "$registry_file"
 	rm -rf "$STATE/$AGENT.$N"
 }
 trap cleanup EXIT
@@ -153,10 +117,8 @@ session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 # Attach to the session just created. Run in the current project directory
 # (agents are global via ~/.config/opencode/agent).
 #
-# The TUI goes to the background so that its pid can be recorded below. What
-# marduk tracks is the opencode process; this script is a child of the kitty
-# window's shell, so its own pid stands for the window instead — a different and
-# longer lifetime, which is the bug this shape fixes.
+# Run the TUI in the background so the script can wait for it and hold its slot
+# until the window closes.
 #
 # An asynchronous command is handed /dev/null for stdin when job control is off,
 # which is exactly this script: the TUI opens, draws, and never sees a keystroke,
@@ -165,26 +127,6 @@ session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 exec 3<&0
 opencode --session "$session_id" --log-level warn <&3 &
 oc_pid=$!
-oc_ticks=$(start_ticks_of "$oc_pid")
-
-# One file per session, named for the id so a stale entry is unambiguous. Written
-# after the TUI starts, because the process it describes has to exist first.
-registry_file="$registry_dir/$session_id.json"
-jq -nc \
-	--arg session "$session_id" \
-	--arg role "$TITLE" \
-	--arg agent "$AGENT" \
-	--arg dir "$project_dir" \
-	--argjson slot "$N" \
-	--argjson pid "$oc_pid" \
-	--argjson ticks "$oc_ticks" \
-	'{session_id:$session,role:$role,agent:$agent,workspace:$dir,slot:$slot,pid:$pid,start_ticks:$ticks,started_at:(now*1000|floor)}' \
-	> "$registry_file" 2>/dev/null
-
-# An entry marduk cannot read is a session it will not show, and the failure is
-# otherwise silent — jq refuses a non-numeric field, so an unreadable /proc lands
-# here with an empty start time.
-[ -s "$registry_file" ] || echo "oc-agent: could not register this session for marduk" >&2
 
 wait "$oc_pid"
 exit $?
