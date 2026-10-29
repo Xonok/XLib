@@ -160,19 +160,6 @@ pretend metadata is a ranking). Options: `powerful`, `interval_seconds`
 `max(3 × interval, 180)`) and `prices_refresh_seconds` (default 21600).
 (ticket: *The model-catalogue feed*)
 
-**R16 — The Traveller player source.** It reads the game's `users.json` and each
-`users/<name>.json` under the configured `data_path`; `props.created` is the
-join time and `props.last_active` the last-seen time. The first run seeds the
-last-active times and announces nothing. After that, a player not in memory is
-one `info` news item, and a player whose last-active time advanced by more than
-`absence_days` is one that says how long they were away. A player idle for a
-day is not news; a player missing from the list stays in memory; a broken
-player file is skipped rather than failing the feed. Options: `data_path`
-(required — the game's data directory, which is outside this repository),
-`absence_days` (default 14), `interval_seconds` (default 300) and
-`stale_after_seconds` (default `max(3 × interval, 180)`).
-(ticket: *The Traveller player feed*)
-
 ## Decisions
 
 **D1 — A JSON store, not SQLite or xcsv.** The data is small, inspection
@@ -251,5 +238,6 @@ loses the inotify requirement. The new tests cover what replaces them.
 
 ## Out of scope
 
-The remaining feeds (the weekly world-news digest), the digest's model call,
-interaction, and the `oc-agent`/plugin cleanup. Each is its own ticket.
+The remaining feeds (Traveller players, the weekly world-news digest), the
+digest's model call, interaction, and the `oc-agent`/plugin cleanup. Each is
+its own ticket.
