@@ -1,250 +1,150 @@
 <!-- spec-origin: ai -->
 > **AI-written spec.** Authored by an AI agent, not by the human.
 
-# Marduk — Real-Time Agent Status Monitor
+# Marduk — Rare-Events Panel
 
-## Overview
-Marduk is a monitoring tool that displays live status of OpenCode agent instances by connecting to their SSE event streams. Agents are launched via `tools/oc-agent`, a general-purpose role-aware launcher that writes port metadata files to a shared directory. Marduk watches this directory, connects to each agent's SSE endpoint, and renders a real-time status view.
+## Goal
 
-**Name**: Marduk — Mesopotamian god with four eyes and four ears, "who sees in all directions at once."
+Marduk is a terminal panel that tells the human what they need to know without
+being checked. It has a **health** section — a fixed list, always evaluated —
+and a **news** section of rare events that happened once and are worth knowing.
+It replaces the agent-status monitor; that purpose is retired (epiq `4V9DAKB`,
+human, 2026-10-29).
 
----
+## Requirements
 
-## Architecture
+**R1 — One store, two projections.** The store holds a *condition* per
+`(source, key)` and a log of *transitions*. The health section projects the
+current condition of every configured key; the news section projects the
+transitions. A transition is appended when a key is first seen in a non-ok
+state or when its state changes; an unchanged check appends nothing.
+(ticket: *The shape*)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  tools/oc-agent (role-aware launcher)                           │
-│    ├─ validates: agent name                                     │
-│    ├─ exports: OPENCODE_AGENT_ROLE=<agent-name>                 │
-│    ├─ spawns: opencode --agent <agent-name> --port 0 --log-level WARN │
-│    ├─ discovers: listening port via ss                          │
-│    └─ writes: ~/.opencode/ports/<port>.json                     │
-│         { "port": 4123, "role": "researcher",                  │
-│           "session_id": "abc123", "pid": 12345,                │
-│           "started_at": 1725800000 }                           │
-└─────────────────────────────────────────────────────────────────┘
-															│
-															▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Marduk (monitor)                                               │
-│    ├─ startup: reads all *.json in ~/.opencode/ports/          │
-│    ├─ watch: inotify (or poll fallback) on ~/.opencode/ports/  │
-│    ├─ on new file: parse JSON, connect SSE to /event           │
-│    ├─ maintains: { session_id: { role, status, current_tool,  │
-│           last_event_ts, port, pid } }                         │
-│    ├─ cleanup: removes stale port files (PID dead, SSE dead)   │
-│    └─ renders: live status display (narrow pane, like skynet)  │
-└─────────────────────────────────────────────────────────────────┘
-```
+**R2 — The condition record.** It carries `source`, `key`, `kind` (`health` or
+`news`), `name` (the stable display name), `state` (`ok`, `warn`, `alert`,
+`info`), `title` (the one-line headline for a non-ok state), `detail`, `since`
+(when this state began) and `checked` (the last check that observed it). The key
+is stable across runs. (ticket: *The shape*)
 
----
+**R3 — The transition record.** It carries `id`, `source`, `key`, `state`,
+`title`, `detail`, `at` and `recovered`. It is append-only and newest-first in
+the view, retained for `news_retention_days` (default 7) and capped by the pane,
+not by the store. (ticket: *The shape*)
 
-## Port File Specification
+**R4 — Sources.** A source is a Python module under `_/sources/` with `NAME`,
+`interval(config)`, `stale_after(config)` and `check(config, now)`, returning a
+complete list of conditions for the keys it owns. A key it no longer returns is
+dropped. An exception is a failed run: the last conditions are kept and the
+source is marked failed. (ticket: *The shape*, *Candidate sources*)
 
-### Location
-`~/.opencode/ports/` (created by `tools/oc-agent` on first use)
+**R5 — Scheduling.** Each source runs on its own interval in a background
+thread. The panel renders on its own timer and never waits for a source. A
+source still running when its next run is due is skipped, not queued.
+(ticket: *The shape*)
 
-### Filename
-`<port>.json` — port number is unique, so no collisions. Later agent overwrites if port reused (OS won't reuse immediately).
+**R6 — Liveness is first-class.** The store records `last_run`, `last_ok` and
+`last_error` per source. The panel shows each source as `ok`, `stale`
+(`now - last_ok > stale_after`) or `error` (the last run failed), with its age.
+A health condition from a stale or failed source is marked `?`: it is the last
+known state, not a current one. A source whose normal silence is long (the
+weekly digest) declares a `stale_after` longer than its interval, so a normal
+week is not stale. (ticket: *The requirement that decides whether it works*)
 
-### Content (JSON)
-```json
-{
-	"port": 4123,
-	"role": "researcher",
-	"session_id": "abc123def",
-	"pid": 12345,
-	"started_at": 1725800000.123
-}
-```
-- `port`: integer, the HTTP/SSE port
-- `role`: string, agent role (`planner`, `programmer`, `reviewer`, `secretary`, `mechanic`, `researcher`, or custom)
-- `session_id`: string, OpenCode session ID (from opencode)
-- `pid`: integer, opencode process PID (for staleness detection)
-- `started_at`: float, Unix timestamp (seconds.millis)
+**R7 — The site source.** It checks each configured site over HTTPS with a
+timeout. Any HTTP response means the server answered: `ok` for 2xx/3xx, `warn`
+for 4xx, `alert` for 5xx. DNS, connection, TLS and timeout failures are `alert`,
+and the detail names the failure and the elapsed time. The key is
+`site:<name>`; the name is the configured label. The detail carries the status
+code or the failure and the elapsed time. (ticket: *Initial health list*,
+*Examples*)
 
----
+**R8 — Configuration.** The default is `~/.config/marduk/config.json`,
+overridable with `--config`. It holds the site list, the site interval and
+timeout, the news retention and the state path. A missing or malformed config is
+a visible error, not a silent empty list. The real config is outside the
+repository. (ticket: *Initial health list*)
 
-## Staleness Detection & Cleanup
+**R9 — State.** The default is `~/.local/share/marduk/state.json`, overridable
+with `--state` or the config's `state_path`. It is written atomically (a temp
+file and a rename) after each check cycle and on exit. A corrupt state file is
+reported and replaced, not crashed on. (ticket: *The shape*)
 
-Marduk removes port files **only** on definitive signals:
+**R10 — Display.** Two sections, health then news, plus a feeds footer. The
+health section always shows every configured key in config order, even before
+the first check; a key with no condition yet shows `?`. The news section shows
+the newest transitions first, or `nothing yet`; it caps to the room and shows
+`… +N more`. The feeds footer shows each source's state and age. The frame obeys
+`TERMINAL.md`. (ticket: *The shape*)
 
-| Check | Method | Action |
-|-------|--------|--------|
-| **PID dead** | `os.kill(pid, 0)` raises `ProcessLookupError` | Delete port file immediately |
-| **TCP connect fails** | `socket.connect(('127.0.0.1', port))` fails (connection refused, timeout) | Delete port file immediately |
+**R11 — No interaction in v1.** No key handling, no dismissal, no
+acknowledgement. News ages out. The panel is read-only. (ticket: *Why*)
 
-**NOT cleanup triggers** (informational only, shown in UI):
-| Check | Why Unreliable |
-|-------|----------------|
-| **SSE silent > N seconds** | Idle agents produce no events; 60s+ silence is normal |
-| **Port file age > 24h** | Long-running sessions (research, background tasks) are valid |
+**R12 — The old purpose is removed.** The agent registry, the shared event
+stream, the session and port watchers, the process helpers and the instance
+join are deleted with their tests. The `oc-agent` registry and the
+`instance-report` plugin are left in place; their cleanup is a separate ticket,
+because removing them widens the blast radius. (ticket: *Old purpose retired*)
 
-**Display hint**: If SSE silent > 60s OR file age > 24h, show a `⚠` marker in status column (e.g., `idle⚠`), but **do not remove** the port file.
+**R13 — Tests.** New tests in `tools/marduk/test/` in xtest's idiom cover the
+transition rules, the store roundtrip and corruption, the site outcomes, the
+scheduler and staleness, the render fitting and its empty states, and the
+terminal contract.
 
-**Race condition**: If agent restarts and writes new file for same port, Marduk sees new file (inotify `CREATE` or `MODIFY`), re-reads, reconnects.
+## Decisions
 
----
+**D1 — A JSON store, not SQLite or xcsv.** The data is small, inspection
+matters, and xcsv is being rewritten by hand. Rejected: SQLite (more machinery
+than the data needs); CSV (a schema change would be painful).
 
-## SSE Event Handling
+**D2 — In-process sources, not external commands.** A source is a small Python
+function; the scheduler runs it in a thread, so a slow check cannot block the
+render. Rejected: a subprocess/JSON protocol (more moving parts for a handful of
+sources).
 
-### Connection
-- URL: `http://127.0.0.1:<port>/event`
-- Standard `EventSource` / SSE client (Python: `requests` with `stream=True` or `httpx`)
-- Reconnect on disconnect with exponential backoff (1s, 2s, 4s, max 30s)
+**D3 — Conditions and transitions in one file, written together.** The health
+view needs current state and the news view needs changes, and both derive from
+the same check result, so they are written in one transaction.
 
-### Events of Interest
-| Event | Updates |
-|-------|---------|
-| `session.status` | `status = data.type` (`idle`, `busy`, `retry`) |
-| `session.next.step.started` | `status = "working"`, `current_tool = null` |
-| `session.next.text.started` | `status = "working"` |
-| `session.next.reasoning.started` | `status = "working"` |
-| `session.next.tool.called` | `current_tool = data.tool.name`; if `tool == "task"` → `status = "delegating"` |
-| `question.asked` | `status = "question"` |
-| `permission.asked` | `status = "question"` (waiting for user) |
-| `session.next.agent.switched` | `status = "delegating"` (subagent context switch) |
+**D4 — Any HTTP response is up.** The question is whether the server answers,
+not whether the page is correct. A 503 is an alert, a 404 is a warning, and both
+mean the server is reachable. Rejected: treating every non-2xx as down (it would
+report a reachable server as unreachable).
 
-### Status Inference (Marduk's Display State)
-| Display Status | Source |
-|----------------|--------|
-| `idle` | `session.status` = `idle` |
-| `working` | `session.status` = `busy` + step/text/reasoning started |
-| `delegating` | `tool.called` with `task` OR `agent.switched` |
-| `question` | `question.asked` OR `permission.asked` |
-| `retry` | `session.status` = `retry` (rate limited) |
-| `disconnected` | SSE closed, reconnecting... |
+**D5 — Staleness is per source and visible.** `stale_after` is declared by the
+source, not fixed globally, because the weekly digest is legitimately silent for
+a week. The health section marks a condition from a stale source with `?`.
+Rejected: one global timeout (it either nags about the weekly digest or misses a
+dead site check).
 
----
+**D6 — News is retained for 7 days and capped by the pane.** The panel is not a
+log; a rare event a week old is no longer news. Rejected: acknowledgement (it
+needs input and persistence); permanent history (it defeats "rare").
 
-## Display Format
+**D7 — The old modules are deleted, not flagged.** Keeping the agent path behind
+a flag would keep the code and its tests alive for a purpose the human retired.
+The `oc-agent` side is left alone.
 
-The terminal requirements — cursor, alternate screen, inotify, height cap and
-width — are recorded in `TERMINAL.md`.
+**D8 — No interaction in v1.** The value is the aggregation and the filtering;
+input handling, dismissal and scrolling are a later ticket.
 
-### Layout (narrow pane, ~40-50 columns)
-```
-=== Marduk (Live) ===
+**D9 — Config and state are XDG paths outside the repo.** The repository is
+public and the paths are machine-specific. The site list is the human's, not the
+repository's.
 
-XLib
-	planner      working     step:read  2s ago
-	reviewer     question    ?          5s ago
-	programmer   delegating  task       1s ago
+**D10 — The panel renders from the store, never from a live check.** A check
+that hangs changes nothing on screen except the source's age; the last known
+state is always available.
 
-Agents
-	secretary    idle⚠                  3m ago
-	mechanic     working     step:write 10s ago
-```
+## What is removed
 
-### Formatting Rules
-- **Header**: `=== Marduk (Live) ===`
-- **Workspace group**: Workspace name (from agent's cwd or role notes) — blank line before each group
-- **Agent line**: `  {role}  {status}  {detail}  {age}`
-	- Role: 12 chars, left-aligned
-	- Status: 10 chars, left-aligned (`idle`, `working`, `delegating`, `question`, `retry`, `disconnected`)
-	- **Warning marker**: `⚠` appended to status if SSE silent > `--warn-sse-secs` OR file age > `--warn-age-hours`
-	- Detail: current tool name or `?` for question, empty otherwise (truncated to fit)
-	- Age: right-aligned, human-readable (`2s`, `5m`, `1h23m`)
-- **Sorting**: Workspace alphabetical, then role alphabetical
-- **Empty state**: `no agents connected`
+Files: `_/service.py`, `_/sse_client.py`, `_/session_watcher.py`,
+`_/port_watcher.py`, `_/instance.py`, `_/process.py`, `_/state.py`,
+`_/inotify.py`, and the tests `test_service.py`, `test_sse_client.py`,
+`test_session_watcher.py`, `test_instance.py`, `test_state.py`. `TERMINAL.md`
+loses the inotify requirement. The new tests cover what replaces them.
 
----
+## Out of scope
 
-## Command Line Interface
-
-```bash
-# Launch an agent (repository path)
-tools/oc-agent researcher
-
-# Launch through the user command symlink
-oc-agent researcher
-
-# Watch mode (default)
-python3 -m marduk.marduk --watch
-
-# One-shot (for testing)
-python3 -m marduk.marduk --once
-
-# Options
---ports-dir PATH       # Default: ~/.opencode/ports/
---poll-seconds FLOAT   # Default: 1.0 (fallback if no inotify)
---warn-sse-secs INT    # Default: 60 (SSE silent → show ⚠ marker)
---warn-age-hours INT   # Default: 24 (file age → show ⚠ marker)
---compact              # Compact mode for narrow panes
-```
-
----
-
-## Implementation Plan
-
-### Phase 1: Core
-1. Port file watcher (inotify read through `_.inotify`, or poll fallback)
-2. JSON parser with validation
-3. SSE client with reconnection logic
-4. Event parser → status inference
-5. In-memory state store `{session_id: AgentState}`
-
-### Phase 2: Cleanup & Robustness
-6. Staleness detector (PID check, TCP connect, SSE silence, file age)
-7. Port file cleanup on staleness
-8. Startup: read existing files, connect all
-9. Signal handling (SIGTERM → clean shutdown)
-
-### Phase 3: Display & Integration
-10. Renderer (ANSI, fit to the pane: height-capped body with `… +N more`,
-	auto-compact below 46 columns, long fields cut rather than wrapped)
-11. `--watch` loop with 1s redraw
-12. `tmux-xlib.sh` integration (4th pane or replace skynet-agents)
-13. Compact mode (< 35 cols)
-
----
-
-## Dependencies
-- Python stdlib: `json`, `os`, `pathlib`, `time`, `signal`, `socket`, `select`, `ctypes`
-- inotify comes from the kernel through `_.inotify` (ctypes), so there is no
-	package to install; polling is the fallback when the kernel has none.
-- HTTP/SSE: `httpx` (if available) or `urllib.request` + manual SSE parsing
-
----
-
-## Integration with `tools/oc-agent`
-
-`tools/oc-agent` is the producer of Marduk's port-file contract. It is a general-purpose, role-aware OpenCode launcher: callers provide an agent name, the launcher exports `OPENCODE_AGENT_ROLE`, starts OpenCode on an ephemeral port, discovers the listening port, and writes the metadata file Marduk watches.
-
-```bash
-tools/oc-agent researcher
-# or, after installing the user command symlink:
-oc-agent researcher
-```
-
-The launcher and monitor remain separate processes. Marduk does not import or invoke `tools/oc-agent`; it only reads and cleans up files under the configured ports directory. The metadata schema is defined in [Port File Specification](#port-file-specification).
-
-The user-level `oc-agent` command is a symlink to `tools/oc-agent`, so moving the launcher into XLib does not change the existing command.
-
----
-
-## Testing Scenarios
-
-1. **Single agent, idle** → shows `idle` with increasing age; after `--warn-sse-secs` shows `idle⚠`
-2. **Agent working** → shows `working` with tool name
-3. **Agent asks question** → shows `question` with `?`
-4. **Agent delegates** → shows `delegating` with `task`
-5. **Agent exits** → port file cleaned up (PID dead + TCP fail), disappears from display
-6. **Agent restarts** → new port file, Marduk reconnects
-7. **Marduk starts after agents** → reads existing port files, connects
-8. **Multiple workspaces** → grouped by workspace (from cwd or role notes)
-9. **Port file orphaned** (PID dead) → cleaned up
-10. **SSE disconnect/reconnect** → status shows `disconnected` briefly, then recovers
-11. **Long-running session** (>24h) → shows `idle⚠` but port file NOT removed
-12. **Very narrow pane** → compact mode works
-
----
-
-## Future Enhancements
-- Clickable: press key to focus tmux pane for that agent (requires tmux integration)
-- Filter by workspace: `--workspace=XLib`
-- Show current task from agent's role notes
-- Color coding for statuses
-- Historical timeline (last N status changes)
-- Export JSON for other tools
+The other feeds (free models, Traveller players, the weekly world-news digest),
+the digest's model call, interaction, and the `oc-agent`/plugin cleanup. Each is
+its own ticket.
