@@ -71,10 +71,12 @@ reported and replaced, not crashed on. (ticket: *The shape*)
 
 **R10 — Display.** Two sections, health then news, plus a feeds footer. The
 health section always shows every configured key in config order, even before
-the first check; a key with no condition yet shows `?`. The news section shows
-the newest transitions first, or `nothing yet`; it caps to the room and shows
-`… +N more`. The feeds footer shows each source's state and age. The frame obeys
-`TERMINAL.md`. (ticket: *The shape*)
+the first check; a key with no condition yet shows `?`. The age column is how
+long the key has been known in its current state (`since`), so a down site
+carries its downtime rather than its last check; the feeds footer carries the
+age of the last successful check. The news section shows the newest transitions
+first, or `nothing yet`; it caps to the room and shows `… +N more`. The frame
+obeys `TERMINAL.md`. (ticket: *The shape*)
 
 **R11 — No interaction in v1.** No key handling, no dismissal, no
 acknowledgement. News ages out. The panel is read-only. (ticket: *Why*)

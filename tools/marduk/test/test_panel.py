@@ -22,9 +22,9 @@ class Config:
 		self.site_timeout = 5.0
 		self.news_retention_days = 7.0
 
-def _condition(state, key="site:a", name="a", checked=1000.0):
+def _condition(state, key="site:a", name="a", checked=1000.0, since=None):
 	return event.Condition("site", key, "health", name, state, f"{name} is {state}",
-		f"HTTP 200 ({0.1:.1f}s)", checked=checked)
+		f"HTTP 200 ({0.1:.1f}s)", since=checked if since is None else since, checked=checked)
 
 def _snapshot(conditions=None, news=None, sources=None):
 	return {"conditions": conditions or [], "news": news or [], "sources": sources or {}}
@@ -54,6 +54,13 @@ def test_a_stale_source_marks_its_condition():
 	text = _text(lines)
 	xtest.contains("?", text, "a stale condition is a question mark")
 	xtest.contains("last alert", text, "the last known state is named")
+
+def test_the_health_age_is_the_time_in_the_state():
+	snapshot = _snapshot(
+		conditions=[_condition(event.STATE_ALERT, checked=1000.0, since=700.0)],
+		sources={"site": {"last_run": 1000.0, "last_ok": 1000.0, "last_error": ""}})
+	lines = _render(Config(), snapshot, now=1000.0)
+	xtest.contains("5m", _text(lines), "five minutes in the alert state")
 
 def test_the_feeds_line_shows_each_source():
 	lines = _render(Config(), _snapshot(sources={"site": {"last_run": 1000.0, "last_ok": 1000.0}}))
