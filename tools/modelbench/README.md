@@ -176,6 +176,7 @@ HTTP is the default; the harness path exists only for models that are reachable 
 | `ledger.py` | re-derive a corpus into one row per run, and re-grade what can be re-graded |
 | `episodes/invoicer/` | single-file, integer cents, one planted bug in the tax rule |
 | `episodes/billing/` | multi-file, two sequential bugs, two declared stated facts, reference-backed checker |
+| `episodes/newsroom/` | selection and aggregation: find the seeded stories in a week of feed items, and merge outlets covering one event; it does not judge whether a story is true |
 | `run.py`, `score.py`, `prompts/`, `tasks/anchors/` | the superseded completion-based harness, kept for the record |
 
 ## Adding an episode
@@ -188,6 +189,13 @@ they are how collateral damage is told apart from an unfixed bug.
 
 Add `stated_facts.json` if the brief contains a settled fact a model might "helpfully"
 correct — that is what G5 measures against, and without it error (d) stays unmeasured.
+
+**A selection episode is the same shape without the code.** `newsroom` gives the model a
+corpus of feed items and asks for `digest.json`; `check.py` measures grounding,
+aggregation of one event across outlets, recall of the seeded stories and noise-only
+items. It deliberately does not check whether a story is true: finding and grouping are
+the task, and validity is a later stage. The corpus hash is a guard, so editing the data
+is collateral damage rather than a finding.
 
 Mark each case's `guard` flag by **running it**, not by reasoning about it. Half of
 `billing`'s invariant cases were marked guards and two of them are witnesses, because

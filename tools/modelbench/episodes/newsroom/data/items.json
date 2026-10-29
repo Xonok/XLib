@@ -1,0 +1,303 @@
+[
+ {
+  "id": "bbc-01",
+  "source": "BBC World",
+  "title": "7.1 earthquake strikes off Valdoria coast",
+  "summary": "A tsunami warning covers three provinces after the strongest quake in a decade.",
+  "published": "2026-10-27T06:10:00Z"
+ },
+ {
+  "id": "guard-01",
+  "source": "Guardian World",
+  "title": "Valdoria quake: tsunami warning across three provinces",
+  "summary": "Authorities order coastal evacuations after a 7.1 offshore earthquake.",
+  "published": "2026-10-27T07:05:00Z"
+ },
+ {
+  "id": "alj-01",
+  "source": "Al Jazeera",
+  "title": "Valdoria evacuates coast after 7.1 magnitude quake",
+  "summary": "Thousands move inland as a tsunami warning remains in force.",
+  "published": "2026-10-27T07:40:00Z"
+ },
+ {
+  "id": "bbc-02",
+  "source": "BBC World",
+  "title": "Central bank lifts key rate by two points",
+  "summary": "The surprise move is the largest in the bank's history; markets fall.",
+  "published": "2026-10-28T12:00:00Z"
+ },
+ {
+  "id": "guard-02",
+  "source": "Guardian World",
+  "title": "Rate rise shocks markets as central bank warns on inflation",
+  "summary": "Policymakers say the two-point rise is needed to stop price growth spreading.",
+  "published": "2026-10-28T12:30:00Z"
+ },
+ {
+  "id": "bbc-03",
+  "source": "BBC World",
+  "title": "Opposition wins disputed election in Marovia",
+  "summary": "The result gives the opposition a narrow majority after a recount.",
+  "published": "2026-10-25T21:15:00Z"
+ },
+ {
+  "id": "guard-03",
+  "source": "Guardian World",
+  "title": "Marovia election: opposition declared winner after recount",
+  "summary": "Observers call the count credible; the outgoing government disputes it.",
+  "published": "2026-10-25T22:00:00Z"
+ },
+ {
+  "id": "alj-02",
+  "source": "Al Jazeera",
+  "title": "Marovia's opposition takes power after disputed vote",
+  "summary": "The new government promises an inquiry into the count.",
+  "published": "2026-10-26T05:20:00Z"
+ },
+ {
+  "id": "bbc-04",
+  "source": "BBC World",
+  "title": "Ceasefire collapses in Kestria as fighting resumes",
+  "summary": "Both sides blame the other after a night of shelling across the border.",
+  "published": "2026-10-29T04:45:00Z"
+ },
+ {
+  "id": "guard-04",
+  "source": "Guardian World",
+  "title": "Kestria ceasefire broken within hours",
+  "summary": "Aid convoys turn back as artillery fire resumes along the front.",
+  "published": "2026-10-29T05:30:00Z"
+ },
+ {
+  "id": "alj-03",
+  "source": "Al Jazeera",
+  "title": "Fighting returns to Kestria after ceasefire fails",
+  "summary": "Thousands flee border villages for a second time this year.",
+  "published": "2026-10-29T06:05:00Z"
+ },
+ {
+  "id": "bbc-05",
+  "source": "BBC World",
+  "title": "Category 5 hurricane makes landfall in Nelara",
+  "summary": "The storm is the strongest to hit the island in recorded history.",
+  "published": "2026-10-24T18:00:00Z"
+ },
+ {
+  "id": "guard-05",
+  "source": "Guardian World",
+  "title": "Hurricane Idris batters Nelara at category 5",
+  "summary": "Power is out across the island and the airport is closed.",
+  "published": "2026-10-24T19:10:00Z"
+ },
+ {
+  "id": "bbc-06",
+  "source": "BBC World",
+  "title": "High court rules emergency powers unlawful",
+  "summary": "The court says the government exceeded its authority during the crisis.",
+  "published": "2026-10-23T10:20:00Z"
+ },
+ {
+  "id": "guard-06",
+  "source": "Guardian World",
+  "title": "Court strikes down emergency powers in landmark ruling",
+  "summary": "The government says it will appeal; the ruling takes effect immediately.",
+  "published": "2026-10-23T11:00:00Z"
+ },
+ {
+  "id": "bbc-07",
+  "source": "BBC World",
+  "title": "Cholera outbreak crosses border into Orin",
+  "summary": "Health agencies report more than 2,000 suspected cases in two weeks.",
+  "published": "2026-10-26T09:00:00Z"
+ },
+ {
+  "id": "guard-07",
+  "source": "Guardian World",
+  "title": "Cholera spreads across Orin border as clinics fill",
+  "summary": "Aid groups warn the response is short of clean water and beds.",
+  "published": "2026-10-26T10:15:00Z"
+ },
+ {
+  "id": "bbc-08",
+  "source": "BBC World",
+  "title": "Fusion reactor holds net power for ten minutes",
+  "summary": "Engineers say the run is a step toward a continuous power plant.",
+  "published": "2026-10-22T14:30:00Z"
+ },
+ {
+  "id": "guard-08",
+  "source": "Guardian World",
+  "title": "Fusion test sustains net energy output for ten minutes",
+  "summary": "The result beats the previous record by a factor of four.",
+  "published": "2026-10-22T15:00:00Z"
+ },
+ {
+  "id": "bbc-09",
+  "source": "BBC World",
+  "title": "United hold on for a draw at Northfield",
+  "summary": "A late equaliser keeps the title race alive.",
+  "published": "2026-10-28T22:00:00Z"
+ },
+ {
+  "id": "guard-09",
+  "source": "Guardian World",
+  "title": "Singer and actor announce separation",
+  "summary": "The couple's representatives ask for privacy.",
+  "published": "2026-10-28T18:00:00Z"
+ },
+ {
+  "id": "alj-04",
+  "source": "Al Jazeera",
+  "title": "Film festival opens with a crowded red carpet",
+  "summary": "Organisers expect record attendance this year.",
+  "published": "2026-10-27T20:00:00Z"
+ },
+ {
+  "id": "bbc-10",
+  "source": "BBC World",
+  "title": "Shares slip as technology stocks retreat",
+  "summary": "The main index fell 0.8% in a quiet session.",
+  "published": "2026-10-28T16:30:00Z"
+ },
+ {
+  "id": "guard-10",
+  "source": "Guardian World",
+  "title": "Sunny spells forecast for the weekend",
+  "summary": "Temperatures will be close to the seasonal average.",
+  "published": "2026-10-29T07:00:00Z"
+ },
+ {
+  "id": "alj-05",
+  "source": "Al Jazeera",
+  "title": "Five city breaks for the autumn",
+  "summary": "A guide to short trips within easy reach.",
+  "published": "2026-10-26T13:00:00Z"
+ },
+ {
+  "id": "bbc-11",
+  "source": "BBC World",
+  "title": "Why the traffic debate needs a fresh start",
+  "summary": "A columnist argues for a new approach to congestion.",
+  "published": "2026-10-25T09:00:00Z"
+ },
+ {
+  "id": "guard-11",
+  "source": "Guardian World",
+  "title": "Phone maker unveils folding handset",
+  "summary": "The device goes on sale next month at a premium price.",
+  "published": "2026-10-24T12:00:00Z"
+ },
+ {
+  "id": "alj-06",
+  "source": "Al Jazeera",
+  "title": "Marathon record falls in Berlin",
+  "summary": "The winner shaved nine seconds off the course record.",
+  "published": "2026-10-25T15:20:00Z"
+ },
+ {
+  "id": "bbc-12",
+  "source": "BBC World",
+  "title": "Lottery winner plans a new kitchen",
+  "summary": "The ticket was bought at a supermarket in the north.",
+  "published": "2026-10-23T17:40:00Z"
+ },
+ {
+  "id": "guard-12",
+  "source": "Guardian World",
+  "title": "A warming soup for a cold evening",
+  "summary": "A simple recipe with squash and ginger.",
+  "published": "2026-10-22T11:00:00Z"
+ },
+ {
+  "id": "alj-07",
+  "source": "Al Jazeera",
+  "title": "Airline launches a new island route",
+  "summary": "Return fares start at a promotional price.",
+  "published": "2026-10-21T08:30:00Z"
+ },
+ {
+  "id": "bbc-13",
+  "source": "BBC World",
+  "title": "Dog rescued after a week on a ledge",
+  "summary": "Firefighters used a ladder and a basket.",
+  "published": "2026-10-20T16:00:00Z"
+ },
+ {
+  "id": "guard-13",
+  "source": "Guardian World",
+  "title": "Fashion week opens with muted tones",
+  "summary": "Designers lean toward understated tailoring.",
+  "published": "2026-10-19T10:00:00Z"
+ },
+ {
+  "id": "alj-08",
+  "source": "Al Jazeera",
+  "title": "Stadium concert draws a record crowd",
+  "summary": "The tour added a second night after tickets sold out.",
+  "published": "2026-10-18T21:00:00Z"
+ },
+ {
+  "id": "bbc-14",
+  "source": "BBC World",
+  "title": "Retailer reports flat quarterly earnings",
+  "summary": "Sales were unchanged from a year earlier.",
+  "published": "2026-10-17T09:15:00Z"
+ },
+ {
+  "id": "guard-14",
+  "source": "Guardian World",
+  "title": "Royal couple visit a coastal town",
+  "summary": "The visit is part of a regional tour.",
+  "published": "2026-10-16T14:00:00Z"
+ },
+ {
+  "id": "alj-09",
+  "source": "Al Jazeera",
+  "title": "Gaming studio delays its winter release",
+  "summary": "The team says it needs more time to polish.",
+  "published": "2026-10-15T12:00:00Z"
+ },
+ {
+  "id": "bbc-15",
+  "source": "BBC World",
+  "title": "Minister resigns over leaked memo",
+  "summary": "The minister denies wrongdoing and calls for an inquiry.",
+  "published": "2026-10-29T08:00:00Z"
+ },
+ {
+  "id": "guard-15",
+  "source": "Guardian World",
+  "title": "Thousands join protest over housing costs",
+  "summary": "Organisers call it the largest demonstration in a decade.",
+  "published": "2026-10-28T19:00:00Z"
+ },
+ {
+  "id": "alj-10",
+  "source": "Al Jazeera",
+  "title": "Hospital network hit by cyberattack",
+  "summary": "Staff are using paper records while systems are restored.",
+  "published": "2026-10-27T11:30:00Z"
+ },
+ {
+  "id": "bbc-16",
+  "source": "BBC World",
+  "title": "Bank announces 3,000 job cuts",
+  "summary": "The lender says the cuts follow a fall in mortgage demand.",
+  "published": "2026-10-26T16:45:00Z"
+ },
+ {
+  "id": "guard-16",
+  "source": "Guardian World",
+  "title": "Museum agrees to return contested artefacts",
+  "summary": "The decision follows a long campaign by the origin country.",
+  "published": "2026-10-25T13:00:00Z"
+ },
+ {
+  "id": "alj-11",
+  "source": "Al Jazeera",
+  "title": "Border closure strands freight trucks",
+  "summary": "Drivers wait at the crossing as officials trade blame.",
+  "published": "2026-10-24T09:30:00Z"
+ }
+]

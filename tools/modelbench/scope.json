@@ -88,6 +88,24 @@
 			"invoicer.py"
 		]
 	},
+	"newsroom": {
+		"definitions": {},
+		"files": [
+			"REQUEST.md",
+			"SPEC.md",
+			"check.py",
+			"data/items.json"
+		],
+		"off_limits": [
+			"SPEC.md",
+			"REQUEST.md",
+			"check.py",
+			"data/"
+		],
+		"work_set": [
+			"digest.json"
+		]
+	},
 	"patch": {
 		"definitions": {
 			"patchlib/slugs.py": [

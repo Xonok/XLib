@@ -112,7 +112,7 @@ def test_the_manifest_matches_the_episodes():
 	"""A scope manifest that has drifted from its episode is a gate that charges the wrong
 	thing: a missing file is reported as a deletion, a renamed definition as a move."""
 	manifest = trace._scope()
-	xtest.equal(sorted(manifest),["billing","invoicer","invoicer-nohint","patch","rota","stockroom"],
+	xtest.equal(sorted(manifest),["billing","invoicer","invoicer-nohint","newsroom","patch","rota","stockroom"],
 		"every episode has a work set")
 	for name,entry in manifest.items():
 		root = os.path.join(REPO,"tools","modelbench","episodes",name)
