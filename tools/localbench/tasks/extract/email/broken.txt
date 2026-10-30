@@ -1,1 +1,1 @@
-{"sender":"jane.doe@example.com","deadline":"2024-12-01","action":"wrong"}
+{"sender": "jane.doe@example.com", "current_deadline": "2024-12-15", "requested_deadline": "2024-12-01", "intent": "extend"}

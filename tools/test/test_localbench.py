@@ -53,7 +53,8 @@ class LedgerTests(unittest.TestCase):
 			write_meta(runs, "a", "m1", "format", "f1", 1, ok=True)
 			write_meta(runs, "b", "m1", "format", "f1", 2, ok=False, contract=False)
 			text = ledger.markdown(ledger.find_runs(runs))
-			self.assertIn("| m1 | format | 2 | 1 | 1 |", text)
+			self.assertIn("| m1 | format |", text)
+			self.assertIn("| 2 | 1 | 1 |", text)
 
 	def test_check_reports_state_missing_without_failing(self):
 		with tempfile.TemporaryDirectory() as td:

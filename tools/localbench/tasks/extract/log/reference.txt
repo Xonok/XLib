@@ -1,1 +1,1 @@
-{"code":"ERROR","file":"auth.py","line":42}
+{"level": "ERROR", "status": 500, "file": "auth.py", "line": 42}

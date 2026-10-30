@@ -1,7 +1,12 @@
 import json,os,sys
 
 LABELS = ["feat","fix","docs","test","chore"]
-EXPECTED = ["feat","fix","docs","test","chore","feat","fix","docs","test","chore","feat","fix","docs","test","chore","feat","fix","docs","test","chore"]
+def load_expected():
+	path = os.path.join(os.environ["LB_TASK_DIR"], "reference.txt")
+	with open(path) as f:
+		return [ln.strip() for ln in f if ln.strip()]
+
+EXPECTED = []
 
 def load_stdout():
 	path = os.environ["LB_STDOUT"]
@@ -18,6 +23,7 @@ def load_stdout():
 
 def main():
 	content = load_stdout()
+	EXPECTED = load_expected()
 	stripped = content.strip()
 	lines = [ln.strip() for ln in stripped.splitlines() if ln.strip()]
 	correct = 0

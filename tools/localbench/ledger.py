@@ -91,15 +91,16 @@ def check_rows(rows, tasks_dir):
 def markdown(rows):
 	groups = {}
 	for row in rows:
-		key = (str(row.get("model")), str(row.get("task")))
+		bench = str(row.get("bench_version") or "")[:13]
+		key = (str(row.get("model")), str(row.get("task")), bench)
 		groups.setdefault(key, []).append(row)
 	lines = [
 		"<!-- BEGIN GENERATED: localbench -->",
-		"| Model | Family | n | pass | contract | median wall s | prefill tok/s | gen tok/s | native/parsed calls |",
-		"|---|---|---|---|---|---|---|---|---|",
+		"| Model | Family | bench | n | pass | contract | median wall s | prefill tok/s | gen tok/s | native/parsed calls |",
+		"|---|---|---|---|---|---|---|---|---|---|",
 	]
-	for (model, family) in sorted(groups):
-		items = groups[(model, family)]
+	for (model, family, bench) in sorted(groups):
+		items = groups[(model, family, bench)]
 		n = len(items)
 		passes = sum(1 for r in items if (r.get("checker") or {}).get("ok"))
 		contracts = sum(1 for r in items if (r.get("checker") or {}).get("contract_clean"))
@@ -108,7 +109,7 @@ def markdown(rows):
 		gen = median([r.get("gen_tok_s") for r in items])
 		native = sum(1 for r in items for c in (r.get("tool_calls") or []) if c.get("source") == "native")
 		parsed = sum(1 for r in items for c in (r.get("tool_calls") or []) if c.get("source") == "parsed")
-		lines.append(f"| {model} | {family} | {n} | {passes} | {contracts} | {wall if wall is not None else '-'} | {prefill if prefill is not None else '-'} | {gen if gen is not None else '-'} | {native}/{parsed} |")
+		lines.append(f"| {model} | {family} | {bench} | {n} | {passes} | {contracts} | {wall if wall is not None else '-'} | {prefill if prefill is not None else '-'} | {gen if gen is not None else '-'} | {native}/{parsed} |")
 	lines.append("<!-- END GENERATED: localbench -->")
 	return "\n".join(lines) + "\n"
 

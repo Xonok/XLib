@@ -1,1 +1,1 @@
-{"code":"INFO","file":"auth.py","line":42}
+{"level": "WARN", "status": 200, "file": "db.py", "line": 17}
