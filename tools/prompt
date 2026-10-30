@@ -1,0 +1,747 @@
+#!/usr/bin/env python3
+"""prompt - minimal blocking harness around Ollama for small models.
+
+Usage:
+  prompt                       show this help
+  prompt --help                show this help
+  prompt models                list models available in Ollama
+  prompt <model> [flags...] [prompt]
+
+Positional:
+  <model>    Ollama model name (first argument, no flag). Use 'prompt models'
+             to list available ones.
+
+Flags (may repeat; order affects the assembled prompt):
+  --prompt TEXT        prompt text (can be placed anywhere, incl. before tools)
+  --file PATH [PATH..] include one or more files (variadic, until next flag)
+  --read               enable the 'read' tool (read a file's contents)
+  --grep               enable the 'grep' tool (search text in files)
+  --ls                 enable the 'ls' tool (list a directory, incl. hidden)
+  --bash               enable the 'bash' tool (run a shell command)
+  --system TEXT        system message (concatenated if repeated)
+  --max-turns N        tool-call loop limit (default 1; 1 = single shot)
+  --timeout S          idle timeout between streamed chunks, seconds (default 120)
+  --load-timeout S     time to wait for the model to start responding (default 300)
+  --verbose            print turn/tool traces to stderr
+  --models             list available models and exit
+
+The trailing unflagged positional prompt is shorthand for a final --prompt, so
+the original 'prompt <model> ... "prompt"' form keeps working.
+
+Exit codes: 0 success, 1 runtime error (Ollama/model/tool failure), 2 usage error.
+"""
+import http.client
+import json
+import shlex
+import shutil
+import socket
+import os
+import re
+import subprocess
+import sys
+import uuid
+
+NAME = "prompt"
+DEFAULT_MODEL_TIMEOUT_LOAD = 300
+DEFAULT_MODEL_TIMEOUT_IDLE = 120
+MAX_FILE_BYTES = 20000
+MAX_FILE_LINES = 200
+MAX_TOOL_RESULT = 8000
+MAX_GREP_MATCHES = 60
+
+TOOLS = {
+	"read": {
+		"description": "Read the contents of a file.",
+		"schema": {
+			"type": "object",
+			"properties": {"path": {"type": "string", "description": "file path"}},
+			"required": ["path"],
+		},
+	},
+	"grep": {
+		"description": "Search for a pattern in a file or directory (recursive).",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"pattern": {"type": "string", "description": "regex pattern"},
+				"path": {"type": "string", "description": "file or directory (default .)"},
+			},
+			"required": ["pattern"],
+		},
+	},
+	"ls": {
+		"description": "List entries in a directory (including hidden files).",
+		"schema": {
+			"type": "object",
+			"properties": {"path": {"type": "string", "description": "directory (default .)"}},
+			"required": [],
+		},
+	},
+	"bash": {
+		"description": "Run a shell command and return its combined stdout/stderr and exit code.",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"command": {"type": "string", "description": "shell command to run"},
+				"timeout": {"type": "integer", "description": "timeout in seconds (default 30, max 120)"},
+			},
+			"required": ["command"],
+		},
+	},
+}
+
+ENABLED_TOOLS = set()
+
+HELP = __doc__
+
+
+def fail(msg, code=2):
+	sys.stderr.write(f"{NAME}: {msg}\n")
+	sys.exit(code)
+
+
+def human_size(n):
+	if n >= 1024 * 1024 * 1024:
+		return f"{n / (1024**3):.1f}G"
+	if n >= 1024 * 1024:
+		return f"{n / (1024**2):.1f}M"
+	if n >= 1024:
+		return f"{n / 1024:.1f}K"
+	return f"{n}B"
+
+
+def list_models():
+	try:
+		conn = http.client.HTTPConnection("localhost", 11434, timeout=10)
+		conn.request("GET", "/api/tags")
+		resp = conn.getresponse()
+		raw = resp.read()
+		conn.close()
+	except Exception as e:
+		fail(f"cannot reach Ollama: {e}", 1)
+	if resp.status != 200:
+		fail(f"Ollama HTTP {resp.status}: {raw.decode(errors='replace')}", 1)
+	try:
+		data = json.loads(raw)
+	except json.JSONDecodeError as e:
+		fail(f"bad response from Ollama: {e}", 1)
+	models = data.get("models", [])
+	if not models:
+		print("no models installed")
+		return
+	width = max(len(m.get("name", "")) for m in models)
+	for m in sorted(models, key=lambda x: x.get("name", "")):
+		name = m.get("name", "")
+		size = human_size(m.get("size", 0))
+		caps = ", ".join(m.get("capabilities", []))
+		print(f"{name:<{width}}  {size:>6}  {caps}")
+
+
+def read_file_text(path):
+	try:
+		with open(path, "r", encoding="utf-8", errors="replace") as f:
+			lines = f.readlines()
+	except OSError as e:
+		return f"[error reading {path}: {e}]"
+	truncated = False
+	if len(lines) > MAX_FILE_LINES:
+		lines = lines[:MAX_FILE_LINES]
+		truncated = True
+	text = "".join(lines)
+	if len(text) > MAX_FILE_BYTES:
+		text = text[:MAX_FILE_BYTES]
+		truncated = True
+	if truncated:
+		text += f"\n... [truncated: {path}]"
+	return text
+
+
+def tool_read(args):
+	path = args.get("path")
+	if not path:
+		return "[error: missing 'path']"
+	if not os.path.isfile(path):
+		return f"[error: not a file: {path}]"
+	return read_file_text(path)
+
+
+def tool_grep(args):
+	pattern = args.get("pattern")
+	if not pattern:
+		return "[error: missing 'pattern']"
+	path = args.get("path", ".")
+	try:
+		regex = re.compile(pattern)
+	except re.error as e:
+		return f"[error: bad regex: {e}]"
+	matches = []
+	count = 0
+	if os.path.isfile(path):
+		files = [path]
+	else:
+		files = []
+		for root, dirs, fnames in os.walk(path):
+			dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "node_modules")]
+			for fn in fnames:
+				files.append(os.path.join(root, fn))
+	for fp in files:
+		try:
+			with open(fp, "r", encoding="utf-8", errors="replace") as f:
+				for i, line in enumerate(f, 1):
+					if regex.search(line):
+						matches.append(f"{fp}:{i}: {line.rstrip()}")
+						count += 1
+						if count >= MAX_GREP_MATCHES:
+							break
+		except OSError:
+			continue
+		if count >= MAX_GREP_MATCHES:
+			break
+	if not matches:
+		return "[no matches]"
+	out = "\n".join(matches)
+	if count >= MAX_GREP_MATCHES:
+		out += f"\n... [truncated at {MAX_GREP_MATCHES} matches]"
+	return out
+
+
+def tool_ls(args):
+	path = args.get("path", ".")
+	try:
+		entries = sorted(os.listdir(path))
+	except OSError as e:
+		return f"[error: {e}]"
+	lines = []
+	for name in entries:
+		full = os.path.join(path, name)
+		suffix = "/" if os.path.isdir(full) else ""
+		lines.append(name + suffix)
+	return "\n".join(lines) if lines else "[empty directory]"
+
+
+def tool_bash(args):
+	command = args.get("command")
+	if not command:
+		return "[error: missing 'command']"
+	try:
+		timeout = int(args.get("timeout", 30))
+	except (TypeError, ValueError):
+		timeout = 30
+	if timeout < 1:
+		timeout = 1
+	if timeout > 120:
+		timeout = 120
+	try:
+		res = subprocess.run(
+			["bash", "-c", command],
+			capture_output=True,
+			text=True,
+			timeout=timeout,
+			cwd=os.getcwd(),
+		)
+	except subprocess.TimeoutExpired:
+		return f"[error: command timed out after {timeout}s]"
+	except OSError as e:
+		return f"[error: {e}]"
+	out = res.stdout
+	if res.stderr:
+		out += ("" if out.endswith("\n") or not out else "\n") + res.stderr
+	if res.returncode != 0:
+		out += f"\n[exit code {res.returncode}]"
+	if not out.strip():
+		out = f"[exit code {res.returncode}]"
+	return out
+
+
+def execute_tool(name, args):
+	if not isinstance(args, dict):
+		args = {}
+	if name == "read":
+		return tool_read(args)
+	if name == "grep":
+		return tool_grep(args)
+	if name == "ls":
+		return tool_ls(args)
+	if name == "bash":
+		return tool_bash(args)
+	return f"[error: unknown tool '{name}']"
+	if not isinstance(args, dict):
+		args = {}
+	if name == "read":
+		return tool_read(args)
+	if name == "grep":
+		return tool_grep(args)
+	if name == "ls":
+		return tool_ls(args)
+	return f"[error: unknown tool '{name}']"
+
+
+def _positional_args(tool, toks):
+	if tool == "read":
+		if not toks:
+			return {}
+		return {"path": " ".join(toks)}
+	if tool == "ls":
+		# accept common flags like -a, -l as no-ops (ls already shows hidden)
+		paths = [t for t in toks if not t.startswith("-")]
+		if not paths:
+			return {}
+		return {"path": " ".join(paths)}
+	if tool == "grep":
+		if not toks:
+			return {}
+		if len(toks) == 1:
+			return {"pattern": toks[0]}
+		return {"pattern": toks[0], "path": " ".join(toks[1:])}
+	return {}
+
+
+_SHELL_BUILTINS = {"cd", "export", "source", ".", "alias", "echo", "printf", "read",
+	"test", "[", "[[", "true", "false", "pwd", "unset", "local", "return"}
+
+
+def _is_executable(token):
+	if not token:
+		return False
+	if token in _SHELL_BUILTINS:
+		return True
+	if "/" in token:
+		return os.path.isfile(token) and os.access(token, os.X_OK)
+	return shutil.which(token) is not None
+
+
+def _extract_bodies(text):
+	bodies = []
+	for m in re.finditer(r"```([^\n]*)\n(.*?)```", text, re.DOTALL):
+		lang = m.group(1).strip().lower()
+		bodies.append((m.group(2).strip(), True, lang))
+	for m in re.finditer(r"<(?:tool_call|function_call|xml)[^>]*>\s*(.*?)\s*</(?:tool_call|function_call|xml)>", text, re.DOTALL | re.IGNORECASE):
+		bodies.append((m.group(1).strip(), True, ""))
+	bodies.append((text.strip(), False, ""))
+	seen = set()
+	out = []
+	for b, f, lang in bodies:
+		if b and b not in seen:
+			seen.add(b)
+			out.append((b, f, lang))
+	return out
+
+
+def parse_tool_calls_from_content(text):
+	if not text:
+		return []
+	for body, fenced, lang in _extract_bodies(text):
+		# bare tool name
+		if body in TOOLS:
+			return [normalize_call({"name": body, "arguments": {}})]
+		parts = body.split(None, 1)
+		if parts and parts[0] in TOOLS:
+			name = parts[0]
+			rest = parts[1].strip() if len(parts) > 1 else ""
+			if not rest:
+				return [normalize_call({"name": name, "arguments": {}})]
+			# JSON arguments
+			try:
+				args = json.loads(rest)
+				if isinstance(args, dict):
+					return [normalize_call({"name": name, "arguments": args})]
+			except json.JSONDecodeError:
+				pass
+			# positional arguments (common small-model style: "read a.txt")
+			# allow positional when fenced; for unfenced single-line bodies,
+			# only when the args are a single token or quoted, to avoid
+			# treating ordinary prose as a tool call
+			single_line = "\n" not in body
+			simple_args = (len(rest.split()) <= 1) or rest.startswith(("\"", "'"))
+			if fenced or (single_line and simple_args):
+				try:
+					toks = shlex.split(rest)
+				except ValueError:
+					toks = rest.split()
+				args = _positional_args(name, toks)
+				return [normalize_call({"name": name, "arguments": args})]
+		# json object/array anywhere in the body
+		for m in re.finditer(r"(\{.*?\}|\[.*?\])", body, re.DOTALL):
+			try:
+				obj = json.loads(m.group(1))
+			except json.JSONDecodeError:
+				continue
+			items = obj if isinstance(obj, list) else [obj]
+			out = []
+			for it in items:
+				call = normalize_call(it)
+				if call:
+					out.append(call)
+			if out:
+				return out
+		try:
+			obj = json.loads(body)
+		except json.JSONDecodeError:
+			continue
+		items = obj if isinstance(obj, list) else [obj]
+		out = []
+		for it in items:
+			call = normalize_call(it)
+			if call:
+				out.append(call)
+		if out:
+			return out
+	# bash fallback: a fenced block that is not a recognized tool call and
+	# looks like a command (common when the model writes the command directly)
+	if "bash" in ENABLED_TOOLS:
+		for body, fenced, lang in _extract_bodies(text):
+			if not fenced or not body.strip():
+				continue
+			if "\n" in body.strip():
+				continue
+			first = body.split(None, 1)[0] if body.split() else ""
+			if first in TOOLS:
+				continue
+			if body.lstrip().startswith(("{", "[")):
+				continue
+			if lang and not ("tool" in lang or "bash" in lang or "sh" in lang or "shell" in lang):
+				continue
+			# only treat as a shell command if the first token is actually
+			# an executable (or a known shell builtin); otherwise the fenced
+			# text is almost certainly an answer, not a command
+			if not _is_executable(first):
+				continue
+			return [normalize_call({"name": "bash", "arguments": {"command": body.strip()}})]
+	return []
+
+
+def normalize_call(obj):
+	if not isinstance(obj, dict):
+		return None
+	if "function" in obj and isinstance(obj["function"], dict):
+		f = obj["function"]
+		name = f.get("name") or obj.get("name") or obj.get("type")
+		args = f.get("arguments", f.get("parameters", {}))
+	else:
+		name = obj.get("name") or obj.get("type")
+		args = obj.get("arguments", obj.get("parameters", {}))
+	if not name:
+		return None
+	if isinstance(args, str):
+		try:
+			args = json.loads(args)
+		except json.JSONDecodeError:
+			args = {"_raw": args}
+	if not isinstance(args, dict):
+		args = {}
+	return {"id": obj.get("id") or f"call_{uuid.uuid4().hex[:8]}", "function": {"name": name, "arguments": args}}
+
+
+def ollama_chat(model, messages, tools, load_timeout, idle_timeout):
+	payload = {"model": model, "messages": messages, "stream": True}
+	if tools:
+		payload["tools"] = tools
+	data = json.dumps(payload).encode()
+	try:
+		conn = http.client.HTTPConnection("localhost", 11434, timeout=load_timeout)
+		conn.request("POST", "/api/chat", body=data, headers={"Content-Type": "application/json"})
+		resp = conn.getresponse()
+	except Exception as e:
+		raise RuntimeError(f"cannot reach Ollama: {e}")
+	if resp.status != 200:
+		try:
+			err = resp.read().decode(errors="replace")
+		except Exception:
+			err = ""
+		conn.close()
+		raise RuntimeError(f"Ollama HTTP {resp.status}: {err}")
+	try:
+		conn.sock.settimeout(idle_timeout)
+	except Exception:
+		pass
+	content_parts = []
+	tool_calls = None
+	try:
+		for raw in resp:
+			line = raw.strip()
+			if not line:
+				continue
+			try:
+				chunk = json.loads(line)
+			except json.JSONDecodeError:
+				continue
+			if isinstance(chunk, dict) and "error" in chunk:
+				conn.close()
+				raise RuntimeError(f"Ollama: {chunk['error']}")
+			msg = chunk.get("message", {}) if isinstance(chunk, dict) else {}
+			if isinstance(msg, dict):
+				if msg.get("content"):
+					content_parts.append(msg["content"])
+				if msg.get("tool_calls"):
+					tool_calls = msg["tool_calls"]
+			if isinstance(chunk, dict) and chunk.get("done"):
+				break
+	except socket.timeout:
+		conn.close()
+		raise RuntimeError(f"Ollama idle timeout ({idle_timeout}s with no data)")
+	except Exception as e:
+		conn.close()
+		raise RuntimeError(f"Ollama stream error: {e}")
+	conn.close()
+	return {"role": "assistant", "content": "".join(content_parts), "tool_calls": tool_calls}
+
+
+def socket_timeout_exc():
+	import socket
+	return socket.timeout
+
+
+def build_tool_schemas(enabled):
+	out = []
+	for name in enabled:
+		info = TOOLS.get(name)
+		if not info:
+			continue
+		out.append({"type": "function", "function": {"name": name, "description": info["description"], "parameters": info["schema"]}})
+	return out
+
+
+def parse_args(argv):
+	# returns (model, segments, config) or exits
+	if not argv or argv[0] in ("-h", "--help"):
+		print(HELP)
+		sys.exit(0)
+	# subcommand: list models
+	if argv[0] in ("models", "list-models", "ls-models"):
+		list_models()
+		sys.exit(0)
+	# flag-first models
+	if argv[0] in ("--models", "--list-models"):
+		list_models()
+		sys.exit(0)
+
+	model = None
+	segments = []  # list of tuples (kind, data)
+	config = {
+		"max_turns": 1,
+		"idle_timeout": DEFAULT_MODEL_TIMEOUT_IDLE,
+		"load_timeout": DEFAULT_MODEL_TIMEOUT_LOAD,
+		"verbose": False,
+		"system": [],
+	}
+	positionals = []
+	i = 0
+	n = len(argv)
+	while i < n:
+		tok = argv[i]
+		if tok.startswith("--"):
+			name = tok[2:]
+			if name in ("prompt",):
+				if i + 1 >= n:
+					fail(f"--prompt requires a value")
+				segments.append(("prompt", argv[i + 1]))
+				i += 2
+				continue
+			if name in ("file", "files"):
+				i += 1
+				files = []
+				while i < n and not argv[i].startswith("--"):
+					files.append(argv[i])
+					i += 1
+				if not files:
+					fail("--file requires at least one path")
+				segments.append(("file", files))
+				continue
+			if name in ("system",):
+				if i + 1 >= n:
+					fail("--system requires a value")
+				config["system"].append(argv[i + 1])
+				i += 2
+				continue
+			if name in ("max-turns", "turns", "max_turns"):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				try:
+					v = int(argv[i + 1])
+				except ValueError:
+					fail(f"--{name} value must be an integer")
+				if v < 1:
+					fail(f"--{name} must be >= 1")
+				config["max_turns"] = v
+				i += 2
+				continue
+			if name in ("timeout", "idle-timeout", "idle_timeout"):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				try:
+					v = int(argv[i + 1])
+				except ValueError:
+					fail(f"--{name} value must be an integer")
+				if v < 1:
+					fail(f"--{name} must be >= 1")
+				config["idle_timeout"] = v
+				i += 2
+				continue
+			if name in ("load-timeout", "load_timeout"):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				try:
+					v = int(argv[i + 1])
+				except ValueError:
+					fail(f"--{name} value must be an integer")
+				if v < 1:
+					fail(f"--{name} must be >= 1")
+				config["load_timeout"] = v
+				i += 2
+				continue
+			if name in ("verbose", "v"):
+				config["verbose"] = True
+				i += 1
+				continue
+			if name in ("models", "list-models"):
+				list_models()
+				sys.exit(0)
+			if name in TOOLS:
+				segments.append(("tool", name))
+				i += 1
+				continue
+			fail(f"unknown flag: --{name}")
+		else:
+			positionals.append(tok)
+			i += 1
+
+	# resolve positionals: first = model, rest => prompt(s)
+	if not positionals:
+		fail("missing model (first argument)")
+	model = positionals[0]
+	if len(positionals) >= 2:
+		# trailing positional prompt (shorthand for final --prompt)
+		prompt_text = " ".join(positionals[1:])
+		segments.append(("prompt", prompt_text))
+	if len(positionals) > 2:
+		# already joined; note ambiguity
+		pass
+
+	return model, segments, config
+
+
+def vlog(config, msg):
+	if config["verbose"]:
+		sys.stderr.write(f"{NAME}: {msg}\n")
+
+
+def main(argv):
+	model, segments, config = parse_args(argv)
+
+	# assemble
+	enabled_tools = set()
+	text_blocks = []
+	for kind, data in segments:
+		if kind == "prompt":
+			text_blocks.append(data)
+		elif kind == "file":
+			for p in data:
+				content = read_file_text(p)
+				text_blocks.append(f"--- {p} ---\n{content}")
+		elif kind == "tool":
+			enabled_tools.add(data)
+			info = TOOLS[data]
+			text_blocks.append(f"[tool available: {data} — {info['description']}]")
+
+	global ENABLED_TOOLS
+	ENABLED_TOOLS = set(enabled_tools)
+
+	user_content = "\n\n".join(b for b in text_blocks if b.strip())
+	if not user_content.strip():
+		fail("no prompt provided (use --prompt or a trailing prompt)")
+
+	system_content = "\n\n".join(config["system"])
+
+	messages = []
+	if system_content.strip():
+		messages.append({"role": "system", "content": system_content})
+	messages.append({"role": "user", "content": user_content})
+
+	tools_list = build_tool_schemas(enabled_tools)
+	vlog(config, f"model={model} turns={config['max_turns']} tools={sorted(enabled_tools)}")
+
+	last_call_sig = None
+	repeated = False
+	for turn in range(1, config["max_turns"] + 1):
+		vlog(config, f"turn {turn}: calling model")
+		try:
+			assistant = ollama_chat(model, messages, tools_list if (turn <= config["max_turns"]) else None, config["load_timeout"], config["idle_timeout"])
+		except RuntimeError as e:
+			fail(str(e), 1)
+		messages.append(assistant)
+		content = assistant.get("content", "") or ""
+		vlog(config, f"  assistant: {content[:400].replace(chr(10), ' ')}")
+		tool_calls = assistant.get("tool_calls")
+		if not tool_calls:
+			tool_calls = parse_tool_calls_from_content(content)
+		if not tool_calls:
+			# final answer
+			sys.stdout.write(content)
+			if content and not content.endswith("\n"):
+				sys.stdout.write("\n")
+			return 0
+
+		# execute tool calls
+		if turn >= config["max_turns"]:
+			sys.stderr.write(f"{NAME}: model requested tool call but max-turns reached; not executed\n")
+			sys.exit(0)
+		sigs = []
+		for tc in tool_calls:
+			fn = tc.get("function", {})
+			name = fn.get("name")
+			args = fn.get("arguments", {})
+			sigs.append((name, json.dumps(args, sort_keys=True)))
+		call_sig = tuple(sigs)
+		if call_sig == last_call_sig:
+			repeated = True
+		last_call_sig = call_sig
+
+		vlog(config, f"turn {turn}: {len(tool_calls)} tool call(s): {[tc.get('function',{}).get('name') for tc in tool_calls]}")
+
+		if not repeated:
+			for tc in tool_calls:
+				fn = tc.get("function", {})
+				name = fn.get("name")
+				args = fn.get("arguments", {})
+				vlog(config, f"  -> {name}({json.dumps(args)})")
+				try:
+					result = execute_tool(name, args)
+				except Exception as e:
+					result = f"[error: {e}]"
+				if len(result) > MAX_TOOL_RESULT:
+					result = result[:MAX_TOOL_RESULT] + f"\n... [truncated to {MAX_TOOL_RESULT} chars]"
+				vlog(config, f"  <- {result[:200].replace(chr(10), ' ')}")
+				messages.append({"role": "tool", "content": result, "tool_call_id": tc.get("id")})
+
+		if repeated:
+			vlog(config, "stopping: repeated identical tool call; forcing final answer")
+			messages.append({"role": "user", "content": "You already have the tool result above. Answer the original request now in plain text, without calling any tools."})
+			try:
+				assistant = ollama_chat(model, messages, None, config["load_timeout"], config["idle_timeout"])
+			except RuntimeError as e:
+				fail(str(e), 1)
+			messages.append(assistant)
+			content = assistant.get("content", "") or ""
+			sys.stdout.write(content)
+			if content and not content.endswith("\n"):
+				sys.stdout.write("\n")
+			return 0
+		if turn >= config["max_turns"]:
+			vlog(config, "stopping: max turns reached")
+			break
+
+	# no final content produced
+	sys.stderr.write(f"{NAME}: no final answer produced\n")
+	sys.exit(0)
+
+
+if __name__ == "__main__":
+	try:
+		main(sys.argv[1:])
+	except SystemExit:
+		raise
+	except KeyboardInterrupt:
+		sys.stderr.write(f"{NAME}: interrupted\n")
+		sys.exit(1)
+	except Exception as e:
+		fail(f"unexpected error: {e}", 1)
