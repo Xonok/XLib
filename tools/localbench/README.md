@@ -95,3 +95,18 @@ Fixtures are data, not project code: `.xlintignore` exempts `fixture/`, `broken/
 
 `python3 tools/test/test_localbench.py` — unit tests for the version hash, ledger grouping,
 checker parsing and the state-missing path. No model required.
+
+## Operations measurements
+
+`ops.py` answers the other half of the question — speed, memory and concurrency:
+
+```sh
+python3 tools/localbench/ops.py --models m1,m2 --out DIR
+python3 tools/localbench/ops.py --concurrency m1,m2,m3 --out DIR
+```
+
+The first warms each model, measures prefill/generation at roughly 100/1,000/4,000 prompt
+tokens with a fixed 40-number answer, and records `/api/ps` size and VRAM after load. The
+second warms the set, measures each solo, then three rounds of all models at once, recording
+per-call wall time and load average. These are operating measurements, not capability scores;
+they are kept beside the task ledger rather than in it on purpose.
