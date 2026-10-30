@@ -106,6 +106,8 @@ class Store:
 		with self._external_lock():
 			self._reload_if_changed_unlocked()
 			with self._lock:
+				if any(condition.replace for condition in conditions):
+					self.news=[item for item in self.news if item.get("source")!=source_name]
 				seen=set()
 				for condition in conditions:
 					seen.add(condition.key)
@@ -113,7 +115,6 @@ class Store:
 					condition.since=old.since if old is not None and old.state==condition.state else now
 					record=event.transition(old,condition)
 					if condition.replace:
-						self.news=[item for item in self.news if item.get("source")!=source_name]
 						if condition.state!=event.STATE_OK:
 							self.news.append(event.record(condition))
 					elif record is not None:

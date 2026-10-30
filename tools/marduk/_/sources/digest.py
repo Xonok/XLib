@@ -26,6 +26,7 @@ class Digest:
 		self.max_seen=int(options.get("max_seen",2000))
 		self.max_age_days=float(options.get("max_age_days",3.0))
 		self.candidate_days=float(options.get("candidate_days",3.0))
+		self.accept_all=bool(options.get("accept_all",False))
 		self.run_dir=options.get("run_dir") or _default_run_dir()
 
 	def interval(self)->float:
@@ -111,6 +112,19 @@ class Digest:
 		candidates=[item for item in memory.get("candidates") or [] if item.get("day")==target]
 		if not candidates:
 			return
+		memory["published_pool"]=list(candidates)
+		if self.accept_all:
+			memory["published"]=[{
+				"title":item.get("title",""),
+				"why":item.get("summary","") or "accepted (accept_all mode)",
+				"url":item.get("url",""),
+				"day":target,
+				"at":now,
+			} for item in candidates]
+			memory["last_eval_day"]=target
+			memory["last_model"]="accept-all"
+			memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
+			return
 		prompt=_eval_prompt(candidates)
 		text,model=_eval_with_fallback(self.eval_models,prompt,self.timeout_seconds,call)
 		data=_json(text)
@@ -136,21 +150,26 @@ class Digest:
 		if chosen is None:
 			raise ValueError(f"{model} returned no usable item")
 		memory["published"]=[chosen]
-		memory["published_pool"]=list(candidates)
 		memory["last_eval_day"]=target
 		memory["last_model"]=model
 		memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
 
 	def _conditions(self,now:float,memory:dict)->list[event.Condition]:
-		"""The latest daily pick, so a re-check does not drop its store key."""
+		"""The daily pick(s); accept_all publishes every candidate."""
 		published=memory.get("published") or []
 		if not published:
 			return []
-		item=published[-1]
-		key=f"{self.id}:{item['day']}"
-		return [event.Condition(self.id,key,"news","World news",event.STATE_INFO,
-			item["title"],f"Pick for {item['day']}. {item['why']} — {item['url']}",
-			checked=_day_end(now),replace=True)]
+		day=published[-1]["day"]
+		result=[]
+		for index,item in enumerate(published):
+			if len(published)==1:
+				key=f"{self.id}:{item['day']}"
+			else:
+				key=f"{self.id}:{item['day']}:{index}"
+			result.append(event.Condition(self.id,key,"news","World news",event.STATE_INFO,
+				item["title"],f"Pick for {item['day']}. {item['why']} — {item['url']}",
+				checked=_day_end(now),replace=True))
+		return result
 
 	def _prune(self,now:float,memory:dict)->None:
 		cutoff=now-self.candidate_days*86400
