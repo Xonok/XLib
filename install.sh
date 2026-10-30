@@ -21,7 +21,7 @@ chmod +x "$PWD/tools/oc-agent" "$PWD/tools/ctx" "$PWD/tools/xlint/xlint.py" \
 	"$PWD/tools/taskview/taskview.py" "$PWD/tools/taskview/taskupdate.py" \
 	"$PWD/tools/marduk/marduk" "$PWD/tools/skynet.py" \
 	"$PWD/tools/bbprs/bbprs.py" "$PWD/tools/tmux-xlib.sh" \
-	"$PWD/tools/ruffwatch.py" 2>/dev/null || true
+	"$PWD/tools/ruffwatch.py" "$PWD/tools/xprompt" 2>/dev/null || true
 ln -sf "$PWD/tools/oc-agent" "$HOME/.local/bin/oc-agent"
 ln -sf "$PWD/tools/ctx" "$HOME/.local/bin/ctx"
 ln -sf "$PWD/tools/xlint/xlint.py" "$HOME/.local/bin/xlint"
@@ -32,4 +32,5 @@ ln -sf "$PWD/tools/skynet.py" "$HOME/.local/bin/skynet"
 ln -sf "$PWD/tools/bbprs/bbprs.py" "$HOME/.local/bin/bbprs"
 ln -sf "$PWD/tools/tmux-xlib.sh" "$HOME/.local/bin/tmux-xlib"
 ln -sf "$PWD/tools/ruffwatch.py" "$HOME/.local/bin/ruffwatch"
+ln -sf "$PWD/tools/xprompt" "$HOME/.local/bin/xprompt"
 echo "Linked panel tools into $HOME/.local/bin"

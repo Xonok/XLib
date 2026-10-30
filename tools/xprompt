@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""prompt - minimal blocking harness around Ollama for small models.
+"""xprompt - minimal blocking harness around Ollama for small models.
 
 Usage:
-  prompt                       show this help
-  prompt --help                show this help
-  prompt models                list models available in Ollama
-  prompt <model> [flags...] [prompt]
+  xprompt                       show this help
+  xprompt --help                show this help
+  xprompt models                list models available in Ollama
+  xprompt <model> [flags...] [prompt]
 
 Positional:
-  <model>    Ollama model name (first argument, no flag). Use 'prompt models'
+  <model>    Ollama model name (first argument, no flag). Use 'xprompt models'
              to list available ones.
 
 Flags (may repeat; order affects the assembled prompt):
@@ -26,7 +26,7 @@ Flags (may repeat; order affects the assembled prompt):
   --models             list available models and exit
 
 The trailing unflagged positional prompt is shorthand for a final --prompt, so
-the original 'prompt <model> ... "prompt"' form keeps working.
+the original 'xprompt <model> ... "prompt"' form keeps working.
 
 Exit codes: 0 success, 1 runtime error (Ollama/model/tool failure), 2 usage error.
 """
@@ -41,7 +41,7 @@ import subprocess
 import sys
 import uuid
 
-NAME = "prompt"
+NAME = "xprompt"
 DEFAULT_MODEL_TIMEOUT_LOAD = 300
 DEFAULT_MODEL_TIMEOUT_IDLE = 120
 MAX_FILE_BYTES = 20000
