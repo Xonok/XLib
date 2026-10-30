@@ -1,0 +1,1 @@
+A database outage lasted 2 hours and affected 1,200 users. Root cause was a misconfigured index. The issue was resolved by rollback.

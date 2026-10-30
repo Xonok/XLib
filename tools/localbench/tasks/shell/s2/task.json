@@ -1,0 +1,1 @@
+{"family": "shell", "case": "s2", "kind": "state", "prompt": "Write the name (not the path) of the largest file under data/ to answer.txt.", "tools": ["bash"], "max_turns": 6, "timeout_s": 180, "options": {}, "verify_command": null, "note": null}

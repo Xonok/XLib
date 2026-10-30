@@ -21,3 +21,11 @@ tools/pybundle/test/fixtures/
 # owns, so the html rules would report it for its indent unit rather than for
 # anything about it. The narrow path: the 10 .py files beside it stay linted.
 dev/xhttp/compare/web/
+
+# localbench task fixtures are data, not project code: deliberately buggy or incomplete
+# files a model is asked to repair, plus the reference/broken states the checker self-test
+# uses. Linting them would impose repository style on test input. The check.py files beside
+# them are instrument code and stay linted.
+tools/localbench/tasks/*/*/fixture/
+tools/localbench/tasks/*/*/broken/
+tools/localbench/tasks/*/*/reference/

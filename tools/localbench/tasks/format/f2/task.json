@@ -1,0 +1,1 @@
+{"family":"format","case":"f2","kind":"stdout","prompt":"Reply with exactly this JSON and nothing else: {\"status\":\"ready\",\"count\":3}","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"note":null}

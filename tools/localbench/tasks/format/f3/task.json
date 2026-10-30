@@ -1,0 +1,1 @@
+{"family":"format","case":"f3","kind":"stdout","prompt":"Output the three words red, green, blue as one comma-separated line, lowercase, no spaces.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"note":null}

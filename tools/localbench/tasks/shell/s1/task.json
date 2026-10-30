@@ -1,0 +1,1 @@
+{"family": "shell", "case": "s1", "kind": "state", "prompt": "Create out/summary.txt containing the sorted unique lines of data/names.txt, one per line.", "tools": ["bash"], "max_turns": 6, "timeout_s": 180, "options": {}, "verify_command": null, "note": null}
