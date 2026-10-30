@@ -16,7 +16,7 @@ rules; this file only adds Python-specific rules.
 - A file ends with exactly one newline, after real content: no trailing blank line,
 	and no missing final newline (`BX56XRY`).
 - No trailing whitespace.
-- A mid-line double space is a typo. Use one space between tokens and after commas.
+- A mid-line double space is a typo. Use one space between tokens. After a comma, spacing follows readability: a space helps where the comma separates typed or dense pieces (`file: TextIO, lines: list[line]`), and hurts where a short two-argument call would read as two chunks (`raw.write_lines(file,lines)`). Imports always omit it.
 - Prefer concise code, but do not make it complicated just to be concise.
 - Use intermediate variables to break up complex logic; use spaces to break
 	math into simpler parts, and don't pad spaces as a blanket rule.
@@ -27,7 +27,9 @@ rules; this file only adds Python-specific rules.
 	(`import argparse,ctypes,os`), names from the same module are comma-joined
 	(`from X import Y,Z`), no space after a comma. Dotted names get their own
 	line, and so do aliased ones (`import os as o`) — they are avoided where the
-	plain name is clear enough.
+	plain name is clear enough. **That separate rule is what makes the no-space
+	form safe**: a comma in an import separates simple names only, so the
+	readability case that needs a space cannot arise.
 - One statement per line (no `;`); no blank lines between imports. Imports
 	from meaningfully different categories (stdlib vs repo-local) are separated
 	without an empty line between them.
