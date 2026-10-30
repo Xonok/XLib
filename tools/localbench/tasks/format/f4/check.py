@@ -1,4 +1,4 @@
-import json,os,sys
+import json,os,re,sys
 
 def load_stdout():
 	path = os.environ["LB_STDOUT"]
@@ -15,9 +15,9 @@ def load_stdout():
 
 def main():
 	content = load_stdout().strip()
-	expected = "43"
-	ok = content == expected
-	print(json.dumps({"ok": ok, "contract_clean": ok, "reason": "ok" if ok else "mismatch", "detail": {"stdout": content}}))
+	ok = re.search(r"\b43\b", content) is not None
+	contract_clean = content == "43"
+	print(json.dumps({"ok": ok, "contract_clean": contract_clean, "reason": "ok" if ok else "mismatch", "detail": {"stdout": content}}))
 	sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":

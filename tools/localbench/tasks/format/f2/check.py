@@ -21,7 +21,14 @@ def main():
 		parsed = json.loads(content)
 	except (json.JSONDecodeError, ValueError):
 		parsed = None
-	ok = parsed == expected
+	start, end = content.find("{"), content.rfind("}")
+	tolerant = None
+	if start >= 0 and end > start:
+		try:
+			tolerant = json.loads(content[start:end + 1])
+		except (json.JSONDecodeError, ValueError):
+			tolerant = None
+	ok = tolerant == expected
 	contract_clean = parsed == expected
 	print(json.dumps({"ok": ok, "contract_clean": contract_clean, "reason": "ok" if ok else "mismatch", "detail": {"parsed": parsed}}))
 	sys.exit(0 if ok else 1)

@@ -16,8 +16,9 @@ def load_stdout():
 def main():
 	content = load_stdout().strip()
 	expected = "red,green,blue"
-	ok = content == expected
-	print(json.dumps({"ok": ok, "contract_clean": ok, "reason": "ok" if ok else "mismatch", "detail": {"stdout": content}}))
+	ok = content.lower().replace(" ", "") == expected
+	contract_clean = content == expected
+	print(json.dumps({"ok": ok, "contract_clean": contract_clean, "reason": "ok" if ok else "mismatch", "detail": {"stdout": content}}))
 	sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":

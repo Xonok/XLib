@@ -1,1 +1,1 @@
-{"family": "needle", "case": "p32k", "kind": "stdout", "prompt": null, "prompt_file": "p32k.txt", "tools": [], "max_turns": 1, "timeout_s": 300, "options": {"num_ctx": 40960}, "verify_command": null, "note": null}
+{"family": "needle", "case": "p32k", "kind": "stdout", "prompt": null, "prompt_file": "p32k.txt", "tools": [], "max_turns": 1, "timeout_s": 300, "options": {"num_ctx": 65536}, "verify_command": null, "note": null}

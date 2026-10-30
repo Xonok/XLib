@@ -92,6 +92,7 @@ def main():
 	ap.add_argument("--workdir", default=None)
 	ap.add_argument("--keep", action="store_true")
 	ap.add_argument("--no-warmup", action="store_true")
+	ap.add_argument("--think", action="store_true", help="enable model thinking (default off)")
 	ap.add_argument("--no-final", action="store_true")
 	ap.add_argument("--option", action="append", default=[])
 	args = ap.parse_args()
@@ -110,9 +111,13 @@ def main():
 	workdir = Path(args.workdir) if args.workdir else (out_dir / "work")
 	workdir.mkdir(parents=True, exist_ok=True)
 
-	# warmup
+	# warmup — same host/options/think as the runs, or the first scored call pays a reload
 	if not args.no_warmup:
 		cmd = [xprompt, args.model, "--json", "--max-turns", "1", "Reply with exactly: OK"]
+		for o in args.option:
+			if "=" in o:
+				cmd += ["--option", o]
+		cmd.append("--think" if args.think else "--no-think")
 		if args.host:
 			cmd += ["--host", args.host]
 		try:
@@ -173,6 +178,7 @@ def main():
 			for t in task_tools:
 				if t in TOOL_FLAGS:
 					cmd.append(TOOL_FLAGS[t])
+			cmd.append("--think" if task.get("think", args.think) else "--no-think")
 			for k, v in merged.items():
 				cmd += ["--option", f"{k}={v}"]
 			if args.host:
@@ -304,6 +310,7 @@ def main():
 				"options": merged,
 				"tools": task_tools,
 				"max_turns": max_turns,
+				"think": bool(task.get("think", args.think)),
 				"exit_code": returncode,
 				"timed_out": timed_out,
 				"wall_time_s": wall_time_s,
