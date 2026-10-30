@@ -5,7 +5,7 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH="~/.config/marduk/config.json"
 DEFAULT_STATE_PATH="~/.local/share/marduk/state.json"
-_GLOBAL_KEYS={"sources","news_retention_days","state_path"}
+_GLOBAL_KEYS={"sources","news_retention_days","state_path","sections"}
 
 class Config:
 	"""The panel's settings, loaded from one JSON file."""
@@ -15,6 +15,7 @@ class Config:
 		self.sources=[]
 		self.news_retention_days=7.0
 		self.state_path=Path(DEFAULT_STATE_PATH).expanduser()
+		self.sections=None
 		self.error=""
 		self.load()
 
@@ -43,6 +44,8 @@ class Config:
 		names=[entry["id"] for entry in self.sources]
 		if len(set(names))!=len(names):
 			raise ValueError("source ids must be unique")
+		if "sections" in data:
+			self.sections=_sections(data.get("sections"))
 		self.news_retention_days=float(data.get("news_retention_days",self.news_retention_days))
 		if "state_path" in data:
 			self.state_path=Path(data["state_path"]).expanduser()
@@ -63,3 +66,19 @@ def _source(entry:object)->dict:
 	if not isinstance(name,str) or not name:
 		raise ValueError(f"source {kind}: id must be a non-empty string")
 	return {**entry,"kind":kind,"id":name}
+
+def _sections(value:object)->list:
+	if not isinstance(value,list):
+		raise ValueError("sections must be a list")
+	out=[]
+	for entry in value:
+		if not isinstance(entry,dict):
+			raise ValueError("a section must be an object")
+		kind=entry.get("kind")
+		title=entry.get("title")
+		if not isinstance(kind,str) or not kind:
+			raise ValueError("a section needs a kind")
+		if not isinstance(title,str) or not title:
+			raise ValueError("a section needs a title")
+		out.append({"kind":kind,"title":title})
+	return out

@@ -59,7 +59,7 @@ class Panel:
 			width=size.columns if width is None else width
 		now=self.clock()
 		notices=[notice for notice in (self.config.error,*self.source_notices,self.store.load_error) if notice]
-		return render.render(self.sources,self.store.snapshot(now),now,height,width,self.compact,notices)
+		return render.render(self.sources,self.store.snapshot(now),now,height,width,self.compact,notices,sections=self.config.sections)
 
 	def run_once(self)->None:
 		self.scheduler.run_due(self.clock(),force=True)
