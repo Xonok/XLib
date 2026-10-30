@@ -4,7 +4,7 @@
 Usage:
   xprompt                       show this help
   xprompt --help                show this help
-  xprompt models                list models available in Ollama
+  xprompt models [--detail]     list models available in Ollama
   xprompt <model> [flags...] [prompt]
 
 Positional:
@@ -18,17 +18,29 @@ Flags (may repeat; order affects the assembled prompt):
   --grep               enable the 'grep' tool (search text in files)
   --ls                 enable the 'ls' tool (list a directory, incl. hidden)
   --bash               enable the 'bash' tool (run a shell command)
+  --write              enable the 'write' tool (write content to a file)
   --system TEXT        system message (concatenated if repeated)
   --max-turns N        tool-call loop limit (default 1; 1 = single shot)
   --timeout S          idle timeout between streamed chunks, seconds (default 120)
   --load-timeout S     time to wait for the model to start responding (default 300)
+  --option KEY=VALUE   pass an Ollama option (temperature, seed, num_ctx,
+                       num_gpu, num_thread, num_predict, ...); repeatable
+  --host URL           Ollama host (default $OLLAMA_HOST or localhost:11434)
+  --think/--no-think   force thinking on or off for thinking-capable models
+  --json               print one JSON object (content, turns, tool_calls,
+                       timings, error) instead of plain text
   --verbose            print turn/tool traces to stderr
   --models             list available models and exit
+
+'models --detail' adds effective num_ctx, num_gpu and num_thread from
+/api/show. The default listing shows name, size, parameters, quantization,
+native context and capabilities.
 
 The trailing unflagged positional prompt is shorthand for a final --prompt, so
 the original 'xprompt <model> ... "prompt"' form keeps working.
 
-Exit codes: 0 success, 1 runtime error (Ollama/model/tool failure), 2 usage error.
+Exit codes: 0 success, 1 runtime error (Ollama/model/tool failure, including a
+run that produced no final answer), 2 usage error.
 """
 import http.client
 import json
@@ -39,7 +51,9 @@ import os
 import re
 import subprocess
 import sys
+import time
 import uuid
+from urllib.parse import urlparse
 
 NAME = "xprompt"
 DEFAULT_MODEL_TIMEOUT_LOAD = 300
@@ -88,6 +102,17 @@ TOOLS = {
 			"required": ["command"],
 		},
 	},
+	"write": {
+		"description": "Write content to a file (creating parent directories), returning a byte count.",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"path": {"type": "string", "description": "file path"},
+				"content": {"type": "string", "description": "content to write"},
+			},
+			"required": ["path", "content"],
+		},
+	},
 }
 
 ENABLED_TOOLS = set()
@@ -110,9 +135,68 @@ def human_size(n):
 	return f"{n}B"
 
 
-def list_models():
+def normalize_host(value=None):
+	if value is None:
+		value = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+	value = str(value).strip()
+	host = ""
+	port = None
+	if "://" in value:
+		parsed = urlparse(value)
+		host = parsed.hostname or ""
+		port = parsed.port
+	else:
+		if ":" in value:
+			h, sep, pstr = value.rpartition(":")
+			try:
+				port = int(pstr)
+				host = h
+			except ValueError:
+				host = value
+				port = None
+		else:
+			host = value
+	if not host:
+		host = "localhost"
+	if port is None:
+		port = 11434
+	return host, int(port)
+
+
+def coerce_option_value(value):
+	s = value
+	low = str(s).lower()
+	if low == "true":
+		return True
+	if low == "false":
+		return False
+	if re.fullmatch(r"[+-]?\d+", str(s)):
+		return int(s)
 	try:
-		conn = http.client.HTTPConnection("localhost", 11434, timeout=10)
+		return float(s)
+	except (TypeError, ValueError):
+		return s
+
+
+def parse_show_parameters(text):
+	result = {"num_ctx": None, "num_gpu": None, "num_thread": None}
+	if not text:
+		return result
+	for line in str(text).splitlines():
+		parts = line.split()
+		if len(parts) < 2:
+			continue
+		key = parts[0]
+		val = parts[1]
+		if key in result:
+			result[key] = val
+	return result
+
+
+def fetch_tags(host=None):
+	h, p = normalize_host(host)
+	try:
+		conn = http.client.HTTPConnection(h, p, timeout=10)
 		conn.request("GET", "/api/tags")
 		resp = conn.getresponse()
 		raw = resp.read()
@@ -125,16 +209,82 @@ def list_models():
 		data = json.loads(raw)
 	except json.JSONDecodeError as e:
 		fail(f"bad response from Ollama: {e}", 1)
+	return data
+
+
+def fetch_show(model, host=None):
+	h, p = normalize_host(host)
+	try:
+		conn = http.client.HTTPConnection(h, p, timeout=10)
+		data = json.dumps({"model": model}).encode()
+		conn.request("POST", "/api/show", body=data, headers={"Content-Type": "application/json"})
+		resp = conn.getresponse()
+		raw = resp.read()
+		conn.close()
+	except Exception as e:
+		fail(f"cannot reach Ollama: {e}", 1)
+	if resp.status != 200:
+		fail(f"Ollama HTTP {resp.status}: {raw.decode(errors='replace')}", 1)
+	try:
+		data = json.loads(raw)
+	except json.JSONDecodeError as e:
+		fail(f"bad response from Ollama: {e}", 1)
+	return data
+
+
+def list_models(detail=False, host=None):
+	data = fetch_tags(host)
 	models = data.get("models", [])
 	if not models:
 		print("no models installed")
 		return
+	show_data = {}
+	if detail:
+		for m in models:
+			name = m.get("name", "")
+			try:
+				sd = fetch_show(name, host)
+				show_data[name] = sd
+			except SystemExit:
+				raise
+			except Exception as e:
+				show_data[name] = {}
 	width = max(len(m.get("name", "")) for m in models)
+	param_width = 8
+	quant_width = 10
+	ctx_width = 8
 	for m in sorted(models, key=lambda x: x.get("name", "")):
 		name = m.get("name", "")
 		size = human_size(m.get("size", 0))
 		caps = ", ".join(m.get("capabilities", []))
-		print(f"{name:<{width}}  {size:>6}  {caps}")
+		details = m.get("details", {}) or {}
+		param = details.get("parameter_size")
+		if param is None:
+			param = "-"
+		quant = details.get("quantization_level")
+		if quant is None:
+			quant = "-"
+		ctx = details.get("context_length")
+		if ctx is None:
+			ctx = "-"
+		row = f"{name:<{width}}  {size:>6}  {str(param):>{param_width}}  {str(quant):<{quant_width}}  {str(ctx):>{ctx_width}}"
+		if detail:
+			sd = show_data.get(name, {}) or {}
+			params_str = sd.get("parameters", "") if isinstance(sd, dict) else ""
+			parsed = parse_show_parameters(params_str)
+			num_ctx = parsed.get("num_ctx")
+			if num_ctx is None:
+				num_ctx = "-"
+			num_gpu = parsed.get("num_gpu")
+			if num_gpu is None:
+				num_gpu = "-"
+			num_thread = parsed.get("num_thread")
+			if num_thread is None:
+				num_thread = "-"
+			row += f"  {num_ctx}  {num_gpu}  {num_thread}"
+		if caps:
+			row += f"  {caps}"
+		print(row)
 
 
 def read_file_text(path):
@@ -253,6 +403,28 @@ def tool_bash(args):
 	return out
 
 
+def tool_write(args):
+	path = args.get("path")
+	if not path:
+		return "[error: missing 'path']"
+	content = args.get("content")
+	if content is None:
+		return "[error: missing 'content']"
+	if not isinstance(content, str):
+		content = str(content)
+	try:
+		full = os.path.abspath(path)
+		parent = os.path.dirname(full)
+		if parent and not os.path.isdir(parent):
+			os.makedirs(parent, exist_ok=True)
+		with open(full, "w", encoding="utf-8") as f:
+			f.write(content)
+		byte_count = len(content.encode("utf-8"))
+		return f"[wrote {byte_count} bytes to {path}]"
+	except OSError as e:
+		return f"[error: {e}]"
+
+
 def execute_tool(name, args):
 	if not isinstance(args, dict):
 		args = {}
@@ -264,15 +436,8 @@ def execute_tool(name, args):
 		return tool_ls(args)
 	if name == "bash":
 		return tool_bash(args)
-	return f"[error: unknown tool '{name}']"
-	if not isinstance(args, dict):
-		args = {}
-	if name == "read":
-		return tool_read(args)
-	if name == "grep":
-		return tool_grep(args)
-	if name == "ls":
-		return tool_ls(args)
+	if name == "write":
+		return tool_write(args)
 	return f"[error: unknown tool '{name}']"
 
 
@@ -281,6 +446,12 @@ def _positional_args(tool, toks):
 		if not toks:
 			return {}
 		return {"path": " ".join(toks)}
+	if tool == "write":
+		if not toks:
+			return {}
+		if len(toks) == 1:
+			return {"path": toks[0], "content": ""}
+		return {"path": toks[0], "content": " ".join(toks[1:])}
 	if tool == "ls":
 		# accept common flags like -a, -l as no-ops (ls already shows hidden)
 		paths = [t for t in toks if not t.startswith("-")]
@@ -432,13 +603,18 @@ def normalize_call(obj):
 	return {"id": obj.get("id") or f"call_{uuid.uuid4().hex[:8]}", "function": {"name": name, "arguments": args}}
 
 
-def ollama_chat(model, messages, tools, load_timeout, idle_timeout):
+def ollama_chat(model, messages, tools=None, load_timeout=DEFAULT_MODEL_TIMEOUT_LOAD, idle_timeout=DEFAULT_MODEL_TIMEOUT_IDLE, host=None, options=None, think=None):
 	payload = {"model": model, "messages": messages, "stream": True}
+	if think is not None:
+		payload["think"] = think
 	if tools:
 		payload["tools"] = tools
+	if options:
+		payload["options"] = options
 	data = json.dumps(payload).encode()
+	h, p = normalize_host(host)
 	try:
-		conn = http.client.HTTPConnection("localhost", 11434, timeout=load_timeout)
+		conn = http.client.HTTPConnection(h, p, timeout=load_timeout)
 		conn.request("POST", "/api/chat", body=data, headers={"Content-Type": "application/json"})
 		resp = conn.getresponse()
 	except Exception as e:
@@ -456,6 +632,7 @@ def ollama_chat(model, messages, tools, load_timeout, idle_timeout):
 		pass
 	content_parts = []
 	tool_calls = None
+	timings = None
 	try:
 		for raw in resp:
 			line = raw.strip()
@@ -475,6 +652,14 @@ def ollama_chat(model, messages, tools, load_timeout, idle_timeout):
 				if msg.get("tool_calls"):
 					tool_calls = msg["tool_calls"]
 			if isinstance(chunk, dict) and chunk.get("done"):
+				timings = {
+					"load_duration_ns": chunk.get("load_duration"),
+					"prompt_eval_count": chunk.get("prompt_eval_count"),
+					"prompt_eval_duration_ns": chunk.get("prompt_eval_duration"),
+					"eval_count": chunk.get("eval_count"),
+					"eval_duration_ns": chunk.get("eval_duration"),
+					"total_duration_ns": chunk.get("total_duration"),
+				}
 				break
 	except socket.timeout:
 		conn.close()
@@ -483,12 +668,8 @@ def ollama_chat(model, messages, tools, load_timeout, idle_timeout):
 		conn.close()
 		raise RuntimeError(f"Ollama stream error: {e}")
 	conn.close()
-	return {"role": "assistant", "content": "".join(content_parts), "tool_calls": tool_calls}
-
-
-def socket_timeout_exc():
-	import socket
-	return socket.timeout
+	msg_out = {"role": "assistant", "content": "".join(content_parts), "tool_calls": tool_calls, "timings": timings}
+	return msg_out
 
 
 def build_tool_schemas(enabled):
@@ -508,11 +689,33 @@ def parse_args(argv):
 		sys.exit(0)
 	# subcommand: list models
 	if argv[0] in ("models", "list-models", "ls-models"):
-		list_models()
+		detail = False
+		h = None
+		i = 1
+		n = len(argv)
+		while i < n:
+			if argv[i] == "--detail":
+				detail = True
+				i += 1
+			elif argv[i] == "--host":
+				if i + 1 >= n:
+					fail("--host requires a value")
+				h = argv[i + 1]
+				i += 2
+			else:
+				fail(f"unknown flag: {argv[i]}")
+		list_models(detail=detail, host=h)
 		sys.exit(0)
 	# flag-first models
 	if argv[0] in ("--models", "--list-models"):
-		list_models()
+		detail = "--detail" in argv
+		h = None
+		if "--host" in argv:
+			idx = argv.index("--host")
+			if idx + 1 >= len(argv):
+				fail("--host requires a value")
+			h = argv[idx + 1]
+		list_models(detail=detail, host=h)
 		sys.exit(0)
 
 	model = None
@@ -523,6 +726,10 @@ def parse_args(argv):
 		"load_timeout": DEFAULT_MODEL_TIMEOUT_LOAD,
 		"verbose": False,
 		"system": [],
+		"json": False,
+		"options": {},
+		"host": None,
+		"think": None,
 	}
 	positionals = []
 	i = 0
@@ -589,12 +796,48 @@ def parse_args(argv):
 				config["load_timeout"] = v
 				i += 2
 				continue
+			if name in ("json",):
+				config["json"] = True
+				i += 1
+				continue
+			if name in ("option", "options"):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				raw = argv[i + 1]
+				if "=" not in raw:
+					fail(f"--{name} requires key=value")
+				key, val = raw.split("=", 1)
+				config["options"][key] = coerce_option_value(val)
+				i += 2
+				continue
+			if name in ("host",):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				config["host"] = argv[i + 1]
+				i += 2
+				continue
+			if name in ("think", "no-think"):
+				config["think"] = name == "think"
+				i += 1
+				continue
 			if name in ("verbose", "v"):
 				config["verbose"] = True
 				i += 1
 				continue
 			if name in ("models", "list-models"):
-				list_models()
+				detail = False
+				h = config.get("host")
+				j = i + 1
+				while j < n and argv[j].startswith("--"):
+					if argv[j] == "--detail":
+						detail = True
+						j += 1
+					elif argv[j] == "--host":
+						h = argv[j + 1]
+						j += 2
+					else:
+						break
+				list_models(detail=detail, host=h)
 				sys.exit(0)
 			if name in TOOLS:
 				segments.append(("tool", name))
@@ -635,9 +878,9 @@ def main(argv):
 		if kind == "prompt":
 			text_blocks.append(data)
 		elif kind == "file":
-			for p in data:
-				content = read_file_text(p)
-				text_blocks.append(f"--- {p} ---\n{content}")
+			for pth in data:
+				content = read_file_text(pth)
+				text_blocks.append(f"--- {pth} ---\n{content}")
 		elif kind == "tool":
 			enabled_tools.add(data)
 			info = TOOLS[data]
@@ -660,31 +903,89 @@ def main(argv):
 	tools_list = build_tool_schemas(enabled_tools)
 	vlog(config, f"model={model} turns={config['max_turns']} tools={sorted(enabled_tools)}")
 
+	json_mode = config["json"]
+	options = config["options"]
+	host = config["host"]
+	think = config["think"]
+
+	wall_start = time.time()
+	tool_call_records = []
+	timings_list = []
+	final_content = None
+	error = None
+	turns_taken = 0
 	last_call_sig = None
 	repeated = False
+
 	for turn in range(1, config["max_turns"] + 1):
+		turns_taken = turn
 		vlog(config, f"turn {turn}: calling model")
 		try:
-			assistant = ollama_chat(model, messages, tools_list if (turn <= config["max_turns"]) else None, config["load_timeout"], config["idle_timeout"])
+			assistant = ollama_chat(model, messages, tools_list if (turn <= config["max_turns"]) else None, config["load_timeout"], config["idle_timeout"], host=host, options=options, think=think)
 		except RuntimeError as e:
+			if json_mode:
+				obj = {
+					"model": model,
+					"think": think,
+					"content": "",
+					"turns": turns_taken,
+					"wall_time_s": time.time() - wall_start,
+					"tool_calls": tool_call_records,
+					"timings": timings_list,
+					"error": str(e),
+				}
+				sys.stdout.write(json.dumps(obj))
+				sys.stdout.write("\n")
+				sys.exit(1)
 			fail(str(e), 1)
 		messages.append(assistant)
 		content = assistant.get("content", "") or ""
 		vlog(config, f"  assistant: {content[:400].replace(chr(10), ' ')}")
+		t = assistant.get("timings")
+		timing_entry = {
+			"turn": turn,
+			"load_duration_ns": None,
+			"prompt_eval_count": None,
+			"prompt_eval_duration_ns": None,
+			"eval_count": None,
+			"eval_duration_ns": None,
+			"total_duration_ns": None,
+		}
+		if isinstance(t, dict):
+			timing_entry["load_duration_ns"] = t.get("load_duration_ns")
+			timing_entry["prompt_eval_count"] = t.get("prompt_eval_count")
+			timing_entry["prompt_eval_duration_ns"] = t.get("prompt_eval_duration_ns")
+			timing_entry["eval_count"] = t.get("eval_count")
+			timing_entry["eval_duration_ns"] = t.get("eval_duration_ns")
+			timing_entry["total_duration_ns"] = t.get("total_duration_ns")
+		timings_list.append(timing_entry)
+
 		tool_calls = assistant.get("tool_calls")
+		source = None
 		if not tool_calls:
-			tool_calls = parse_tool_calls_from_content(content)
+			parsed = parse_tool_calls_from_content(content)
+			if parsed:
+				tool_calls = parsed
+				source = "parsed"
+		else:
+			source = "native"
+
+		if tool_calls:
+			for tc in tool_calls:
+				fn = tc.get("function", {})
+				name = fn.get("name")
+				args = fn.get("arguments", {})
+				tool_call_records.append({"turn": turn, "name": name, "arguments": args, "source": source})
+
 		if not tool_calls:
-			# final answer
-			sys.stdout.write(content)
-			if content and not content.endswith("\n"):
-				sys.stdout.write("\n")
-			return 0
+			final_content = content
+			break
 
 		# execute tool calls
 		if turn >= config["max_turns"]:
 			sys.stderr.write(f"{NAME}: model requested tool call but max-turns reached; not executed\n")
-			sys.exit(0)
+			error = "no final answer produced"
+			break
 		sigs = []
 		for tc in tool_calls:
 			fn = tc.get("function", {})
@@ -717,22 +1018,77 @@ def main(argv):
 			vlog(config, "stopping: repeated identical tool call; forcing final answer")
 			messages.append({"role": "user", "content": "You already have the tool result above. Answer the original request now in plain text, without calling any tools."})
 			try:
-				assistant = ollama_chat(model, messages, None, config["load_timeout"], config["idle_timeout"])
+				assistant2 = ollama_chat(model, messages, None, config["load_timeout"], config["idle_timeout"], host=host, options=options, think=think)
 			except RuntimeError as e:
+				if json_mode:
+					obj = {
+						"model": model,
+						"think": think,
+						"content": "",
+						"turns": turns_taken,
+						"wall_time_s": time.time() - wall_start,
+						"tool_calls": tool_call_records,
+						"timings": timings_list,
+						"error": str(e),
+					}
+					sys.stdout.write(json.dumps(obj))
+					sys.stdout.write("\n")
+					sys.exit(1)
 				fail(str(e), 1)
-			messages.append(assistant)
-			content = assistant.get("content", "") or ""
-			sys.stdout.write(content)
-			if content and not content.endswith("\n"):
-				sys.stdout.write("\n")
-			return 0
+			messages.append(assistant2)
+			content2 = assistant2.get("content", "") or ""
+			t2 = assistant2.get("timings")
+			te2 = {
+				"turn": turn,
+				"load_duration_ns": None,
+				"prompt_eval_count": None,
+				"prompt_eval_duration_ns": None,
+				"eval_count": None,
+				"eval_duration_ns": None,
+				"total_duration_ns": None,
+			}
+			if isinstance(t2, dict):
+				te2["load_duration_ns"] = t2.get("load_duration_ns")
+				te2["prompt_eval_count"] = t2.get("prompt_eval_count")
+				te2["prompt_eval_duration_ns"] = t2.get("prompt_eval_duration_ns")
+				te2["eval_count"] = t2.get("eval_count")
+				te2["eval_duration_ns"] = t2.get("eval_duration_ns")
+				te2["total_duration_ns"] = t2.get("total_duration_ns")
+			timings_list.append(te2)
+			final_content = content2
+			break
 		if turn >= config["max_turns"]:
 			vlog(config, "stopping: max turns reached")
 			break
 
-	# no final content produced
+	if final_content is None and error is None:
+		error = "no final answer produced"
+
+	wall_time = time.time() - wall_start
+
+	if json_mode:
+		obj = {
+			"model": model,
+			"think": think,
+			"content": final_content if final_content is not None else "",
+			"turns": turns_taken,
+			"wall_time_s": wall_time,
+			"tool_calls": tool_call_records,
+			"timings": timings_list,
+			"error": error,
+		}
+		sys.stdout.write(json.dumps(obj))
+		sys.stdout.write("\n")
+		sys.exit(0 if error is None else 1)
+
+	if final_content is not None:
+		sys.stdout.write(final_content)
+		if final_content and not final_content.endswith("\n"):
+			sys.stdout.write("\n")
+		return 0
+
 	sys.stderr.write(f"{NAME}: no final answer produced\n")
-	sys.exit(0)
+	sys.exit(1)
 
 
 if __name__ == "__main__":
