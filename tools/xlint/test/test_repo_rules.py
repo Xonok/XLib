@@ -70,7 +70,7 @@ def _problems(root):
 
 def _messages(found):
 	"""The messages alone, so a test asserts on what is reported and not its order."""
-	return sorted(message for _, _, message in found)
+	return sorted(item[-1] for item in found)
 
 def _error(fn):
 	"""The message of the repo-rule error `fn` raises, or a failure if it passes."""
@@ -167,7 +167,7 @@ def test_paths_omitted_selects_every_linted_file():
 		root = _checkout(folder)
 		_module(root, _names_rule())
 		found = _problems(root)
-		xtest.equal(sorted(path.name for path, _, _ in found), ["code.py", "xlint_rules.py"])
+		xtest.equal(sorted(path.name for path, _, _, _ in found), ["code.py", "xlint_rules.py"])
 
 def test_paths_select_by_glob():
 	with tempfile.TemporaryDirectory() as folder:
@@ -211,7 +211,7 @@ def test_each_checkout_uses_its_own_module():
 		_module(second, _flag_rule("second"))
 		rules = xlint._Rules([first, second])
 		found = rules.repo_problems(rules.files())
-		xtest.equal(sorted((path.parent.name, message) for path, _, message in found),
+		xtest.equal(sorted((path.parent.name, message) for path, _, _, message in found),
 			[("first", "first"), ("second", "second")])
 
 def test_a_checkout_without_a_module_adds_no_findings():
@@ -221,7 +221,7 @@ def test_a_checkout_without_a_module_adds_no_findings():
 		_module(first, _flag_rule("first"))
 		rules = xlint._Rules([first, second])
 		found = rules.repo_problems(rules.files())
-		xtest.true(all(path.parent == first for path, _, _ in found),
+		xtest.true(all(path.parent == first for path, _, _, _ in found),
 			"a finding in the checkout that has no module")
 		xtest.equal(_messages(found), ["first"])
 
@@ -233,7 +233,7 @@ def test_a_nested_checkout_keeps_its_own_module():
 		_module(nested, _flag_rule("nested"))
 		rules = xlint._Rules([parent])
 		found = rules.repo_problems(rules.files())
-		xtest.equal(sorted((str(path.relative_to(parent)), message) for path, _, message in found),
+		xtest.equal(sorted((str(path.relative_to(parent)), message) for path, _, _, message in found),
 			[("code.py", "parent"), ("nested/code.py", "nested")])
 
 def test_a_worktree_is_a_checkout():

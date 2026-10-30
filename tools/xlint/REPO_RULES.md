@@ -14,6 +14,38 @@ another.
 	test file, a split rules package. A config without `[rules]` means the
 	default. Neither file means no repo rules, and xlint behaves as it did
 	before.
+## Disabling rules
+
+A checkout can disable rules locally in `.xlint.toml`, without editing the
+module or passing flags on every invocation. Disabled rules are skipped for
+that checkout only.
+
+```toml
+# Disable by name — built-in ids and repo rule names both work.
+disable = ["space-indent", "flag"]
+
+# Or, equivalently:
+[disable]
+space-indent = true
+flag = true
+```
+
+Built-in rules are identified by their `--no-*` flag name without the `no-`
+prefix (`double-blank`, `space-indent`, `trailing`, `js-trailing`, ...).
+Repo rules are identified by the `name` their module gives them. The special
+names `*` and `repo-rules` disable every repo rule in the checkout.
+
+A `[rules]` table may also carry the list when no module path is needed:
+
+```toml
+[rules]
+disable = ["flag"]
+```
+
+An empty or absent disable list leaves every rule in force. A malformed entry
+(a non-string, an empty name, or a non-boolean value) is a hard error naming
+the config file.
+
 - **One per checkout.** A worktree is its own checkout and carries its own
 	tracked copy. A nested checkout's module governs its files. A path outside
 	any checkout has no repo rules.

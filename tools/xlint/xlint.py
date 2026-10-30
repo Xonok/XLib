@@ -546,7 +546,7 @@ def _findings(result, path, rule):
 			raise _RepoRuleError(f"{path}: rule '{rule}' returned line {line!r}, expected 1 or greater, or None")
 		if not isinstance(message, str):
 			raise _RepoRuleError(f"{path}: rule '{rule}' returned a finding whose message is {type(message).__name__}")
-		found.append((Path(offender), line, message))
+		found.append((Path(offender), line, rule, message))
 	return found
 
 def _load_rules(path, root):
@@ -595,6 +595,86 @@ def _load_rules(path, root):
 		sys.modules.pop(name, None)
 		raise
 
+_BUILTIN_DISABLES = [
+	("double-blank", "no_double_blank"),
+	("space-indent", "no_space_indent"),
+	("trailing", "no_trailing"),
+	("def-one-line", "no_def_one_line"),
+	("def-comment", "no_def_comment"),
+	("final-newline", "no_final_newline"),
+	("imports", "no_imports"),
+	("double-space", "no_double_space"),
+	("absolute-paths", "no_absolute_paths"),
+	("personal", "no_personal"),
+	("js-double-blank", "no_js_double_blank"),
+	("js-space-indent", "no_js_space_indent"),
+	("js-trailing", "no_js_trailing"),
+	("js-final-newline", "no_js_final_newline"),
+	("html-double-blank", "no_html_double_blank"),
+	("html-space-indent", "no_html_space_indent"),
+	("html-trailing", "no_html_trailing"),
+	("html-final-newline", "no_html_final_newline"),
+	("html-unclosed", "no_html_unclosed"),
+	("html-bad-closer", "no_html_bad_closer"),
+	("html-depth", "no_html_depth"),
+]
+
+def _canonical_disable(name):
+	"""One disable identifier in its canonical form: lower case, hyphens, no leading `no-`."""
+	name = str(name).strip().lower().replace("_", "-")
+	if name.startswith("no-"):
+		name = name[3:]
+	return name
+
+def _add_disabled(disabled, value, where):
+	"""Add disabled rule names from one config value (a list or a mapping)."""
+	if isinstance(value, (list, tuple)):
+		for item in value:
+			if not isinstance(item, str) or not item.strip():
+				raise _RepoRuleError(f"{where}: disabled entries must be non-empty strings")
+			disabled.add(item.strip())
+		return
+	if isinstance(value, dict):
+		for key, flag in value.items():
+			if not isinstance(key, str) or not key.strip():
+				raise _RepoRuleError(f"{where}: disabled keys must be non-empty strings")
+			if flag is True:
+				disabled.add(key.strip())
+			elif flag is not False:
+				raise _RepoRuleError(f"{where}: disabled values must be true or false")
+		return
+	raise _RepoRuleError(f"{where}: disabled rules must be a list or a mapping")
+
+def _parse_disabled(data, config):
+	"""The set of rule names `.xlint.toml` asks to disable."""
+	disabled = set()
+	# Top-level forms.
+	for key in ("disable", "disabled", "disabled_rules", "disabled-rules"):
+		if key in data:
+			_add_disabled(disabled, data[key], f"{config}: {key}")
+	# A `[disable]` table: a list under `rules`/`disabled`, or boolean entries.
+	section = data.get("disable")
+	if isinstance(section, dict):
+		for key in ("rules", "disabled", "disabled_rules", "disabled-rules"):
+			if key in section:
+				_add_disabled(disabled, section[key], f"{config}: [disable].{key}")
+		for key, value in section.items():
+			if key in ("rules", "disabled", "disabled_rules", "disabled-rules"):
+				continue
+			if value is True:
+				if not isinstance(key, str) or not key.strip():
+					raise _RepoRuleError(f"{config}: [disable]: disabled keys must be non-empty strings")
+				disabled.add(key.strip())
+			elif value is not False:
+				raise _RepoRuleError(f"{config}: [disable]: values must be true or false")
+	# A `[rules]` table may also carry the list.
+	rules_section = data.get("rules")
+	if isinstance(rules_section, dict):
+		for key in ("disable", "disabled", "disabled_rules", "disabled-rules"):
+			if key in rules_section:
+				_add_disabled(disabled, rules_section[key], f"{config}: [rules].{key}")
+	return disabled
+
 class _RepoModule:
 	"""One checkout's repo rules: the module it resolves to, and its rules.
 
@@ -610,6 +690,7 @@ class _RepoModule:
 		self.default = root / "tools" / "xlint_rules.py"
 		self.target = None
 		self.rules = []
+		self.disabled = set()
 		self.error = None
 		self.module_name = None
 		self.load()
@@ -635,11 +716,19 @@ class _RepoModule:
 		self.error = None
 		self.rules = []
 		self.target = None
+		self.disabled = set()
 		if self.module_name is not None:
 			sys.modules.pop(self.module_name, None)
 			self.module_name = None
 		try:
-			target = self._configured()
+			data = {}
+			if self.config.is_file():
+				try:
+					data = tomllib.loads(self.config.read_text(encoding = "utf-8"))
+				except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+					raise _RepoRuleError(f"{self.config}: {error}") from error
+			self.disabled = _parse_disabled(data, self.config)
+			target = self._configured(data)
 			if target is None and self.default.is_file():
 				target = self.default
 			self.target = target
@@ -653,25 +742,32 @@ class _RepoModule:
 		except _RepoRuleError as error:
 			self.error = error
 
-	def _configured(self):
+	def _configured(self, data = None):
 		"""The path `.xlint.toml` names, or None when it has no `[rules]` table.
 
 		The path is relative to the checkout root and must stay inside it. An
 		absolute path, or one that climbs out with `..`, is an error rather than
 		a silent load of a file the repository does not carry.
 		"""
-		if not self.config.is_file():
-			return None
-		try:
-			data = tomllib.loads(self.config.read_text(encoding = "utf-8"))
-		except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-			raise _RepoRuleError(f"{self.config}: {error}") from error
+		if data is None:
+			if not self.config.is_file():
+				return None
+			try:
+				data = tomllib.loads(self.config.read_text(encoding = "utf-8"))
+			except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+				raise _RepoRuleError(f"{self.config}: {error}") from error
 		section = data.get("rules")
 		if section is None:
 			return None
 		if not isinstance(section, dict):
 			raise _RepoRuleError(f"{self.config}: [rules] must be a table")
 		path = section.get("path")
+		if path is None:
+			# A [rules] table with no path is allowed when it only disables rules.
+			if "path" not in section and not any(key in section for key in ("disable", "disabled", "disabled_rules", "disabled-rules")):
+				raise _RepoRuleError(f"{self.config}: [rules] needs a `path` string")
+			if "path" not in section:
+				return None
 		if not isinstance(path, str) or not path:
 			raise _RepoRuleError(f"{self.config}: [rules] needs a `path` string")
 		candidate = Path(path)
@@ -763,7 +859,11 @@ class _RepoRules:
 					texts[path] = path.read_text(encoding = "utf-8").splitlines()
 				except (OSError, UnicodeDecodeError):
 					continue
+			if "*" in entry.disabled or "repo-rules" in entry.disabled or "repo_rules" in entry.disabled:
+				continue
 			for rule in entry.rules:
+				if rule["name"] in entry.disabled:
+					continue
 				selected = [(path, texts[path]) for path in group if path in texts and rule["selects"](path)]
 				try:
 					result = rule["check"](selected)
@@ -815,6 +915,16 @@ class _Rules:
 		if self.repo is None:
 			return []
 		return self.repo.problems(files)
+
+	@property
+	def disabled(self):
+		"""The rule names `.xlint.toml` disables across the checkouts in scope."""
+		if self.repo is None:
+			return set()
+		out = set()
+		for entry in self.repo.entries.values():
+			out |= entry.disabled
+		return out
 
 def check_double_blank(lines):
 	report = []
@@ -1594,6 +1704,30 @@ def check_imports(lines):
 					prev_plain = False
 	return report
 
+def _disabled_canonical(args):
+	"""Canonical disabled rule names from an args namespace, if any."""
+	raw = getattr(args, "disabled", None)
+	if raw is None:
+		raw = getattr(args, "disabled_rules", None)
+	if raw is None:
+		return set()
+	if isinstance(raw, str):
+		raw = [raw]
+	try:
+		items = list(raw)
+	except TypeError:
+		return set()
+	return {_canonical_disable(item) for item in items if isinstance(item, str)}
+
+def _apply_disabled_to_args(args, rules):
+	"""Let a workspace's `.xlint.toml` disable built-in rules via args flags."""
+	disabled = getattr(rules, "disabled", set()) if rules is not None else set()
+	canonical = {_canonical_disable(item) for item in disabled}
+	args.disabled = set(disabled) | _disabled_canonical(args)
+	for key, attr in _BUILTIN_DISABLES:
+		if key in canonical:
+			setattr(args, attr, True)
+
 def check_file(path, args):
 	try:
 		lines = path.read_text().splitlines(keepends=True)
@@ -1601,35 +1735,36 @@ def check_file(path, args):
 		return []
 	text_lines = [line.rstrip("\n") for line in lines]
 	problems = []
+	disabled = _disabled_canonical(args)
 	if path.suffix == ".py":
-		if not args.no_double_blank:
-			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
-		if not args.no_space_indent:
+		if not (args.no_double_blank or "double-blank" in disabled):
+			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
+		if not (args.no_space_indent or "space-indent" in disabled):
 			string_lines = _python_string_lines(text_lines)
-			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, string_lines))
-		if not args.no_trailing:
-			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
-		if not args.no_def_one_line:
-			problems.extend((line, msg) for line, msg in check_def_one_line(text_lines))
-		if not args.no_def_comment:
-			problems.extend((line, msg) for line, msg in check_def_comment(text_lines))
-		if not args.no_final_newline:
-			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, msg) for line, msg in check_final_newline(lines))
-		if not args.no_imports:
-			problems.extend((line, msg) for line, msg in check_imports(text_lines))
-		if not args.no_double_space:
-			problems.extend((line, msg) for line, msg in check_double_space(text_lines, True))
-		if not args.no_absolute_paths and _is_tracked_file(path):
+			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent_exempt(text_lines, string_lines))
+		if not (args.no_trailing or "trailing" in disabled):
+			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
+		if not (args.no_def_one_line or "def-one-line" in disabled):
+			problems.extend((line, "def-one-line", msg) for line, msg in check_def_one_line(text_lines))
+		if not (args.no_def_comment or "def-comment" in disabled):
+			problems.extend((line, "def-comment", msg) for line, msg in check_def_comment(text_lines))
+		if not (args.no_final_newline or "final-newline" in disabled):
+			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
+			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
+		if not (args.no_imports or "imports" in disabled):
+			problems.extend((line, "imports", msg) for line, msg in check_imports(text_lines))
+		if not (args.no_double_space or "double-space" in disabled):
+			problems.extend((line, "double-space", msg) for line, msg in check_double_space(text_lines, True))
+		if not (args.no_absolute_paths or "absolute-paths" in disabled) and _is_tracked_file(path):
 			# A path in a string literal is a value; a path in a docstring is a
 			# statement about where this file is. The check wants the second.
 			exempt = _python_string_lines(text_lines) - _python_docstring_lines(text_lines)
-			problems.extend((line, msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
+			problems.extend((line, "absolute-paths", msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
 	elif path.suffix == ".md":
-		if not args.no_double_blank:
+		if not (args.no_double_blank or "double-blank" in disabled):
 			# The target of `check_trailing_blank`'s deferral. Without it a Markdown file
 			# ending in two blank lines is reported by neither check and passes clean.
-			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
+			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
 		if not _is_tracked_file(path):
 			# Untracked files are not subject to the absolute-path rule
 			pass
@@ -1637,51 +1772,51 @@ def check_file(path, args):
 			exempt = _frontmatter_exempt(text_lines)
 			exempt.update(_fence_exempt(text_lines))
 			exempt.update(_blockquote_exempt(text_lines))
-			if not args.no_absolute_paths:
-				problems.extend((line, msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
-		if not args.no_space_indent:
+			if not (args.no_absolute_paths or "absolute-paths" in disabled):
+				problems.extend((line, "absolute-paths", msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
+		if not (args.no_space_indent or "space-indent" in disabled):
 			exempt = _frontmatter_exempt(text_lines)
 			exempt.update(_fence_exempt(text_lines))
-			problems.extend((line, msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
-		if not args.no_trailing:
-			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines, True))
-		if not args.no_final_newline:
-			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, msg) for line, msg in check_final_newline(lines))
-		if not args.no_double_space:
-			problems.extend((line, msg) for line, msg in check_double_space(text_lines, False))
+			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
+		if not (args.no_trailing or "trailing" in disabled):
+			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines, True))
+		if not (args.no_final_newline or "final-newline" in disabled):
+			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
+			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
+		if not (args.no_double_space or "double-space" in disabled):
+			problems.extend((line, "double-space", msg) for line, msg in check_double_space(text_lines, False))
 	elif path.suffix in _JS_SUFFIXES:
-		if not args.no_js_double_blank:
-			problems.extend((line, msg) for line, msg in check_js_double_blank(text_lines))
-		if not args.no_js_space_indent:
+		if not (args.no_js_double_blank or "js-double-blank" in disabled):
+			problems.extend((line, "js-double-blank", msg) for line, msg in check_js_double_blank(text_lines))
+		if not (args.no_js_space_indent or "js-space-indent" in disabled):
 			exempt = _js_exempt_lines(text_lines)
-			problems.extend((line, msg) for line, msg in check_js_space_indent(text_lines, exempt))
-		if not args.no_js_trailing:
-			problems.extend((line, msg) for line, msg in check_js_trailing_whitespace(text_lines))
-		if not args.no_js_final_newline:
-			problems.extend((line, msg) for line, msg in check_js_trailing_blank(text_lines))
-			problems.extend((line, msg) for line, msg in check_js_final_newline(lines))
+			problems.extend((line, "js-space-indent", msg) for line, msg in check_js_space_indent(text_lines, exempt))
+		if not (args.no_js_trailing or "js-trailing" in disabled):
+			problems.extend((line, "js-trailing", msg) for line, msg in check_js_trailing_whitespace(text_lines))
+		if not (args.no_js_final_newline or "js-final-newline" in disabled):
+			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_trailing_blank(text_lines))
+			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_final_newline(lines))
 	elif path.suffix in _HTML_SUFFIXES:
-		if not args.no_html_double_blank:
-			problems.extend((line, msg) for line, msg in check_double_blank(text_lines))
-		if not args.no_html_space_indent:
-			problems.extend((line, msg) for line, msg in check_space_indent(text_lines))
-		if not args.no_html_trailing:
-			problems.extend((line, msg) for line, msg in check_trailing_whitespace(text_lines))
-		if not args.no_html_final_newline:
-			problems.extend((line, msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, msg) for line, msg in check_final_newline(lines))
+		if not (args.no_html_double_blank or "html-double-blank" in disabled):
+			problems.extend((line, "html-double-blank", msg) for line, msg in check_double_blank(text_lines))
+		if not (args.no_html_space_indent or "html-space-indent" in disabled):
+			problems.extend((line, "html-space-indent", msg) for line, msg in check_space_indent(text_lines))
+		if not (args.no_html_trailing or "html-trailing" in disabled):
+			problems.extend((line, "html-trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
+		if not (args.no_html_final_newline or "html-final-newline" in disabled):
+			problems.extend((line, "html-final-newline", msg) for line, msg in check_trailing_blank(text_lines))
+			problems.extend((line, "html-final-newline", msg) for line, msg in check_final_newline(lines))
 		html_problems = _html.check_html(text_lines)
-		if not args.no_html_unclosed:
-			problems.extend(html_problems["unclosed"])
-		if not args.no_html_bad_closer:
-			problems.extend(html_problems["bad_closer"])
-		if not args.no_html_depth:
-			problems.extend(html_problems["depth"])
-	if not args.no_personal and _is_tracked_file(path):
+		if not (args.no_html_unclosed or "html-unclosed" in disabled):
+			problems.extend((line, "html-unclosed", msg) for line, msg in html_problems["unclosed"])
+		if not (args.no_html_bad_closer or "html-bad-closer" in disabled):
+			problems.extend((line, "html-bad-closer", msg) for line, msg in html_problems["bad_closer"])
+		if not (args.no_html_depth or "html-depth" in disabled):
+			problems.extend((line, "html-depth", msg) for line, msg in html_problems["depth"])
+	if not (args.no_personal or "personal" in disabled) and _is_tracked_file(path):
 		# A tracked file is published with the repository, and this repository is
 		# public. The check asks for the personal identifiers to stay out of it.
-		problems.extend((line, msg) for line, msg in _personal.check(text_lines))
+		problems.extend((line, "personal", msg) for line, msg in _personal.check(text_lines))
 	return problems
 
 class _InotifyWatcher:
@@ -1884,15 +2019,19 @@ def _watch_cursor():
 		sys.stdout.write(_LEAVE_WATCH)
 		sys.stdout.flush()
 
-def _finding_text(path, line, message):
+def _finding_text(path, line, message, rule=None):
 	"""One finding as the report prints it; a file-level finding has no line."""
 	if line is None:
-		return f"{path}: {message}"
-	return f"{path}:{line}: {message}"
+		text = f"{path}: {message}"
+	else:
+		text = f"{path}:{line}: {message}"
+	if rule is not None:
+		text = f"{text} ({rule})"
+	return text
 
 def _finding_key(finding):
 	"""The report's order, with a file-level finding sorting before line 1."""
-	path, line, message = finding
+	path, line, rule, message = finding
 	return (str(path), -1 if line is None else line, message)
 
 def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
@@ -1904,10 +2043,10 @@ def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
 		print(f"repo rules: {error}", flush=True)
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked", flush=True)
-	found = [(path, line, msg) for path in snapshot for line, msg in snapshot[path]]
+	found = [(path, line, rule, msg) for path in snapshot for line, rule, msg in snapshot[path]]
 	found.extend(repo)
-	for path, line, msg in sorted(found, key=_finding_key):
-		print(_finding_text(path, line, msg), flush=True)
+	for path, line, rule, msg in sorted(found, key=_finding_key):
+		print(_finding_text(path, line, msg, rule), flush=True)
 	if found:
 		print(f"{len(found)} problem(s)", flush=True)
 	elif error is not None:
@@ -1955,6 +2094,7 @@ def watch(rules, args):
 				else:
 					changed.setdefault(path, action)
 			if reloaded:
+				_apply_disabled_to_args(args, rules)
 				files = rules.files()
 				snapshot = {path: check_file(path, args) for path in files}
 				repo, error = _repo_report(rules, files)
@@ -2018,6 +2158,7 @@ def main():
 			parser.error(f"not found: {entry}")
 
 	rules = _Rules(args.paths, repo_rules = not args.no_repo_rules)
+	_apply_disabled_to_args(args, rules)
 	skipped = rules.skipped()
 
 	if args.watch:
@@ -2036,16 +2177,17 @@ def main():
 		return 1
 	problems = []
 	for path in files:
-		problems.extend((path, line, msg) for line, msg in check_file(path, args))
+		for line, rule, msg in check_file(path, args):
+			problems.append((path, line, rule, msg))
 	for entry, reason in skipped:
 		print(f"{entry}: excluded by {reason} — nothing checked")
 	if not problems and not repo:
 		print("nothing checked" if skipped else "clean")
 		return 0
-	for path, line, msg in problems:
-		print(f"{path}:{line}: {msg}")
-	for path, line, msg in repo:
-		print(_finding_text(path, line, msg))
+	for path, line, rule, msg in problems:
+		print(_finding_text(path, line, msg, rule))
+	for path, line, rule, msg in repo:
+		print(_finding_text(path, line, msg, rule))
 	print(f"{len(problems) + len(repo)} problem(s)")
 	return 1
 

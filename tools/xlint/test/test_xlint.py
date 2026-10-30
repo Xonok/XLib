@@ -21,7 +21,7 @@ from tools.xlint import _html,xlint
 
 def messages(problems):
 	"""The messages alone, so a test asserts on what is reported and not on its order."""
-	return sorted(message for _, message in problems)
+	return sorted(item[-1] for item in problems)
 
 def html_messages(lines, rule):
 	"""The messages one html rule reports, so a test asserts on a rule and not on the file."""
