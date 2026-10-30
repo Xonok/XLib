@@ -1528,3 +1528,8 @@
 {"v":1,"id":["01M665PFK43WBYBM3H0FBBJVSY","01M665PFK3JE8E17G4FAAS1YAS"],"edit.description":{"id":"01M665PFK2ZHXTMNE46DK4AY2S","md":"After evaluation, the digest prunes that day's candidates from memory, so the pool the published item was chosen from is lost. Store the candidate list alongside the published item (or skip pruning that day) so the pick is auditable."}}
 {"v":1,"id":["01M665PFK50NWVNJV9E35B456Z","01M665PFK43WBYBM3H0FBBJVSY"],"add.issue.tag":{"id":"01M665PFK2ZHXTMNE46DK4AY2S","tag":"01M4PXYNXPF5WFXHJK9AZWPCFA"}}
 {"v":1,"id":["01M665Q789JS5GJSZHHZYQXBAY","01M665PFK50NWVNJV9E35B456Z"],"close.issue":{"id":"01M665PFK2ZHXTMNE46DK4AY2S","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffe8dbd780b92142"}}
+{"v":1,"id":["01M66VC9ET5J47R7ZH1M6KQAXR","01M66SNN7V0S6RBYRPST89TA92"],"add.issue":{"id":"01M66VC9EMCPE1PEG7Z4BK2WCY","parent":"01M3BVED413TBXCFAEK193PBS6","name":"skynet: show days left until the Go quota refreshes","rank":"ffffffffffffff8af8af8af7"}}
+{"v":1,"id":["01M66VC9EZESTFXWEV7A2AFVWX","01M66VC9ET5J47R7ZH1M6KQAXR"],"add.issue.tag":{"id":"01M66VC9EMCPE1PEG7Z4BK2WCY","tag":"01M4PXZVF6XNCKM9QM315S5Z3X"}}
+{"v":1,"id":["01M66VC9F0M909C7R0AWM60RES","01M66VC9EZESTFXWEV7A2AFVWX"],"add.issue.tag":{"id":"01M66VC9EMCPE1PEG7Z4BK2WCY","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
+{"v":1,"id":["01M66VC9FK1P48SX15X1GQG972","01M66VC9F0M909C7R0AWM60RES"],"add.issue":{"id":"01M66VC9FKGCF01H9K1RFWW6GY","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Add tools/ruffwatch: watch-mode ruff runner with per-file caching","rank":"ffffffffffffffc57c57c57b"}}
+{"v":1,"id":["01M66VC9FMR50S9YFYD36WW2YH","01M66VC9FK1P48SX15X1GQG972"],"add.issue.tag":{"id":"01M66VC9FKGCF01H9K1RFWW6GY","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
