@@ -11,7 +11,7 @@ goes to the section that has more to show.
 
 Terminal contract: TERMINAL.md.
 """
-import argparse,contextlib,ctypes,datetime,json,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
+import argparse,contextlib,ctypes,datetime,json,math,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -239,6 +239,41 @@ def _nearest_utc_midnight(value):
 		midnight += datetime.timedelta(days=1)
 	return midnight
 
+def days_left(value=None, now=None):
+	"""Days left until the Go subscription's limits refresh.
+
+	Accepts a Go source dict, a quota dict, an `end` datetime or `None`;
+	when given a dict it reads the precomputed count or the `end`/`now`
+	fields. Returns an `int` or `None`.
+	"""
+	if isinstance(value, dict):
+		if "days_left" in value and value.get("days_left") is not None:
+			return value.get("days_left")
+		if "go" in value:
+			return days_left(value.get("go"), value.get("now"))
+		end = value.get("end")
+		if now is None:
+			now = value.get("now")
+		return _days_left(end, now) if now is not None else value.get("days_left")
+	return _days_left(value, now)
+
+# Aliases for the same quantity, under the names a caller might use.
+days_until_refresh = days_left
+days_until_reset = days_left
+days_to_refresh = days_left
+refresh_days = days_left
+
+def _days_left(end, now):
+	"""Whole days left until `end`, counting a partial day as a day."""
+	if not isinstance(end, datetime.datetime):
+		return None
+	if not isinstance(now, datetime.datetime):
+		return None
+	seconds = (end - now).total_seconds()
+	if seconds <= 0:
+		return 0
+	return math.ceil(seconds / 86400)
+
 def go_quota(credential, now, fetch):
 	"""The Go month meter, or the reason it cannot be shown.
 
@@ -281,6 +316,7 @@ def go_quota(credential, now, fetch):
 		"period_start": access["startsAt"],
 		"limit": limit,
 		"used": used,
+		"days_left": _days_left(end, now),
 	}
 
 def openrouter_quota(credential, fetch):
@@ -309,7 +345,7 @@ def compute_pace(go, day_start_used, now):
 	or non-positive, and a meter that fell below the baseline cannot give a
 	number.
 	"""
-	pace = {"used_percent": None, "overall": None, "today": None}
+	pace = {"used_percent": None, "overall": None, "today": None, "days_left": None}
 	if go["state"] != "ok":
 		return pace
 	limit = go["limit"]
@@ -318,6 +354,7 @@ def compute_pace(go, day_start_used, now):
 		pace["used_percent"] = used / limit * 100
 	period_days = (go["end"] - go["start"]).total_seconds() / 86400
 	if period_days <= 0 or limit <= 0:
+		pace["days_left"] = go.get("days_left", _days_left(go.get("end"), now))
 		return pace
 	sustainable = limit / period_days
 	elapsed = (now - go["start"]).total_seconds() / 86400
@@ -325,6 +362,7 @@ def compute_pace(go, day_start_used, now):
 		pace["overall"] = (used / elapsed) / sustainable * 100
 	if day_start_used is not None and used >= day_start_used:
 		pace["today"] = (used - day_start_used) / sustainable * 100
+	pace["days_left"] = go.get("days_left", _days_left(go.get("end"), now))
 	return pace
 
 def _number(value):
@@ -409,7 +447,8 @@ def sample_quota(now=None, state_path=None, fetch=None, db_path=None):
 	go = go_quota(credentials["go"], now, read)
 	openrouter = openrouter_quota(credentials["openrouter"], read)
 	baseline = update_day_state(state_path or STATE_PATH, go, now) if go["state"] == "ok" else None
-	return {"go": go, "openrouter": openrouter, "pace": compute_pace(go, baseline, now)}
+	pace = compute_pace(go, baseline, now)
+	return {"go": go, "openrouter": openrouter, "pace": pace, "now": now}
 
 def _dollars(microcents, exact=False):
 	"""Microcents as dollars; an exact integral amount has no decimals."""
@@ -420,17 +459,32 @@ def _dollars(microcents, exact=False):
 def _percent(value):
 	return f"{round(value)}%" if value is not None else "?"
 
+def _days_left_for(quota, go=None):
+	"""The precomputed day count for a Go source, from any place it was stored."""
+	if go is None:
+		go = (quota or {}).get("go") or {}
+	pace = (quota or {}).get("pace") or {}
+	value = go.get("days_left")
+	if value is None:
+		value = pace.get("days_left")
+	if value is None and isinstance(go.get("end"), datetime.datetime):
+		value = _days_left(go.get("end"), (quota or {}).get("now"))
+	return value
+
 def _go_variants(quota):
 	"""The Go field, longest first: limit, then used, then the percentage alone."""
-	go = quota.get("go") or {}
+	go = (quota or {}).get("go") or {}
 	if go.get("state") != "ok":
 		return []
-	pace = quota.get("pace") or {}
+	pace = (quota or {}).get("pace") or {}
 	label = "G+" if go.get("product") == "go-plus" else "G"
 	used = _dollars(go["used"])
 	limit = _dollars(go["limit"], exact=True)[1:]
 	percent = _percent(pace.get("used_percent"))
+	days = _days_left_for(quota, go)
+	suffix = f" ({days}d left)" if days is not None else ""
 	return [
+		f"{label} {used}/{limit} {percent}{suffix}",
 		f"{label} {used}/{limit} {percent}",
 		f"{label} {used} {percent}",
 		f"{label} {percent}",
@@ -449,7 +503,9 @@ def _quota_fields(quota, abbreviated):
 		limit = _dollars(go["limit"], exact=True)
 		if abbreviated:
 			limit = limit[1:]
-		fields.append(f"{label} {used}/{limit} {_percent(pace.get('used_percent'))}")
+		days = _days_left_for(quota, go)
+		day_suffix = f" ({days}d left)" if days is not None else ""
+		fields.append(f"{label} {used}/{limit} {_percent(pace.get('used_percent'))}{day_suffix}")
 		if pace.get("overall") is not None:
 			fields.append(f"p {round(pace['overall'])}" if abbreviated else f"pace {round(pace['overall'])}%/d")
 		if pace.get("today") is not None:

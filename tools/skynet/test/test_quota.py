@@ -91,6 +91,7 @@ def _ok_go(used=300_000_000, limit=LIMIT, product="go", start=PERIOD_START, end=
 		"period_start": start,
 		"limit": limit,
 		"used": used,
+		"days_left": skynet._days_left(skynet._parse_time(end), NOW),
 	}
 
 def _aligned(block, width):
@@ -410,19 +411,19 @@ def test_a_write_failure_still_returns_the_baseline():
 
 def test_the_full_line_carries_every_field():
 	line = skynet.quota_line(_display_quota(), 70)
-	xtest.equal(line, _aligned("Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000", 70), "the acceptance table's full line")
+	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72 · t 94 · OR 29/1000", 70), "the acceptance table's full line")
 
 def test_the_line_abbreviates_before_dropping():
 	line = skynet.quota_line(_display_quota(), 60)
-	xtest.equal(line, _aligned("G $1.87/60 3% · p 72 · t 94 · OR 29/1000", 60), "the abbreviated form keeps every field")
+	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72 · t 94", 60), "the abbreviated form keeps every field")
 
 def test_the_openrouter_field_drops_first():
 	line = skynet.quota_line(_display_quota(), 50)
-	xtest.equal(line, _aligned("G $1.87/60 3% · p 72 · t 94", 50), "OR goes before today")
+	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72", 50), "OR goes before today")
 
 def test_the_today_field_drops_next():
 	line = skynet.quota_line(_display_quota(), 40)
-	xtest.equal(line, _aligned("G $1.87/60 3% · p 72", 40), "today goes before pace")
+	xtest.equal(line, _aligned("G $1.87/60 3% (5d left)", 40), "today goes before pace")
 
 def test_the_pace_field_drops_next():
 	line = skynet.quota_line(_display_quota(), 34)
@@ -448,7 +449,7 @@ def test_an_unavailable_go_shows_a_question_mark_and_no_pace():
 def test_an_unavailable_openrouter_shows_a_question_mark():
 	quota = _display_quota(openrouter={"state": "unavailable"})
 	line = skynet.quota_line(quota, 80)
-	xtest.equal(line, _aligned("Go $1.87/$60 3% · pace 72%/d · today 94% · OR ?", 80), "the counter is unknown, not absent")
+	xtest.equal(line, _aligned("Go $1.87/$60 3% (5d left) · pace 72%/d · today 94% · OR ?", 80), "the counter is unknown, not absent")
 
 def test_absent_sources_contribute_nothing():
 	quota = {"go": {"state": "absent"}, "openrouter": {"state": "absent"}, "pace": {"used_percent": None, "overall": None, "today": None}}
@@ -468,7 +469,7 @@ def test_the_quota_block_is_pushed_to_the_right_edge():
 		xtest.true(line.endswith("OR 29/1000"), "the block ends at the right edge")
 
 def test_a_fallback_block_stays_at_the_right_edge():
-	for width, suffix in ((50, "t 94"), (34, "G $1.87/60 3%"), (22, "G 3%")):
+	for width, suffix in ((50, "p 72"), (34, "G $1.87/60 3%"), (22, "G 3%")):
 		line = skynet.quota_line(_display_quota(), width)
 		xtest.equal(len(line), width, f"the fallback fills width {width}")
 		xtest.true(line.endswith(suffix), f"width {width} ends with {suffix}")

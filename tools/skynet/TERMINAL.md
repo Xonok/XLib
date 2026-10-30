@@ -33,8 +33,10 @@ numbers still add up.
 	the sustainable daily allowance: it starts at 0% at the first reading after
 	UTC midnight, counts usage before that reading as the previous day, and only
 	rises with usage. `pace` remains the average rate with `%/d`. The
-	subscription reset is rounded to the nearest UTC midnight for the pace. A
-	configured source that cannot be read shows `?`; one that is not configured
+	subscription reset is rounded to the nearest UTC midnight for the pace, and
+	the number of days left until it refreshes is shown as `(Nd left)` on the
+	Go field. A configured source that cannot be read shows `?`; one that is
+	not configured
 	is omitted. The read is synchronous with a three-second timeout and a
 	failure never removes a table.
 
