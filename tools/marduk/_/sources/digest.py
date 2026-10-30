@@ -136,6 +136,7 @@ class Digest:
 		if chosen is None:
 			raise ValueError(f"{model} returned no usable item")
 		memory["published"]=[chosen]
+		memory["published_pool"]=list(candidates)
 		memory["last_eval_day"]=target
 		memory["last_model"]=model
 		memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
