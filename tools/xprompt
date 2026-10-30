@@ -486,7 +486,7 @@ def _extract_bodies(text):
 	for m in re.finditer(r"```([^\n]*)\n(.*?)```", text, re.DOTALL):
 		lang = m.group(1).strip().lower()
 		bodies.append((m.group(2).strip(), True, lang))
-	for m in re.finditer(r"<(?:tool_call|function_call|xml)[^>]*>\s*(.*?)\s*</(?:tool_call|function_call|xml)>", text, re.DOTALL | re.IGNORECASE):
+	for m in re.finditer(r"<(?:tool_call|function_call|xml|tool)[^>]*>\s*(.*?)\s*</(?:tool_call|function_call|xml|tool)>", text, re.DOTALL | re.IGNORECASE):
 		bodies.append((m.group(1).strip(), True, ""))
 	bodies.append((text.strip(), False, ""))
 	seen = set()

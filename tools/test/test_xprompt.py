@@ -44,6 +44,12 @@ class OptionTests(unittest.TestCase):
 		self.assertFalse(off["think"])
 		self.assertIsNone(unset["think"])
 
+	def test_parses_tool_tag(self):
+		calls = xprompt.parse_tool_calls_from_content('<tool>\n{"name": "ls", "arguments": {"path": "."}}\n</tool>')
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0]["function"]["name"], "ls")
+		self.assertEqual(calls[0]["function"]["arguments"], {"path": "."})
+
 class HostTests(unittest.TestCase):
 	def test_normalize_host_variants(self):
 		self.assertEqual(xprompt.normalize_host("http://host:port".replace("port", "1234")), ("host", 1234))
