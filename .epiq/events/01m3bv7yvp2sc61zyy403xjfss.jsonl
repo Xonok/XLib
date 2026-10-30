@@ -535,3 +535,4 @@
 {"v":1,"id":["01M66NGBT8MC961BAAZYH1QCQV","01M66NGBT7QGX7EAC8G07E0TEP"],"close.issue":{"id":"01M63C21Z6M3EHSPYK33HVVMAR","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffd1b7af017241"}}
 {"v":1,"id":["01M66SNG5M0K7N7MNY3YKHQ35H","01M66NGBT8MC961BAAZYH1QCQV"],"add.issue":{"id":"01M66SNG5J3HF6BKRVXHGAPPMX","parent":"01M3BVED413TBXCFAEK193PBS6","name":"Add tools/prompt: minimal blocking Ollama harness with tool-call loop","rank":"ffffffffffffff8af8af8af7"}}
 {"v":1,"id":["01M66SNG5QS3D9N4K1DD95W365","01M66SNG5M0K7N7MNY3YKHQ35H"],"edit.description":{"id":"01M66SNG5J3HF6BKRVXHGAPPMX","md":"Personal CLI tool wrapping Ollama. Additive; no breaking changes."}}
+{"v":1,"id":["01M66SNN7V0S6RBYRPST89TA92","01M66SNG5QS3D9N4K1DD95W365"],"close.issue":{"id":"01M66SNG5J3HF6BKRVXHGAPPMX","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffe8dbd780b920"}}
