@@ -36,6 +36,14 @@ class OptionTests(unittest.TestCase):
 			xprompt.parse_args(["m", "--option", "noequals"])
 		self.assertEqual(cm.exception.code, 2)
 
+	def test_parse_args_think_flags(self):
+		_, _, on = xprompt.parse_args(["m", "--think", "prompt"])
+		_, _, off = xprompt.parse_args(["m", "--no-think", "prompt"])
+		_, _, unset = xprompt.parse_args(["m", "prompt"])
+		self.assertTrue(on["think"])
+		self.assertFalse(off["think"])
+		self.assertIsNone(unset["think"])
+
 class HostTests(unittest.TestCase):
 	def test_normalize_host_variants(self):
 		self.assertEqual(xprompt.normalize_host("http://host:port".replace("port", "1234")), ("host", 1234))
@@ -125,6 +133,7 @@ class EndToEndJsonTests(unittest.TestCase):
 			self.assertEqual(proc.returncode, 0, proc.stderr)
 			obj = json.loads(proc.stdout)
 			self.assertEqual(obj["model"], "testmodel")
+			self.assertIsNone(obj["think"])
 			self.assertEqual(obj["content"], "final answer")
 			self.assertEqual(obj["turns"], 2)
 			self.assertIsNone(obj["error"])

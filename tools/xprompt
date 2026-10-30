@@ -26,6 +26,7 @@ Flags (may repeat; order affects the assembled prompt):
   --option KEY=VALUE   pass an Ollama option (temperature, seed, num_ctx,
                        num_gpu, num_thread, num_predict, ...); repeatable
   --host URL           Ollama host (default $OLLAMA_HOST or localhost:11434)
+  --think/--no-think   force thinking on or off for thinking-capable models
   --json               print one JSON object (content, turns, tool_calls,
                        timings, error) instead of plain text
   --verbose            print turn/tool traces to stderr
@@ -602,8 +603,10 @@ def normalize_call(obj):
 	return {"id": obj.get("id") or f"call_{uuid.uuid4().hex[:8]}", "function": {"name": name, "arguments": args}}
 
 
-def ollama_chat(model, messages, tools=None, load_timeout=DEFAULT_MODEL_TIMEOUT_LOAD, idle_timeout=DEFAULT_MODEL_TIMEOUT_IDLE, host=None, options=None):
+def ollama_chat(model, messages, tools=None, load_timeout=DEFAULT_MODEL_TIMEOUT_LOAD, idle_timeout=DEFAULT_MODEL_TIMEOUT_IDLE, host=None, options=None, think=None):
 	payload = {"model": model, "messages": messages, "stream": True}
+	if think is not None:
+		payload["think"] = think
 	if tools:
 		payload["tools"] = tools
 	if options:
@@ -726,6 +729,7 @@ def parse_args(argv):
 		"json": False,
 		"options": {},
 		"host": None,
+		"think": None,
 	}
 	positionals = []
 	i = 0
@@ -811,6 +815,10 @@ def parse_args(argv):
 					fail(f"--{name} requires a value")
 				config["host"] = argv[i + 1]
 				i += 2
+				continue
+			if name in ("think", "no-think"):
+				config["think"] = name == "think"
+				i += 1
 				continue
 			if name in ("verbose", "v"):
 				config["verbose"] = True
@@ -898,6 +906,7 @@ def main(argv):
 	json_mode = config["json"]
 	options = config["options"]
 	host = config["host"]
+	think = config["think"]
 
 	wall_start = time.time()
 	tool_call_records = []
@@ -912,11 +921,12 @@ def main(argv):
 		turns_taken = turn
 		vlog(config, f"turn {turn}: calling model")
 		try:
-			assistant = ollama_chat(model, messages, tools_list if (turn <= config["max_turns"]) else None, config["load_timeout"], config["idle_timeout"], host=host, options=options)
+			assistant = ollama_chat(model, messages, tools_list if (turn <= config["max_turns"]) else None, config["load_timeout"], config["idle_timeout"], host=host, options=options, think=think)
 		except RuntimeError as e:
 			if json_mode:
 				obj = {
 					"model": model,
+					"think": think,
 					"content": "",
 					"turns": turns_taken,
 					"wall_time_s": time.time() - wall_start,
@@ -1008,11 +1018,12 @@ def main(argv):
 			vlog(config, "stopping: repeated identical tool call; forcing final answer")
 			messages.append({"role": "user", "content": "You already have the tool result above. Answer the original request now in plain text, without calling any tools."})
 			try:
-				assistant2 = ollama_chat(model, messages, None, config["load_timeout"], config["idle_timeout"], host=host, options=options)
+				assistant2 = ollama_chat(model, messages, None, config["load_timeout"], config["idle_timeout"], host=host, options=options, think=think)
 			except RuntimeError as e:
 				if json_mode:
 					obj = {
 						"model": model,
+						"think": think,
 						"content": "",
 						"turns": turns_taken,
 						"wall_time_s": time.time() - wall_start,
@@ -1058,6 +1069,7 @@ def main(argv):
 	if json_mode:
 		obj = {
 			"model": model,
+			"think": think,
 			"content": final_content if final_content is not None else "",
 			"turns": turns_taken,
 			"wall_time_s": wall_time,
