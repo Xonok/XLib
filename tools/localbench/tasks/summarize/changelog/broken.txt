@@ -1,0 +1,1 @@
+Version 2.4.0 added dark mode and fixed a login bug. It deprecated the legacy API.

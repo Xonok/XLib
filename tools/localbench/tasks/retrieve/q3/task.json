@@ -1,0 +1,1 @@
+{"family": "retrieve", "case": "q3", "kind": "stdout", "prompt": "Which file defines `parse_config`? Answer with only the filename.", "tools": ["read", "grep", "ls"], "max_turns": 6, "timeout_s": 180, "options": {}, "verify_command": null, "note": null}

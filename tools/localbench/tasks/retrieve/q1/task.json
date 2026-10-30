@@ -1,0 +1,1 @@
+{"family": "retrieve", "case": "q1", "kind": "stdout", "prompt": "Use the tools to search the files in the current directory. Find the Python function that calls `normalize_path`. Answer with only the function name.", "tools": ["read", "grep", "ls"], "max_turns": 6, "timeout_s": 180, "options": {}, "verify_command": null, "note": null}
