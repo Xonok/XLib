@@ -106,7 +106,7 @@ provider = "google"
 transport = "http"
 gating = "open"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
-note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names. Probed 2026-10-31: the 503 had cleared and it answered \"OK\" in 74.2 s, so it is slow to first token but reachable."
+note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names. Probed 2026-10-31: the 503 had cleared and it answered \"OK\" in 74.2 s, so it is slow to first token but reachable. Its free tier's day cap was measured on 2026-11-01: 20 requests per project per model (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue 20, retry 31,120 s), so a wave must budget at most 20 calls a day and a cache arm of three repeats does not fit."
 
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"
