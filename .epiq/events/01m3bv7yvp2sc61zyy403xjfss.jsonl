@@ -537,3 +537,4 @@
 {"v":1,"id":["01M66SNG5QS3D9N4K1DD95W365","01M66SNG5M0K7N7MNY3YKHQ35H"],"edit.description":{"id":"01M66SNG5J3HF6BKRVXHGAPPMX","md":"Personal CLI tool wrapping Ollama. Additive; no breaking changes."}}
 {"v":1,"id":["01M66SNN7V0S6RBYRPST89TA92","01M66SNG5QS3D9N4K1DD95W365"],"close.issue":{"id":"01M66SNG5J3HF6BKRVXHGAPPMX","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffe8dbd780b920"}}
 {"v":1,"id":["01M69TYGGPS0RC6P4EN1C43NX9","01M69PRA81803FKR70FAYBSSMM"],"add.issue":{"id":"01M69TYGGHWYJC8Q16DYKCXYFF","parent":"01M3BVED413TBXCFAEK193PBS6","name":"xlint: add leading-blank check (chunk 1)","rank":"fffffffffffffff15f15f15e"}}
+{"v":1,"id":["01M69TYXP1EBYF3C8RTF43K3C0","01M69TYGGPS0RC6P4EN1C43NX9"],"close.issue":{"id":"01M69TYGGHWYJC8Q16DYKCXYFF","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffffff46debc04"}}
