@@ -22,9 +22,11 @@ if str(_here) not in sys.path:
 try:
 	from . import _html
 	from . import _personal
+	from . import _banned_git
 except ImportError:
 	import _html
 	import _personal
+	import _banned_git
 
 _DEF_PREFIX_RE = re.compile(r"^\s*(async\s+def|def)\s+\w+")
 _SPACE_INDENT_RE = re.compile(r"^ +\S")
@@ -608,6 +610,7 @@ _BUILTIN_DISABLES = [
 	("double-space", "no_double_space"),
 	("absolute-paths", "no_absolute_paths"),
 	("personal", "no_personal"),
+	("banned-git", "no_banned_git"),
 	("js-double-blank", "no_js_double_blank"),
 	("js-space-indent", "no_js_space_indent"),
 	("js-trailing", "no_js_trailing"),
@@ -1872,6 +1875,12 @@ def check_file(path, args):
 		# A tracked file is published with the repository, and this repository is
 		# public. The check asks for the personal identifiers to stay out of it.
 		problems.extend((line, "personal", msg) for line, msg in _personal.check(text_lines))
+	if not (args.no_banned_git or "banned-git" in disabled) and _is_tracked_file(path):
+		# Files whose subject is the ban legitimately quote it.
+		_posix = path.as_posix()
+		_exempt_paths = ("AGENTS.md", "doc/working-tree.md", "tools/xlint/xlint.py", "tools/xlint/_banned_git.py", "tools/xlint/test/test_xlint.py")
+		if not any(_posix == candidate or _posix.endswith("/" + candidate) for candidate in _exempt_paths):
+			problems.extend((line, "banned-git", msg) for line, msg in _banned_git.check(text_lines))
 	return problems
 
 class _InotifyWatcher:
@@ -2246,6 +2255,7 @@ def main():
 	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
 	parser.add_argument("--no-absolute-paths", action="store_true", help="disable absolute system path check in Markdown")
 	parser.add_argument("--no-personal", action="store_true", help="disable the personal identifier check in tracked files")
+	parser.add_argument("--no-banned-git", action="store_true", help="disable the banned git command check in tracked files")
 	parser.add_argument("--no-js-double-blank", action="store_true", help="disable JS/TS double blank line check")
 	parser.add_argument("--no-js-space-indent", action="store_true", help="disable JS/TS space indentation check")
 	parser.add_argument("--no-js-trailing", action="store_true", help="disable JS/TS trailing whitespace check")

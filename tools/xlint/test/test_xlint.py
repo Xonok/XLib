@@ -231,7 +231,7 @@ def _every_check_on():
 		"no_js_trailing", "no_js_final_newline", "no_html_double_blank",
 		"no_html_space_indent", "no_html_trailing", "no_html_final_newline",
 		"no_html_unclosed", "no_html_bad_closer", "no_html_depth",
-		"no_personal", "no_leading_blank",
+		"no_personal", "no_leading_blank", "no_banned_git",
 	]
 	return argparse.Namespace(**{flag: False for flag in flags})
 
@@ -697,6 +697,33 @@ class TestCLanguage(unittest.TestCase):
 
 	def test_a_header_file_is_linted(self):
 		self.assertIn("empty line at start of file", self._messages("\nint x;\n", ".h"))
+
+class TestBannedGit(unittest.TestCase):
+	"""Banned git commands must not appear in a tracked file.
+
+	The working-tree rules forbid `git checkout`, `git reset --hard` and
+	`git reset --merge`. The check is the durable half of that ban: a command
+	written into a tracked file is copy-pasted again, so it is flagged.
+	"""
+
+	def test_git_checkout_is_reported(self):
+		problems = xlint._banned_git.check(["run git " + "checkout foo"])
+		self.assertEqual(len(problems), 1)
+
+	def test_git_reset_hard_is_reported(self):
+		problems = xlint._banned_git.check(["git " + "reset --hard"])
+		self.assertEqual(len(problems), 1)
+
+	def test_git_reset_merge_is_reported(self):
+		problems = xlint._banned_git.check(["git " + "reset --merge"])
+		self.assertEqual(len(problems), 1)
+
+	def test_a_clean_file_is_clean(self):
+		self.assertEqual(xlint._banned_git.check(["git switch foo", "git restore bar"]), [])
+
+	def test_one_finding_per_line(self):
+		problems = xlint._banned_git.check(["git " + "checkout a", "git " + "checkout b"])
+		self.assertEqual(len(problems), 2)
 
 if __name__ == "__main__":
 	unittest.main()
