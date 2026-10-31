@@ -565,3 +565,8 @@
 {"v":1,"id":["01M69ZJ365JAAPEHT3YKNHGDND","01M69ZJ364B475353BX1J9TZ2K"],"add.issue.tag":{"id":"01M69ZJ35ZJX2ZEVADV116C4YK","tag":"01M3HBCJ95WET41T11SNG99JKN"}}
 {"v":1,"id":["01M69ZJ366AYQC3T2PZ401M0MK","01M69ZJ365JAAPEHT3YKNHGDND"],"add.issue.tag":{"id":"01M69ZJ35ZJX2ZEVADV116C4YK","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
 {"v":1,"id":["01M69ZJ9WY7MJRM7B043VKN9X2","01M69ZJ366AYQC3T2PZ401M0MK"],"close.issue":{"id":"01M69ZJ35ZJX2ZEVADV116C4YK","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"fffffffffffffffffffd1b79"}}
+{"v":1,"id":["01M69ZXDV89F6X2CZ95MN1RZA5","01M69ZJ9WY7MJRM7B043VKN9X2"],"add.issue":{"id":"01M69ZXDV7AC66E8W9GSMNDHP5","parent":"01M3BVED413TBXCFAEK193PBS6","name":"xlint: banned-git check too broad — refine to command-like lines only","rank":"fffffffffffffff8af8af8ae"}}
+{"v":1,"id":["01M69ZXDVA4J89H2DDBWVWGHQG","01M69ZXDV89F6X2CZ95MN1RZA5"],"edit.description":{"id":"01M69ZXDV7AC66E8W9GSMNDHP5","md":"The banned-git check flagged every mention of git checkout/reset --hard/--merge, including prose and docs. Refined the patterns to only match when the command appears at the start of a line (optionally after a shell prompt), so documentation and inline mentions are not reported."}}
+{"v":1,"id":["01M69ZXDVBC6G9TCQV17A53TXQ","01M69ZXDVA4J89H2DDBWVWGHQG"],"add.issue.tag":{"id":"01M69ZXDV7AC66E8W9GSMNDHP5","tag":"01M3V4VYB8Y9MPVZV5JG74XWAW"}}
+{"v":1,"id":["01M69ZXDVC17MTFGEVXHNVXBVE","01M69ZXDVBC6G9TCQV17A53TXQ"],"add.issue.tag":{"id":"01M69ZXDV7AC66E8W9GSMNDHP5","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
+{"v":1,"id":["01M69ZXDVWF8T8E25ZZQGF91SM","01M69ZXDVC17MTFGEVXHNVXBVE"],"close.issue":{"id":"01M69ZXDV7AC66E8W9GSMNDHP5","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"fffffffffffffffffffe8dbc"}}
