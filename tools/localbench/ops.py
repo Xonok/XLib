@@ -122,22 +122,34 @@ def speed_for_model(xprompt, model, out_dir, host, threads, ctx, extra=None):
 		json.dump(result, f, indent=1, sort_keys=True)
 	return result
 
+def count_prompt(tag):
+	# a unique tag defeats the prompt-prefix cache, and the 1-40 list makes generation real;
+	# a two-token "OK" answer measured cache hits rather than concurrency
+	return f"Request {tag}.\n{COUNT_PROMPT}"
+
 def concurrency(xprompt, models, out_dir, host, threads, ctx, rounds=3, model_options=None):
 	model_options = model_options or {}
+	def one(model, tag):
+		return call(xprompt, model, count_prompt(tag), host, threads, min(ctx, 2048), num_predict=64, extra=model_options.get(model))
 	timing = {}
 	for m in models:
-		call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8, extra=model_options.get(m))
-		solo = call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8, extra=model_options.get(m))
-		timing[m] = {"solo_s": solo["wall_s"], "options": list(model_options.get(m) or [])}
+		one(m, f"warm-{m}")
+		solo = one(m, f"solo-{m}")
+		timing[m] = {"solo_s": solo["wall_s"], "options": list(model_options.get(m) or []), "error": solo.get("error")}
 	concurrent = []
 	for r in range(rounds):
 		with ThreadPoolExecutor(max_workers=len(models)) as ex:
-			futs = [ex.submit(call, xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), 8, extra=model_options.get(m)) for m in models]
+			futs = [ex.submit(one, m, f"round{r}-{m}") for m in models]
 			rows = [f.result() for f in futs]
 		concurrent.append({"round": r + 1, "walls": {m: row["wall_s"] for m, row in zip(models, rows)},
+			"errors": {m: row.get("error") for m, row in zip(models, rows)},
+			"eval_tokens": {m: row.get("eval_tokens") for m, row in zip(models, rows)},
 			"loadavg": list(os.getloadavg())})
 	result = {"models": models, "options": {m: list(model_options.get(m) or []) for m in models},
 		"solo": timing, "concurrent": concurrent, "ps_after": api_ps(host), "rounds": rounds}
+	failed = [m for m, v in timing.items() if v.get("error")]
+	if failed:
+		sys.stderr.write("ops: WARNING solo call failed for " + ", ".join(failed) + "\n")
 	with open(os.path.join(out_dir, "concurrency.json"), "w", encoding="utf-8") as f:
 		json.dump(result, f, indent=1, sort_keys=True)
 	return result
