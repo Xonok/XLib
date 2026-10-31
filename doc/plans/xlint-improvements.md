@@ -98,11 +98,11 @@ chunk 5. Per-chunk tracking is in place: chunk 1 = YKCXYFF, chunks 2/3/6 =
 KSH187Q, chunk 4 = KSH187Q, chunk 5 = FK22699. No umbrella ticket was
 created.
 
-## Notes / decisions to settle with the human
+## Notes / decisions — settled 2026-11-01
 
-- Message wording for the leading-blank check ("empty line at start of file")
-	is new and has no spec; reviewer pass 2 has nothing to check it against.
-- Whether C uses generic or C-specific disable flags.
-- Whether `.cpp`/`.hpp` are in scope or only C.
-- Whether the module split should preserve the single-file entry for backward
-	compatibility with `tools/hooks/pre-commit` and `release.py`.
+- Message wording for the leading-blank check: **keep** `"empty line at start of file"` (ruling 2026-11-01).
+- C disable flags: **generic** flags only (`--no-leading-blank`, etc.); no C-specific family.
+- C scope: **C only** (`.c`, `.h`); `.cpp`/`.hpp`/`.cc`/`.hh` are out of scope.
+- Single-file entry: **keep** `tools/xlint/xlint.py` as the CLI entry for backward compatibility with `tools/hooks/pre-commit` and `release.py`.
+
+No code changes result from these rulings; they confirm the existing defaults.
