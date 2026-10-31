@@ -602,6 +602,7 @@ _BUILTIN_DISABLES = [
 	("def-one-line", "no_def_one_line"),
 	("def-comment", "no_def_comment"),
 	("final-newline", "no_final_newline"),
+	("leading-blank", "no_leading_blank"),
 	("imports", "no_imports"),
 	("double-space", "no_double_space"),
 	("absolute-paths", "no_absolute_paths"),
@@ -1649,6 +1650,17 @@ def check_final_newline(lines):
 		return [(len(lines), "missing final newline")]
 	return []
 
+def check_leading_blank(lines):
+	"""Report a file whose first line is empty.
+
+	An empty line at the start of a file is never intended: it pushes every
+	line number down by one and serves no formatting purpose. The check is
+	language-agnostic, so every language xlint checks gets it.
+	"""
+	if lines and not lines[0].strip():
+		return [(1, "empty line at start of file")]
+	return []
+
 def check_imports(lines):
 	report = []
 	in_block = False
@@ -1737,6 +1749,8 @@ def check_file(path, args):
 	problems = []
 	disabled = _disabled_canonical(args)
 	if path.suffix == ".py":
+		if not (args.no_leading_blank or "leading-blank" in disabled):
+			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
 		if not (args.no_double_blank or "double-blank" in disabled):
 			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
 		if not (args.no_space_indent or "space-indent" in disabled):
@@ -1761,6 +1775,8 @@ def check_file(path, args):
 			exempt = _python_string_lines(text_lines) - _python_docstring_lines(text_lines)
 			problems.extend((line, "absolute-paths", msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
 	elif path.suffix == ".md":
+		if not (args.no_leading_blank or "leading-blank" in disabled):
+			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
 		if not (args.no_double_blank or "double-blank" in disabled):
 			# The target of `check_trailing_blank`'s deferral. Without it a Markdown file
 			# ending in two blank lines is reported by neither check and passes clean.
@@ -1786,6 +1802,8 @@ def check_file(path, args):
 		if not (args.no_double_space or "double-space" in disabled):
 			problems.extend((line, "double-space", msg) for line, msg in check_double_space(text_lines, False))
 	elif path.suffix in _JS_SUFFIXES:
+		if not (args.no_leading_blank or "leading-blank" in disabled):
+			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
 		if not (args.no_js_double_blank or "js-double-blank" in disabled):
 			problems.extend((line, "js-double-blank", msg) for line, msg in check_js_double_blank(text_lines))
 		if not (args.no_js_space_indent or "js-space-indent" in disabled):
@@ -1797,6 +1815,8 @@ def check_file(path, args):
 			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_trailing_blank(text_lines))
 			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_final_newline(lines))
 	elif path.suffix in _HTML_SUFFIXES:
+		if not (args.no_leading_blank or "leading-blank" in disabled):
+			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
 		if not (args.no_html_double_blank or "html-double-blank" in disabled):
 			problems.extend((line, "html-double-blank", msg) for line, msg in check_double_blank(text_lines))
 		if not (args.no_html_space_indent or "html-space-indent" in disabled):
@@ -2136,6 +2156,7 @@ def main():
 	parser.add_argument("--no-def-one-line", action="store_true", help="disable one-line function definition check")
 	parser.add_argument("--no-def-comment", action="store_true", help="disable the check for a comment on a def line")
 	parser.add_argument("--no-final-newline", action="store_true", help="disable final newline and trailing blank line checks")
+	parser.add_argument("--no-leading-blank", action="store_true", help="disable the empty-leading-line check")
 	parser.add_argument("--no-imports", action="store_true", help="disable import style check")
 	parser.add_argument("--no-double-space", action="store_true", help="disable mid-line double space check")
 	parser.add_argument("--no-absolute-paths", action="store_true", help="disable absolute system path check in Markdown")

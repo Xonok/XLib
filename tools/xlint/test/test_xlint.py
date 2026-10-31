@@ -231,7 +231,7 @@ def _every_check_on():
 		"no_js_trailing", "no_js_final_newline", "no_html_double_blank",
 		"no_html_space_indent", "no_html_trailing", "no_html_final_newline",
 		"no_html_unclosed", "no_html_bad_closer", "no_html_depth",
-		"no_personal",
+		"no_personal", "no_leading_blank",
 	]
 	return argparse.Namespace(**{flag: False for flag in flags})
 
