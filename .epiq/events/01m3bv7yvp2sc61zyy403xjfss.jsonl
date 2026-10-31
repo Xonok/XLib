@@ -542,3 +542,4 @@
 {"v":1,"id":["01M69WC6WX0CEEBWSBXZD061SA","01M69WC6WVYH3V6ZGR0JRNEVMN"],"edit.description":{"id":"01M69WC6WVKWRPED2BAKSH187Q","md":"Commit the in-progress work: --output/-o file writing (atomic, empty when clean), incremental repo-rule skipping with cache, and C/.h support. Plus tests for all three."}}
 {"v":1,"id":["01M69WCBJFDPDV8PC6B7Q94D82","01M69WC6WX0CEEBWSBXZD061SA"],"move.node":{"id":"01M69WC6WVKWRPED2BAKSH187Q","parent":"01M3BVED413TBXCFAEK193PBS8","rank":"7fffffffffffffffffffffff"}}
 {"v":1,"id":["01M69XA04M8ERGT9V2D821A9Z9","01M69WCBJFDPDV8PC6B7Q94D82"],"add.issue":{"id":"01M69XA04KH69RYJRJ4BQWSVSD","parent":"01M3BVED413TBXCFAEK193PBS6","name":"xlint: banned git commands in tracked files (mechanized guard for task 141)","rank":"fffffffffffffff15f15f15e"}}
+{"v":1,"id":["01M69XAB3TJHH10WPWWJP0KSYD","01M69XA04M8ERGT9V2D821A9Z9"],"close.issue":{"id":"01M69XA04KH69RYJRJ4BQWSVSD","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffffffa36f5e01"}}
