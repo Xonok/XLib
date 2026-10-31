@@ -5,6 +5,11 @@ so it covers more languages, reports a leading blank line, stops rescanning
 everything on every change, and can dump its output to a file. Work proceeds in
 chunks; one chunk per session, then `/new` and "continue improving xlint".
 
+**Workflow (ruling 2026-10-31):** xlint changes land directly on `master`,
+without a branch, worktree, or review gate — the same standing exception
+Marduk has. xlint is a style tool, so its changes are treated as safe by
+default; review follows the commit rather than gating it.
+
 Status legend: **done** / **in progress** / **planned**.
 
 ## Chunk 1 — Leading blank line (standard, language-agnostic) — done 2026-10-31
