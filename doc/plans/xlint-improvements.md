@@ -89,12 +89,14 @@ the generic flags; prefer generic flags (`--no-trailing`, etc.) where the check
 is shared, plus a C-specific disable name `c`? Decide in chunk. Also add C to
 `_ALL_SUFFIXES` and to the parser description and docstrings.
 
-## Chunk 7 — Epiq / ticket hygiene
+## Chunk 7 — Epiq / ticket hygiene — done 2026-10-31
 
-No open epiq ticket currently covers this work (checked 2026-10-31: searched
-all Todo/In-progress/Done titles for "xlint", "leading", "rescan", "output
-file", "C support"). If the human wants tracking, file one ticket per chunk
-on the XLib board rather than one umbrella ticket.
+Cleanup pass on the XLib board: closed the xlint tickets whose fixes are in
+the current code (KSH187Q, KJKEQ01, 4JMY5S0, 9V0VC5B, F8DW074, BV07FCC,
+6J3V20Z, XCKN0AT, XP56NNC, BSFQYPF, 5ZZRJ23) and filed `FK22699` for
+chunk 5. Per-chunk tracking is in place: chunk 1 = YKCXYFF, chunks 2/3/6 =
+KSH187Q, chunk 4 = KSH187Q, chunk 5 = FK22699. No umbrella ticket was
+created.
 
 ## Notes / decisions to settle with the human
 
