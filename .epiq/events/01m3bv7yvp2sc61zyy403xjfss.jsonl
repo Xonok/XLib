@@ -540,3 +540,4 @@
 {"v":1,"id":["01M69TYXP1EBYF3C8RTF43K3C0","01M69TYGGPS0RC6P4EN1C43NX9"],"close.issue":{"id":"01M69TYGGHWYJC8Q16DYKCXYFF","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffffff46debc04"}}
 {"v":1,"id":["01M69WC6WVYH3V6ZGR0JRNEVMN","01M69TYXP1EBYF3C8RTF43K3C0"],"add.issue":{"id":"01M69WC6WVKWRPED2BAKSH187Q","parent":"01M3BVED413TBXCFAEK193PBS6","name":"xlint: chunks 2/3/6 + tests (output file, incremental repo rules, C support)","rank":"fffffffffffffff15f15f15e"}}
 {"v":1,"id":["01M69WC6WX0CEEBWSBXZD061SA","01M69WC6WVYH3V6ZGR0JRNEVMN"],"edit.description":{"id":"01M69WC6WVKWRPED2BAKSH187Q","md":"Commit the in-progress work: --output/-o file writing (atomic, empty when clean), incremental repo-rule skipping with cache, and C/.h support. Plus tests for all three."}}
+{"v":1,"id":["01M69WCBJFDPDV8PC6B7Q94D82","01M69WC6WX0CEEBWSBXZD061SA"],"move.node":{"id":"01M69WC6WVKWRPED2BAKSH187Q","parent":"01M3BVED413TBXCFAEK193PBS8","rank":"7fffffffffffffffffffffff"}}
