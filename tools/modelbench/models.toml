@@ -97,7 +97,8 @@ transport = "http"
 gating = "open"
 endpoint = "https://api.z.ai/api/paas/v4"
 rpm = 5
-note = "The first Z.ai subject: free, coding-focused, 200k context, tool-capable. The key was connected in opencode on 2026-10-31 but the bench had no Z.ai route, so it was never measured. The free tier is reported at 5 RPM / 500 RPD / 1M tokens per day; rpm is set so the transport paces to the measured minute limit, while the day and token caps are enforced by the provider and a 429 is recorded rather than retried into a hole."
+reasoning = true
+note = "The first Z.ai subject: free, coding-focused, 200k context, tool-capable. The key was connected in opencode on 2026-10-31 but the bench had no Z.ai route, so it was never measured. The free tier is reported at 5 RPM / 500 RPD / 1M tokens per day; rpm is set so the transport paces to the measured minute limit, while the day and token caps are enforced by the provider and a 429 is recorded rather than retried into a hole. Probed 2026-10-31: answered \"OK\" in 2.9 s (162 tokens), thinking in a `reasoning_content` block, so its budget must come from reasoning = true."
 
 ["gemini-3.8-flash"]
 id = "gemini-3.8-flash"
@@ -105,7 +106,7 @@ provider = "google"
 transport = "http"
 gating = "open"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
-note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names."
+note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names. Probed 2026-10-31: the 503 had cleared and it answered \"OK\" in 74.2 s, so it is slow to first token but reachable."
 
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"
