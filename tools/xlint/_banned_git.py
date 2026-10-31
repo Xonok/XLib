@@ -13,10 +13,15 @@ written.
 
 import re
 
+# Only a command that is actually written as a command is flagged: it must
+# appear at the start of the line, optionally after a shell prompt or leading
+# whitespace. A mention in prose, documentation or an inline code span is not
+# a copy-pasteable command and is not reported. This keeps the rule from
+# firing on every discussion of the ban while still catching the durable half.
 _PATTERNS = [
-	(re.compile(r"\bgit\s+checkout\b"), "git checkout"),
-	(re.compile(r"\bgit\s+reset\s+--hard\b"), "git reset --hard"),
-	(re.compile(r"\bgit\s+reset\s+--merge\b"), "git reset --merge"),
+	(re.compile(r"^\s*(?:[$#>]\s*)?git\s+checkout\b"), "git checkout"),
+	(re.compile(r"^\s*(?:[$#>]\s*)?git\s+reset\s+--hard\b"), "git reset --hard"),
+	(re.compile(r"^\s*(?:[$#>]\s*)?git\s+reset\s+--merge\b"), "git reset --merge"),
 ]
 
 def check(lines):

@@ -707,7 +707,7 @@ class TestBannedGit(unittest.TestCase):
 	"""
 
 	def test_git_checkout_is_reported(self):
-		problems = xlint._banned_git.check(["run git " + "checkout foo"])
+		problems = xlint._banned_git.check(["git " + "checkout foo"])
 		self.assertEqual(len(problems), 1)
 
 	def test_git_reset_hard_is_reported(self):
