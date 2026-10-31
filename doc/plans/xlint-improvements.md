@@ -50,9 +50,17 @@ incremental where a rule's `paths` selection allows it (re-run only on the
 files whose content changed, plus a full pass on rule reload), and document the
 cases where a full pass is genuinely required (rules that compare files).
 
-## Chunk 4 — Module split
+## Chunk 4 — Module split — done 2026-10-31
 
-`tools/xlint/xlint.py` is ~2200 lines in one file. Split into a package:
+`tools/xlint/xlint.py` (~2300 lines) split into a package: `tools/xlint/_io.py`
+(exclusions, ignore rules, suffixes, tracked-file check), `_repo_rules.py`,
+`_checks.py` (standard checks plus the `check_file` dispatcher), `_markdown.py`,
+`_python.py`, `_js.py`, `_c.py`, `_watch.py`, `_cli.py`, with `_html.py`
+already in place. `tools/xlint/xlint.py` is now a thin entry that re-exports
+the module names (so `tools.xlint.xlint` and the CLI keep working); internal
+imports fall back from package-relative to top-level so the file still runs as a
+script. `__all__` on every module keeps the underscore names re-exported.
+All 134 xlint tests pass and `xlint tools/xlint` is clean.
 `tools/xlint/__init__.py` (or keep entry), `_checks.py` (language-agnostic
 standard checks), `_python.py`, `_markdown.py`, `_js.py`, `_html.py` (exists),
 `_c.py`, `_watch.py`, `_io.py` (exclusions, ignore rules), `_repo_rules.py`,
