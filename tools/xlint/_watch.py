@@ -8,6 +8,10 @@ try:
 	from ._checks import check_file
 except ImportError:
 	from _checks import check_file
+try:
+	from ._repo_rules import *
+except ImportError:
+	from _repo_rules import *
 class _InotifyWatcher:
 	"""The inotify backend: a watch on every directory the rules allow.
 
@@ -171,6 +175,7 @@ def make_watcher(rules):
 				[_inotify_failure("inotify_init", error.errno) + " — polling instead"]
 				+ _INOTIFY_ADVICE)
 	return _PollWatcher(rules)
+@contextlib.contextmanager
 def _watch_cursor():
 	"""Hide the cursor for the watch, and leave the scrollback where it is.
 

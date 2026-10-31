@@ -42,12 +42,14 @@ class _FakeLibc:
 @contextlib.contextmanager
 def _libc(fake):
 	"""Use `fake` as the libc for the duration, and put the real one back."""
-	saved = xlint._libc
+	saved = (xlint._libc, xlint._watch._libc, xlint._io._libc)
 	xlint._libc = fake
+	xlint._watch._libc = fake
+	xlint._io._libc = fake
 	try:
 		yield fake
 	finally:
-		xlint._libc = saved
+		xlint._libc, xlint._watch._libc, xlint._io._libc = saved
 
 def _repo(folder):
 	"""A checkout holding one directory to watch."""

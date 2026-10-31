@@ -21,8 +21,10 @@ if __package__ is None:
 
 try:
 	from ._io import *
+	from . import _io
 except ImportError:
 	from _io import *
+	import _io
 try:
 	from ._repo_rules import *
 except ImportError:
@@ -61,8 +63,10 @@ except ImportError:
 	import _c
 try:
 	from ._watch import *
+	from . import _watch
 except ImportError:
 	from _watch import *
+	import _watch
 try:
 	from ._cli import *
 except ImportError:
