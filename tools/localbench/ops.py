@@ -6,7 +6,11 @@ acceptance question (several models resident without stress) and to give each mo
 page a speed and memory figure.
 
     ops.py --models m1,m2 --out DIR [--xprompt PATH] [--host H] [--threads 4] [--ctx 8192]
-    ops.py --concurrency m1,m2,m3 --out DIR [same options]
+    ops.py --concurrency m1,m2,m3 --out DIR [same options] [--model-option MODEL:KEY=VALUE]
+
+--model-option applies to one model only and wins over the shared options, e.g.
+--model-option gemma4:e4b:num_gpu=0 pins the model off the card. The effective option
+set is recorded per model in the output JSON.
 """
 import argparse,json,os,shutil,statistics,subprocess,sys,threading,time,urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -74,10 +78,11 @@ def ps_entry(host, model):
 			return {"size": m.get("size"), "size_vram": m.get("size_vram")}
 	return None
 
-def call(xprompt, model, prompt, host, threads, ctx, num_predict=64, max_turns=1):
-	cmd = [xprompt, model, "--json", "--no-think", "--max-turns", str(max_turns), "--prompt", prompt,
-		"--option", "temperature=0", "--option", "seed=42",
-		"--option", f"num_ctx={ctx}", "--option", f"num_thread={threads}", "--option", f"num_predict={num_predict}"]
+def call(xprompt, model, prompt, host, threads, ctx, num_predict=64, max_turns=1, extra=None):
+	base = ["temperature=0", "seed=42", f"num_ctx={ctx}", f"num_thread={threads}", f"num_predict={num_predict}"]
+	cmd = [xprompt, model, "--json", "--no-think", "--max-turns", str(max_turns), "--prompt", prompt]
+	for opt in base + list(extra or []):
+		cmd += ["--option", opt]
 	if host:
 		cmd += ["--host", host]
 	t0 = time.time()
@@ -96,14 +101,14 @@ def call(xprompt, model, prompt, host, threads, ctx, num_predict=64, max_turns=1
 		"gen_s": round((t.get("eval_duration_ns") or 0) / 1e9, 4),
 		"error": data.get("error")}
 
-def speed_for_model(xprompt, model, out_dir, host, threads, ctx):
-	result = {"model": model, "lengths": {}, "memory": None}
-	call(xprompt, model, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8)
+def speed_for_model(xprompt, model, out_dir, host, threads, ctx, extra=None):
+	result = {"model": model, "options": list(extra or []), "lengths": {}, "memory": None}
+	call(xprompt, model, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8, extra=extra)
 	result["memory"] = ps_entry(host, model)
 	for target in LENGTHS:
 		# a unique start per repeat defeats the prompt-prefix cache; otherwise
 		# repeats 2..n report a near-zero prefill and the median is not a measurement
-		runs = [call(xprompt, model, human_filler(target, tag=f"{target}-{i}"), host, threads, ctx) for i in range(REPS)]
+		runs = [call(xprompt, model, human_filler(target, tag=f"{target}-{i}"), host, threads, ctx, extra=extra) for i in range(REPS)]
 		result["lengths"][str(target)] = {
 			"prompt_tokens": median([r["prompt_tokens"] for r in runs]),
 			"prefill_s": median([r["prefill_s"] for r in runs]),
@@ -117,21 +122,22 @@ def speed_for_model(xprompt, model, out_dir, host, threads, ctx):
 		json.dump(result, f, indent=1, sort_keys=True)
 	return result
 
-def concurrency(xprompt, models, out_dir, host, threads, ctx, rounds=3):
+def concurrency(xprompt, models, out_dir, host, threads, ctx, rounds=3, model_options=None):
+	model_options = model_options or {}
 	timing = {}
 	for m in models:
-		call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8)
-		solo = call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8)
-		timing[m] = {"solo_s": solo["wall_s"]}
+		call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8, extra=model_options.get(m))
+		solo = call(xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8, extra=model_options.get(m))
+		timing[m] = {"solo_s": solo["wall_s"], "options": list(model_options.get(m) or [])}
 	concurrent = []
 	for r in range(rounds):
 		with ThreadPoolExecutor(max_workers=len(models)) as ex:
-			futs = [ex.submit(call, xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), 8) for m in models]
+			futs = [ex.submit(call, xprompt, m, "Reply with exactly: OK", host, threads, min(ctx, 2048), 8, extra=model_options.get(m)) for m in models]
 			rows = [f.result() for f in futs]
 		concurrent.append({"round": r + 1, "walls": {m: row["wall_s"] for m, row in zip(models, rows)},
 			"loadavg": list(os.getloadavg())})
-	result = {"models": models, "solo": timing, "concurrent": concurrent,
-		"ps_after": api_ps(host), "rounds": rounds}
+	result = {"models": models, "options": {m: list(model_options.get(m) or []) for m in models},
+		"solo": timing, "concurrent": concurrent, "ps_after": api_ps(host), "rounds": rounds}
 	with open(os.path.join(out_dir, "concurrency.json"), "w", encoding="utf-8") as f:
 		json.dump(result, f, indent=1, sort_keys=True)
 	return result
@@ -145,18 +151,25 @@ def main():
 	ap.add_argument("--host", default=None)
 	ap.add_argument("--threads", type=int, default=4)
 	ap.add_argument("--ctx", type=int, default=8192)
+	ap.add_argument("--model-option", action="append", default=[], metavar="MODEL:KEY=VALUE")
 	args = ap.parse_args()
 	if not args.models and not args.concurrency:
 		fail("pass --models and/or --concurrency")
 	xprompt = resolve_xprompt(args.xprompt)
 	os.makedirs(args.out, exist_ok=True)
+	model_options = {}
+	for item in args.model_option:
+		model, sep, opt = item.rpartition(":")
+		if not sep or "=" not in opt:
+			fail(f"bad --model-option {item!r}; expected MODEL:KEY=VALUE")
+		model_options.setdefault(model, []).append(opt)
 	if args.models:
 		for m in [x.strip() for x in args.models.split(",") if x.strip()]:
-			r = speed_for_model(xprompt, m, args.out, args.host, args.threads, args.ctx)
+			r = speed_for_model(xprompt, m, args.out, args.host, args.threads, args.ctx, extra=model_options.get(m))
 			print(f"{m}: " + " | ".join(f"{k} tok/s prefill={v['prefill_tok_s']} gen={v['gen_tok_s']}" for k, v in r["lengths"].items()))
 	if args.concurrency:
 		models = [x.strip() for x in args.concurrency.split(",") if x.strip()]
-		r = concurrency(xprompt, models, args.out, args.host, args.threads, args.ctx)
+		r = concurrency(xprompt, models, args.out, args.host, args.threads, args.ctx, model_options=model_options)
 		print(json.dumps(r["concurrent"], indent=1))
 
 if __name__ == "__main__":
