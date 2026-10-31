@@ -69,7 +69,9 @@ its own work, not whether the work was right.
 	do) is an instrument outcome, not a model result, when ollama trims the fixture to fit the
 	model's context — the run is marked `truncated`, not passed. Ollama clamps a requested
 	`num_ctx` to the model's own maximum and silently keeps half of an oversized prompt, so a
-	32k rung on a 32k-context model can report 16k tokens and look like a clean pass;
+	32k rung on a 32k-context model can report 16k tokens and look like a clean pass. The
+	guard needs a measured prompt: a timeout returns no timings (`prompt_tokens == 0`) and is
+	a **failed run**, not a truncated rung;
 - `verified`, `final_state_kept`, `xprompt_error`.
 
 `bench_version` changes when a task file or `run.py` changes, so rows measured under

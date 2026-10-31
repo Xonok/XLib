@@ -66,11 +66,16 @@ def recheck(row, tasks_dir):
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
 
+def was_truncated(row):
+	# a timeout returns no timings, so prompt_tokens is 0; that is a failed run, not a
+	# rung trimmed to fit the context
+	return bool(row.get("truncated")) and (row.get("prompt_tokens") or 0) > 0
+
 def check_rows(rows, tasks_dir):
 	disagreements, missing, errors = [], [], []
 	truncated = []
 	for row in rows:
-		if row.get("truncated"):
+		if was_truncated(row):
 			truncated.append(row)
 			continue
 		result = recheck(row, tasks_dir)
@@ -105,7 +110,7 @@ def markdown(rows):
 	]
 	for (model, family, bench) in sorted(groups):
 		items = groups[(model, family, bench)]
-		live = [r for r in items if not r.get("truncated")]
+		live = [r for r in items if not was_truncated(r)]
 		truncs = len(items) - len(live)
 		n = len(live)
 		passes = sum(1 for r in live if (r.get("checker") or {}).get("ok"))

@@ -278,7 +278,7 @@ def main():
 			# A fixture that ollama trims to fit the model's context looks like a clean pass on
 			# a much shorter prompt. Record it as an instrument outcome, not a model result.
 			truncated = None
-			if prompt_min is not None and prompt_tokens < int(prompt_min):
+			if prompt_min is not None and prompt_tokens > 0 and prompt_tokens < int(prompt_min):
 				truncated = True
 				checker_error = False
 				checker = {
