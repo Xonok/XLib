@@ -68,7 +68,11 @@ def recheck(row, tasks_dir):
 
 def check_rows(rows, tasks_dir):
 	disagreements, missing, errors = [], [], []
+	truncated = []
 	for row in rows:
+		if row.get("truncated"):
+			truncated.append(row)
+			continue
 		result = recheck(row, tasks_dir)
 		if result.get("state_missing"):
 			missing.append(row)
@@ -85,7 +89,7 @@ def check_rows(rows, tasks_dir):
 		print(f"checker_error: {row.get('model')} {row.get('task')}/{row.get('case')} r{row.get('repeat')}: {result}")
 	for row, stored, result in disagreements:
 		print(f"DISAGREE: {row.get('model')} {row.get('task')}/{row.get('case')} r{row.get('repeat')}: stored ok={stored.get('ok')} contract={stored.get('contract_clean')} -> now ok={result.get('ok')} contract={result.get('contract_clean')}")
-	print(f"check: {len(rows)} rows, {len(rows) - len(missing) - len(errors) - len(disagreements)} agree, {len(disagreements)} disagree, {len(missing)} state_missing, {len(errors)} checker_error")
+	print(f"check: {len(rows)} rows, {len(rows) - len(truncated) - len(missing) - len(errors) - len(disagreements)} agree, {len(disagreements)} disagree, {len(missing)} state_missing, {len(errors)} checker_error, {len(truncated)} truncated (not re-checked)")
 	return 1 if disagreements or errors else 0
 
 def markdown(rows):
@@ -96,20 +100,22 @@ def markdown(rows):
 		groups.setdefault(key, []).append(row)
 	lines = [
 		"<!-- BEGIN GENERATED: localbench -->",
-		"| Model | Family | bench | n | pass | contract | median wall s | prefill tok/s | gen tok/s | native/parsed calls |",
-		"|---|---|---|---|---|---|---|---|---|---|",
+		"| Model | Family | bench | n | pass | contract | median wall s | prefill tok/s | gen tok/s | native/parsed calls | trunc |",
+		"|---|---|---|---|---|---|---|---|---|---|---|",
 	]
 	for (model, family, bench) in sorted(groups):
 		items = groups[(model, family, bench)]
-		n = len(items)
-		passes = sum(1 for r in items if (r.get("checker") or {}).get("ok"))
-		contracts = sum(1 for r in items if (r.get("checker") or {}).get("contract_clean"))
-		wall = median([r.get("wall_time_s") for r in items])
-		prefill = median([r.get("prefill_tok_s") for r in items])
-		gen = median([r.get("gen_tok_s") for r in items])
-		native = sum(1 for r in items for c in (r.get("tool_calls") or []) if c.get("source") == "native")
-		parsed = sum(1 for r in items for c in (r.get("tool_calls") or []) if c.get("source") == "parsed")
-		lines.append(f"| {model} | {family} | {bench} | {n} | {passes} | {contracts} | {wall if wall is not None else '-'} | {prefill if prefill is not None else '-'} | {gen if gen is not None else '-'} | {native}/{parsed} |")
+		live = [r for r in items if not r.get("truncated")]
+		truncs = len(items) - len(live)
+		n = len(live)
+		passes = sum(1 for r in live if (r.get("checker") or {}).get("ok"))
+		contracts = sum(1 for r in live if (r.get("checker") or {}).get("contract_clean"))
+		wall = median([r.get("wall_time_s") for r in live])
+		prefill = median([r.get("prefill_tok_s") for r in live])
+		gen = median([r.get("gen_tok_s") for r in live])
+		native = sum(1 for r in live for c in (r.get("tool_calls") or []) if c.get("source") == "native")
+		parsed = sum(1 for r in live for c in (r.get("tool_calls") or []) if c.get("source") == "parsed")
+		lines.append(f"| {model} | {family} | {bench} | {n} | {passes} | {contracts} | {wall if wall is not None else '-'} | {prefill if prefill is not None else '-'} | {gen if gen is not None else '-'} | {native}/{parsed} | {truncs} |")
 	lines.append("<!-- END GENERATED: localbench -->")
 	return "\n".join(lines) + "\n"
 

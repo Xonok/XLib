@@ -237,6 +237,7 @@ def main():
 				timings = []
 
 			prompt_tokens = sum((t.get("prompt_eval_count") or 0) for t in timings if isinstance(t, dict))
+			prompt_min = task.get("min_prompt_tokens")
 			eval_tokens = sum((t.get("eval_count") or 0) for t in timings if isinstance(t, dict))
 			prefill_s = sum(((t.get("prompt_eval_duration_ns") or 0) / 1e9) for t in timings if isinstance(t, dict))
 			gen_s = sum(((t.get("eval_duration_ns") or 0) / 1e9) for t in timings if isinstance(t, dict))
@@ -273,6 +274,20 @@ def main():
 				checker_error = True
 			except Exception:
 				checker_error = True
+
+			# A fixture that ollama trims to fit the model's context looks like a clean pass on
+			# a much shorter prompt. Record it as an instrument outcome, not a model result.
+			truncated = None
+			if prompt_min is not None and prompt_tokens < int(prompt_min):
+				truncated = True
+				checker_error = False
+				checker = {
+					"ok": False,
+					"contract_clean": False,
+					"reason": f"prompt truncated: {prompt_tokens} tokens, below the case's {prompt_min}; the model's context cannot hold this rung",
+					"detail": {"stdout": (checker.get("detail") or {}).get("stdout", "")},
+				}
+				print(f"WARNING: {args.model} {fam}/{case} r{rep}: prompt truncated to {prompt_tokens} tokens (min {prompt_min}) — not a model result")
 
 			# verified
 			verified = None
@@ -320,6 +335,7 @@ def main():
 				"turns": turns,
 				"tool_calls": tool_calls,
 				"prompt_tokens": prompt_tokens,
+				"prompt_expected_min": prompt_min,
 				"eval_tokens": eval_tokens,
 				"prefill_s": prefill_s,
 				"gen_s": gen_s,
@@ -327,15 +343,22 @@ def main():
 				"gen_tok_s": gen_tok_s,
 				"checker": checker,
 				"checker_error": checker_error,
+				"truncated": truncated,
 				"verified": verified,
 				"final_state_kept": final_state_kept,
 				"xprompt_error": xprompt_error,
 			}
 			(run_dir / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True))
 
+			passed = bool(checker.get("ok")) if not checker_error else False
+			clean = bool(checker.get("contract_clean")) if not checker_error else False
+			if truncated:
+				passed = False
+				clean = False
 			run_metrics.append({
-				"pass": bool(checker.get("ok")) if not checker_error else False,
-				"contract": bool(checker.get("contract_clean")) if not checker_error else False,
+				"pass": passed,
+				"contract": clean,
+				"trunc": bool(truncated),
 				"wall": wall_time_s,
 				"prefill": prefill_tok_s,
 				"gen": gen_tok_s,
@@ -345,10 +368,11 @@ def main():
 		n = len(run_metrics)
 		passes = sum(1 for m in run_metrics if m["pass"])
 		contracts = sum(1 for m in run_metrics if m["contract"])
+		truncs = sum(1 for m in run_metrics if m["trunc"])
 		med_wall = median([m["wall"] for m in run_metrics])
 		med_prefill = median([m["prefill"] for m in run_metrics])
 		med_gen = median([m["gen"] for m in run_metrics])
-		print(f"{args.model} {fam} {case} n={n} pass={passes} contract={contracts} median_wall={med_wall} median_prefill_tok_s={med_prefill} median_gen_tok_s={med_gen}")
+		print(f"{args.model} {fam} {case} n={n} pass={passes} contract={contracts} trunc={truncs} median_wall={med_wall} median_prefill_tok_s={med_prefill} median_gen_tok_s={med_gen}")
 
 if __name__ == "__main__":
 	main()
