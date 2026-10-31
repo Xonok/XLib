@@ -547,3 +547,4 @@
 {"v":1,"id":["01M69YEYWBAAAFHZQ6NCQDA9B1","01M69YEYW8J6F2HK3MXMQCZX16"],"edit.description":{"id":"01M69YEYW6XY6YBKPV3FK22699","md":"Refactor check_file into a per-language wrapper: each language declares a list of _Check descriptors (attr, name, rule, produce); check_file dispatches by suffix. Adding a language becomes a data change. Tests 113 pass."}}
 {"v":1,"id":["01M69YEYWCNSRQV4JWACCDWYRM","01M69YEYWBAAAFHZQ6NCQDA9B1"],"add.issue.tag":{"id":"01M69YEYW6XY6YBKPV3FK22699","tag":"01M3V4VYB8Y9MPVZV5JG74XWAW"}}
 {"v":1,"id":["01M69YEYWD5AVYDQMW6AHKN6V8","01M69YEYWCNSRQV4JWACCDWYRM"],"add.issue.tag":{"id":"01M69YEYW6XY6YBKPV3FK22699","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
+{"v":1,"id":["01M69YFE8MJD9GGKEW48WPNZMH","01M69YEYWD5AVYDQMW6AHKN6V8"],"close.issue":{"id":"01M69YEYW6XY6YBKPV3FK22699","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffffffffd1b7af00"}}
