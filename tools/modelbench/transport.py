@@ -21,6 +21,9 @@ a lost cell.
 import json,os,re,subprocess,time,urllib.error,urllib.request
 
 AUTH_PATH = os.path.expanduser("~/.local/share/opencode/auth.json")
+# Z.ai's credential landed in opencode's `credential` table rather than auth.json,
+# so the key reader has to know both stores. Read exactly one row, lazily.
+DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 HARNESS_TIMEOUT = 900
 # Direct HTTP gets its own, much shorter timeout. It inherited HARNESS_TIMEOUT because there
 # was only one default, which is fine for a whole opencode session and absurd for a single
@@ -138,6 +141,35 @@ def _google_key():
 		raise TransportError(f"no Google API key in {AUTH_PATH} ({type(e).__name__}); "
 			"connect it with `opencode auth login`") from e
 
+def _zai_key():
+	"""Z.ai's API key, from whichever of opencode's two credential stores holds it.
+
+	Z.ai is the one provider whose `/connect` wrote into opencode's `credential` table
+	instead of `auth.json` (verified 2026-10-31: auth.json has only google and
+	openrouter). Read auth.json first anyway, so a later `/connect` that lands it in
+	either place works. Read lazily and never log the key: a benchmark run writes every
+	prompt to disk.
+	"""
+	try:
+		with open(AUTH_PATH) as f:
+			key = (json.load(f).get("zai") or {}).get("key")
+	except (OSError,ValueError):
+		key = None
+	if key:
+		return key
+	import sqlite3
+	try:
+		with sqlite3.connect(DB_PATH) as db:
+			row = db.execute("select value from credential where integration_id='zai'").fetchone()
+		key = json.loads(row[0]).get("key") if row else None
+	except (OSError,sqlite3.Error,ValueError,AttributeError) as e:
+		raise TransportError(f"no Z.ai API key in {AUTH_PATH} or {DB_PATH} "
+			f"({type(e).__name__}); connect it with `opencode auth login`") from e
+	if not key:
+		raise TransportError(f"no Z.ai API key in {AUTH_PATH} or {DB_PATH}; "
+			"connect it with `opencode auth login`")
+	return key
+
 def _post(url,payload,headers,timeout):
 	body = json.dumps(payload).encode()
 	# Cloudflare sits in front of the Zen gateway and rejects urllib's default
@@ -165,6 +197,10 @@ def _auth_headers(model):
 		# in opencode's own auth store, beside OpenRouter's, so connecting a provider is
 		# one `/connect` and no file outside it.
 		return {"Authorization":f"Bearer {_google_key()}"}
+	if provider == "zai":
+		# Also OpenAI-compatible, also a bearer key; the key lives in opencode's
+		# credential table rather than auth.json (see _zai_key).
+		return {"Authorization":f"Bearer {_zai_key()}"}
 	if provider == "zen":
 		# space-bunny is reachable unauthenticated by design; every other console model
 		# is harness-only and never reaches the direct path.

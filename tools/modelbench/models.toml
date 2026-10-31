@@ -90,6 +90,23 @@ tpm = 16000
 reasoning = true
 note = "Repinned 2026-10-26 to Google's own route, where the corpus's records and the workers are. The free tier caps INPUT TOKENS at 16,000 per minute (measured 2026-10-22), so tpm is set and the transport paces to it; the four-tool path's prompts are small enough to fit, which is why this works here and not from opencode. It thinks in a visible '<thought>' block, so its budget comes from reasoning = true rather than a wave's name list."
 
+["glm-4.7-flash"]
+id = "glm-4.7-flash"
+provider = "zai"
+transport = "http"
+gating = "open"
+endpoint = "https://api.z.ai/api/paas/v4"
+rpm = 5
+note = "The first Z.ai subject: free, coding-focused, 200k context, tool-capable. The key was connected in opencode on 2026-10-31 but the bench had no Z.ai route, so it was never measured. The free tier is reported at 5 RPM / 500 RPD / 1M tokens per day; rpm is set so the transport paces to the measured minute limit, while the day and token caps are enforced by the provider and a 429 is recorded rather than retried into a hole."
+
+["gemini-3.8-flash"]
+id = "gemini-3.8-flash"
+provider = "google"
+transport = "http"
+gating = "open"
+endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
+note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names."
+
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"
 provider = "openrouter"

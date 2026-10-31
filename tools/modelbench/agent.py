@@ -338,6 +338,7 @@ DIRECT_MAPPING = (
 	"transport._post",
 	"transport._openrouter_key",
 	"transport._google_key",
+	"transport._zai_key",
 	# The provider table, the refusal parser, and the pacer: each decides what reaches
 	# the model and what a refusal says about it, so each is measurement rather than
 	# plumbing. The quota fields in particular are the difference between a hole with a
@@ -361,6 +362,7 @@ DIRECT_MAPPING = (
 	"transport.RETRY_STATUS",
 	"transport.MAX_QUOTA_SLEEP",
 	"transport.AUTH_PATH",
+	"transport.DB_PATH",
 	# `call_chat` names the harness timeout in its source, even though the direct path
 	# never waits that long. It is listed so the constants check stays honest, and the
 	# cost is one over-invalidation: a change to the harness's timeout also moves the
