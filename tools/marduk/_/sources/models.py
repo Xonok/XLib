@@ -95,6 +95,8 @@ def _catalogue(console_ids:list[str],openrouter:dict,console_free:dict)->dict:
 	"""One entry per model, merged across the catalogues that carry it."""
 	current={}
 	for raw in console_ids:
+		if raw.split("/",1)[0].lower()=="ollama":
+			continue
 		model_id=_normalise(raw)
 		entry=current.setdefault(model_id,{"where":set(),"free":None})
 		entry["where"].add("console")
@@ -119,6 +121,8 @@ def _console_free(prices:dict,console_ids:list[str])->dict[str,bool]:
 		if raw.startswith("openrouter/"):
 			continue
 		provider,_,model=raw.partition("/")
+		if provider.lower()=="ollama":
+			continue
 		if not model:
 			continue
 		cost=((prices.get(provider) or {}).get("models") or {}).get(model) or {}
