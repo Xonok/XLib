@@ -35,6 +35,9 @@ a cold load otherwise lands inside the first scored call.
 | `reference.txt` / `reference/` | a known-good answer or state |
 | `broken.txt` / `broken/` | a deliberately wrong answer or state |
 
+A task with `prompt_file` is passed to xprompt as `--prompt-file <case_dir>/<file>`, never read
+into argv — so a fixture larger than Linux's ~128 KB single-argument limit still runs.
+
 **No task is usable until `selftest.py` is green**: the reference must pass, the broken
 state must fail, and empty output must fail. That is what makes a task's verdict mean
 something — without it a model failing a broken checker looks like a model that cannot do

@@ -13,6 +13,7 @@ Positional:
 
 Flags (may repeat; order affects the assembled prompt):
   --prompt TEXT        prompt text (can be placed anywhere, incl. before tools)
+  --prompt-file PATH   read the prompt from a UTF-8 file (same order as --prompt)
   --file PATH [PATH..] include one or more files (variadic, until next flag)
   --read               enable the 'read' tool (read a file's contents)
   --grep               enable the 'grep' tool (search text in files)
@@ -304,6 +305,15 @@ def read_file_text(path):
 	if truncated:
 		text += f"\n... [truncated: {path}]"
 	return text
+
+
+def read_prompt_file(path):
+	# no MAX_FILE_BYTES cap: this is the prompt itself, not an included file
+	try:
+		with open(path, "r", encoding="utf-8") as f:
+			return f.read()
+	except OSError as e:
+		fail(f"cannot read prompt file {path}: {e}")
 
 
 def tool_read(args):
@@ -738,10 +748,11 @@ def parse_args(argv):
 		tok = argv[i]
 		if tok.startswith("--"):
 			name = tok[2:]
-			if name in ("prompt",):
+			if name in ("prompt", "prompt-file"):
 				if i + 1 >= n:
-					fail(f"--prompt requires a value")
-				segments.append(("prompt", argv[i + 1]))
+					fail(f"--{name} requires a value")
+				kind = "prompt" if name == "prompt" else "prompt_file"
+				segments.append((kind, argv[i + 1]))
 				i += 2
 				continue
 			if name in ("file", "files"):
@@ -877,6 +888,8 @@ def main(argv):
 	for kind, data in segments:
 		if kind == "prompt":
 			text_blocks.append(data)
+		elif kind == "prompt_file":
+			text_blocks.append(read_prompt_file(data))
 		elif kind == "file":
 			for pth in data:
 				content = read_file_text(pth)
@@ -891,7 +904,7 @@ def main(argv):
 
 	user_content = "\n\n".join(b for b in text_blocks if b.strip())
 	if not user_content.strip():
-		fail("no prompt provided (use --prompt or a trailing prompt)")
+		fail("no prompt provided (use --prompt, --prompt-file or a trailing prompt)")
 
 	system_content = "\n\n".join(config["system"])
 

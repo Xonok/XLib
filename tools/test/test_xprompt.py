@@ -50,6 +50,25 @@ class OptionTests(unittest.TestCase):
 		self.assertEqual(calls[0]["function"]["name"], "ls")
 		self.assertEqual(calls[0]["function"]["arguments"], {"path": "."})
 
+class PromptFileTests(unittest.TestCase):
+	def test_parse_args_keeps_prompt_file_order(self):
+		_, segments, _ = xprompt.parse_args(["m", "--prompt", "a", "--prompt-file", "f.txt", "--prompt", "b"])
+		self.assertEqual(segments, [("prompt", "a"), ("prompt_file", "f.txt"), ("prompt", "b")])
+
+	def test_prompt_file_content_is_sent_utf8(self):
+		with tempfile.TemporaryDirectory() as td:
+			path = Path(td) / "prompt.txt"
+			path.write_text("ünïcode needle", encoding="utf-8")
+			captured = {}
+			def fake_chat(model, messages, *args, **kwargs):
+				captured["messages"] = [dict(m) for m in messages]
+				return {"role": "assistant", "content": "ok", "tool_calls": None, "timings": None}
+			with mock.patch.object(xprompt, "ollama_chat", fake_chat):
+				with mock.patch("sys.stdout", io.StringIO()):
+					code = xprompt.main(["m", "--prompt-file", str(path)])
+			self.assertEqual(code, 0)
+			self.assertEqual(captured["messages"][-1]["content"], "ünïcode needle")
+
 class HostTests(unittest.TestCase):
 	def test_normalize_host_variants(self):
 		self.assertEqual(xprompt.normalize_host("http://host:port".replace("port", "1234")), ("host", 1234))
