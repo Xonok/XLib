@@ -65,8 +65,10 @@ week is not stale. (ticket: *The requirement that decides whether it works*)
 
 **R7 — The site source.** It checks each configured target over HTTPS with a
 timeout. Any HTTP response means the server answered: `ok` for 2xx/3xx, `warn`
-for 4xx, `alert` for 5xx. DNS, connection, TLS and timeout failures are `alert`,
-and the detail names the failure and the elapsed time. Options: `targets` (a
+for 4xx, `alert` for 5xx. DNS, connection, TLS and timeout failures are not a
+verdict on the server: the check cannot be completed, so the run fails and the
+source is marked failed, leaving the last known state (and its `since`) in
+place. Options: `targets` (a
 host string, or an object with `name` and `url`), `interval_seconds` (default
 60), `timeout_seconds` (default 10) and `stale_after_seconds` (default
 `max(3 × interval, 180)`). The key is `<id>:<name>`, where `id` defaults to

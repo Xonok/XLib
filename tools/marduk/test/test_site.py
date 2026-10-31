@@ -51,15 +51,15 @@ def test_a_503_is_an_alert():
 	xtest.equal(conditions[0].state, event.STATE_ALERT, "a 503 is an alert")
 	xtest.contains("HTTP 503", conditions[0].detail, "the status code is in the detail")
 
-def test_a_connection_error_is_an_alert():
-	conditions = _source().check(1000.0, _failing(urllib.error.URLError("refused")))
-	xtest.equal(conditions[0].state, event.STATE_ALERT, "a refused connection is down")
-	xtest.contains("refused", conditions[0].detail, "the reason is in the detail")
+def test_a_connection_error_fails_the_run():
+	xtest.raises(urllib.error.URLError,
+		lambda: _source().check(1000.0, _failing(urllib.error.URLError("refused"))),
+		"a refused connection is not treated as the server being down")
 
-def test_a_timeout_is_an_alert():
-	conditions = _source().check(1000.0, _failing(TimeoutError("timed out")))
-	xtest.equal(conditions[0].state, event.STATE_ALERT, "a timeout is down")
-	xtest.contains("timed out", conditions[0].detail, "the reason is in the detail")
+def test_a_timeout_fails_the_run():
+	xtest.raises(TimeoutError,
+		lambda: _source().check(1000.0, _failing(TimeoutError("timed out"))),
+		"a timeout is not treated as the server being down")
 
 def test_every_configured_target_gets_a_condition():
 	conditions = _source().check(1000.0, _opener(200))

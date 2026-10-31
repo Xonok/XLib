@@ -59,10 +59,6 @@ def _check_one(source_id:str,target:dict,timeout:float,now:float,opener)->event.
 			code=getattr(response,"status",200) or 200
 	except urllib.error.HTTPError as exc:
 		code=exc.code
-	except (urllib.error.URLError,OSError,ValueError) as exc:
-		elapsed=time.monotonic()-start
-		reason=getattr(exc,"reason",exc)
-		return event.Condition(source_id,key,"health",name,event.STATE_ALERT,f"{name} is down",f"{reason} ({elapsed*1000:.0f} ms)",checked=now)
 	elapsed=time.monotonic()-start
 	if code>=500:
 		state,title=event.STATE_ALERT,f"{name} is down"
