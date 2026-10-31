@@ -150,8 +150,10 @@ def main():
 		timeout_s = int(task.get("timeout_s", 120))
 		task_opts = task.get("options", {}) or {}
 		prompt_text = task.get("prompt")
-		if prompt_text is None and task.get("prompt_file"):
-			prompt_text = (case_dir / task["prompt_file"]).read_text()
+		prompt_path = None
+		if task.get("prompt_file"):
+			# passed by path: a large fixture would exceed MAX_ARG_STRLEN as argv text
+			prompt_path = (case_dir / task["prompt_file"]).resolve()
 		verify_command = task.get("verify_command")
 		fixture = case_dir / "fixture"
 
@@ -174,7 +176,8 @@ def main():
 
 			started = iso_now()
 			start_wall = time.time()
-			cmd = [xprompt, args.model, "--json", "--prompt", prompt_text, "--max-turns", str(max_turns), "--timeout", str(timeout_s)]
+			prompt_args = ["--prompt-file", str(prompt_path)] if prompt_path is not None else ["--prompt", prompt_text]
+			cmd = [xprompt, args.model, "--json"] + prompt_args + ["--max-turns", str(max_turns), "--timeout", str(timeout_s)]
 			for t in task_tools:
 				if t in TOOL_FLAGS:
 					cmd.append(TOOL_FLAGS[t])

@@ -1,5 +1,5 @@
 """Tests for tools/localbench — no model required."""
-import io,json,os,sys,tempfile,unittest
+import io,json,os,subprocess,sys,tempfile,unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -32,6 +32,26 @@ class BenchVersionTests(unittest.TestCase):
 			self.assertEqual(first, runmod.bench_version(tasks, run_py))
 			(tasks / "f" / "c" / "task.json").write_text("{\"a\":1}")
 			self.assertNotEqual(first, runmod.bench_version(tasks, run_py))
+
+class IncidentCheckerTests(unittest.TestCase):
+	def check(self, text):
+		case_dir = ROOT / "tools" / "localbench" / "tasks" / "summarize" / "incident"
+		with tempfile.TemporaryDirectory() as td:
+			stdout = Path(td) / "stdout.txt"
+			stdout.write_text(text)
+			env = {**os.environ, "LB_STDOUT": str(stdout), "LB_TASK_DIR": str(case_dir), "LB_META": str(Path(td) / "meta.json")}
+			proc = subprocess.run([sys.executable, str(case_dir / "check.py")], env=env, capture_output=True, text=True, timeout=60)
+			return proc.returncode, json.loads(proc.stdout)
+
+	def test_accepts_paraphrased_duration_and_recovery(self):
+		code, out = self.check("A database outage hit 1,200 users for a two-hour window because of a misconfigured index; service was restored after rolling back the release.")
+		self.assertEqual(code, 0)
+		self.assertTrue(out["ok"])
+
+	def test_rejects_missing_recovery_fact(self):
+		code, out = self.check("A database outage hit 1,200 users for a two-hour window because of a misconfigured index.")
+		self.assertEqual(code, 1)
+		self.assertFalse(out["ok"])
 
 class LedgerTests(unittest.TestCase):
 	def test_one_row_per_run_and_idempotent(self):

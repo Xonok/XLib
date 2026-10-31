@@ -1,6 +1,12 @@
 import json,os,sys
 
-FACTS = ['database outage', '2 hours', 'misconfigured index', '1,200 users', 'resolved by rollback']
+FACTS = [
+	("database outage", ("database outage",)),
+	("2 hours", ("2 hours", "two hours", "2-hour", "two-hour")),
+	("misconfigured index", ("misconfigured index",)),
+	("1,200 users", ("1,200 users",)),
+	("resolved by rollback", ("rollback", "rolling back", "rolled back")),
+]
 
 def load_stdout():
 	path = os.environ["LB_STDOUT"]
@@ -22,7 +28,7 @@ def main():
 	words = content.split()
 	wc = len(words)
 	lower = content.lower()
-	missing = [f for f in FACTS if f.lower() not in lower]
+	missing = [label for label, alternatives in FACTS if not any(a in lower for a in alternatives)]
 	ok = (wc <= 60 and len(missing) == 0)
 	contract_clean = (not fenced and wc <= 60)
 	reason = "ok" if ok else "mismatch"
