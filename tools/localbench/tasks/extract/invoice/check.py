@@ -1,4 +1,12 @@
 import json,os,re,sys
+from decimal import Decimal,InvalidOperation
+
+EXPECTED_VENDOR = "Acme Supplies Ltd"
+EXPECTED_INVOICE = "INV-2024-0892"
+EXPECTED_DUE = "2024-11-15"
+# compared as a number: 1240.5 and "1,240.50" are the same total, and the prompt asks for
+# the field's value, not a particular rendering of it
+EXPECTED_TOTAL = Decimal("1240.50")
 
 def load_stdout():
 	path = os.environ["LB_STDOUT"]
@@ -13,48 +21,50 @@ def load_stdout():
 		pass
 	return raw, content
 
-def normalize_total(v):
-	s = str(v)
-	return re.sub(r"[^0-9.]", "", s)
+def same_total(v):
+	stripped = re.sub(r"[^0-9.]", "", str(v))
+	if not stripped:
+		return False
+	try:
+		return Decimal(stripped) == EXPECTED_TOTAL
+	except InvalidOperation:
+		return False
+
+def matches(obj):
+	if not isinstance(obj, dict):
+		return False
+	return (
+		obj.get("vendor") == EXPECTED_VENDOR
+		and obj.get("invoice") == EXPECTED_INVOICE
+		and obj.get("due") == EXPECTED_DUE
+		and same_total(obj.get("total"))
+	)
+
+def parse(text):
+	stripped = text.strip()
+	try:
+		return json.loads(stripped)
+	except (json.JSONDecodeError, ValueError):
+		pass
+	i, j = stripped.find("{"), stripped.rfind("}")
+	if i < 0 or j <= i:
+		return None
+	try:
+		return json.loads(stripped[i:j + 1])
+	except (json.JSONDecodeError, ValueError):
+		return None
 
 def main():
 	raw, content = load_stdout()
-	stripped = content.strip()
-	parsed = None
+	parsed = parse(content)
+	ok = matches(parsed)
+	# contract_clean means the output itself parses whole and is right — no fence, no prose
 	try:
-		parsed = json.loads(stripped)
-	except (json.JSONDecodeError, ValueError):
-		i = stripped.find("{")
-		j = stripped.rfind("}")
-		if i != -1 and j != -1 and j > i:
-			try:
-				parsed = json.loads(stripped[i:j+1])
-			except (json.JSONDecodeError, ValueError):
-				parsed = None
-	expected = {"vendor": "Acme Supplies Ltd", "invoice": "INV-2024-0892", "due": "2024-11-15", "total": "1240.50"}
-	ok = False
-	if isinstance(parsed, dict):
-		ok = (
-			parsed.get("vendor") == expected["vendor"]
-			and parsed.get("invoice") == expected["invoice"]
-			and parsed.get("due") == expected["due"]
-			and normalize_total(parsed.get("total")) == expected["total"]
-		)
-	contract_clean = False
-	try:
-		whole = json.loads(stripped)
-		contract_clean = isinstance(whole, dict) and whole == parsed and parsed is not None
+		contract_clean = matches(json.loads(content.strip()))
 	except (json.JSONDecodeError, ValueError):
 		contract_clean = False
-	# stricter: contract_clean means stripped itself parses and matches expected
-	try:
-		whole = json.loads(stripped)
-		contract_clean = isinstance(whole, dict) and normalize_total(whole.get("total", "")) == expected["total"] and whole.get("vendor") == expected["vendor"] and whole.get("invoice") == expected["invoice"] and whole.get("due") == expected["due"]
-	except (json.JSONDecodeError, ValueError):
-		contract_clean = False
-	reason = "ok" if ok else "mismatch"
-	detail = {"parsed": parsed}
-	print(json.dumps({"ok": ok, "contract_clean": contract_clean, "reason": reason, "detail": detail}))
+	print(json.dumps({"ok": ok, "contract_clean": contract_clean,
+		"reason": "ok" if ok else "mismatch", "detail": {"parsed": parsed}}))
 	sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":
