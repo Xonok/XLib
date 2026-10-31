@@ -26,10 +26,10 @@ def load_meta(path):
 
 def find_runs(runs_dir):
 	out = []
-	for meta_path in sorted(Path(runs_dir).rglob("meta.json")):
+	for meta_path in sorted(Path(runs_dir).resolve().rglob("meta.json")):
 		meta = load_meta(meta_path)
 		if isinstance(meta, dict):
-			meta["_meta_path"] = str(meta_path)
+			meta["_meta_path"] = str(meta_path.resolve())
 			out.append(meta)
 	out.sort(key=lambda m: (m.get("started") or "", m.get("model") or "", m.get("task") or "", m.get("case") or "", m.get("repeat") or 0, m.get("_meta_path")))
 	return out
