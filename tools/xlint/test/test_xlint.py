@@ -671,5 +671,32 @@ class TestAbsolutePaths(unittest.TestCase):
 				offenders.append(name)
 		self.assertEqual(offenders, [], f"tracked .py files naming a machine path: {offenders}")
 
+class TestCLanguage(unittest.TestCase):
+	"""C and header files carry the shared whitespace checks, under the generic flags."""
+
+	def _messages(self, text, suffix=".c"):
+		with tempfile.TemporaryDirectory() as folder:
+			path = Path(folder) / ("sample" + suffix)
+			path.write_text(text, encoding="utf-8")
+			return messages(xlint.check_file(path, _every_check_on()))
+
+	def test_a_leading_blank_line_is_reported(self):
+		self.assertIn("empty line at start of file", self._messages("\nint x;\n"))
+
+	def test_a_clean_file_is_clean(self):
+		self.assertEqual(self._messages("int x;\n"), [])
+
+	def test_a_double_blank_line_is_reported(self):
+		self.assertIn("double blank line", self._messages("int x;\n\n\nint y;\n"))
+
+	def test_trailing_whitespace_is_reported(self):
+		self.assertIn("trailing whitespace", self._messages("int x; \n"))
+
+	def test_a_missing_final_newline_is_reported(self):
+		self.assertIn("missing final newline", self._messages("int x;"))
+
+	def test_a_header_file_is_linted(self):
+		self.assertIn("empty line at start of file", self._messages("\nint x;\n", ".h"))
+
 if __name__ == "__main__":
 	unittest.main()

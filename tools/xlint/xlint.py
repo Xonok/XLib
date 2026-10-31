@@ -12,7 +12,7 @@ Watch mode's terminal contract — cursor, scrollback, scroll position, inotify
 and fitting — is recorded in TERMINAL.md.
 """
 
-import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,termios,time,tokenize,tomllib,types,subprocess
+import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
@@ -274,11 +274,12 @@ def excluded_paths(paths, exclusions=None):
 _JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
 _PY_MD_SUFFIXES = (".py", ".md")
 _HTML_SUFFIXES = (".html",)
+_C_SUFFIXES = (".c", ".h")
 # Shell scripts carry no style rules, but they are files a value can be pasted
 # into — `tools/tmux-xlib.sh` named a private project in a comment — so they are
 # visited for the personal-identifier check alone.
 _SH_SUFFIXES = (".sh",)
-_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES + _SH_SUFFIXES
+_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES + _C_SUFFIXES + _SH_SUFFIXES
 
 def lint_files(paths, exclusions=None):
 	"""The files in scope, each path judged by the rules that govern it.
@@ -796,6 +797,9 @@ class _RepoRules:
 			if root is not None:
 				self._entry(root)
 		self.state = self._state()
+		# Per-rule finding cache: (root, rule name) -> list of (Path, line, rule, msg).
+		# Used to skip re-running a rule whose selected files did not change.
+		self._cache = {}
 
 	def _entry(self, root):
 		"""The rules of one checkout, loaded on first use."""
@@ -830,15 +834,24 @@ class _RepoRules:
 			return False
 		for entry in self.entries.values():
 			entry.load()
+		self._cache.clear()
 		self.state = before
 		return True
 
-	def problems(self, files):
+	def problems(self, files, changed = None):
 		"""The findings of every checkout's rules over `files`.
 
 		Each rule is called once with every file it selects, so a rule can
 		compare files. A load or run error is raised: a rule that did not run
 		must not be mistaken for one that found nothing.
+
+		`changed`, when given, is the set of files whose content moved since the
+		last pass. A rule whose selected files are none of them is not re-run:
+		its cached findings are reused instead, filtered to the files still in
+		scope. A rule that touches a changed file is re-run over its *full*
+		selected set, so a rule that compares files still sees every file it
+		needs. Pass `changed = None` (the default) to force a full pass and
+		repopulate the cache — rule reloads and one-shot runs do this.
 		"""
 		grouped = {root: [] for root in self.entries}
 		for path in files:
@@ -851,6 +864,7 @@ class _RepoRules:
 			entry = self.entries[root]
 			if entry.error is not None:
 				raise entry.error
+		file_set = set(files)
 		found = []
 		for root, group in grouped.items():
 			entry = self.entries[root]
@@ -865,12 +879,21 @@ class _RepoRules:
 			for rule in entry.rules:
 				if rule["name"] in entry.disabled:
 					continue
-				selected = [(path, texts[path]) for path in group if path in texts and rule["selects"](path)]
+				selected_paths = [path for path in group if path in texts and rule["selects"](path)]
+				# Incremental skip: if nothing this rule selects changed, reuse cache.
+				if changed is not None and not any(path in changed for path in selected_paths):
+					cached = self._cache.get((root, rule["name"]))
+					if cached is not None:
+						found.extend(item for item in cached if item[0] in file_set)
+					continue
+				selected = [(path, texts[path]) for path in selected_paths]
 				try:
 					result = rule["check"](selected)
 				except (Exception, SystemExit) as error:
 					raise _RepoRuleError(f"{entry.target}: rule '{rule['name']}' raised {type(error).__name__}: {error}") from error
-				found.extend(_findings(result, entry.target, rule["name"]))
+				findings = _findings(result, entry.target, rule["name"])
+				self._cache[(root, rule["name"])] = findings
+				found.extend(item for item in findings if item[0] in file_set)
 		return found
 
 class _Rules:
@@ -911,11 +934,11 @@ class _Rules:
 			changed = True
 		return changed
 
-	def repo_problems(self, files):
+	def repo_problems(self, files, changed = None):
 		"""The repo findings, or an empty list when `--no-repo-rules` is in force."""
 		if self.repo is None:
 			return []
-		return self.repo.problems(files)
+		return self.repo.problems(files, changed = changed)
 
 	@property
 	def disabled(self):
@@ -1833,6 +1856,18 @@ def check_file(path, args):
 			problems.extend((line, "html-bad-closer", msg) for line, msg in html_problems["bad_closer"])
 		if not (args.no_html_depth or "html-depth" in disabled):
 			problems.extend((line, "html-depth", msg) for line, msg in html_problems["depth"])
+	elif path.suffix in _C_SUFFIXES:
+		if not (args.no_leading_blank or "leading-blank" in disabled):
+			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
+		if not (args.no_double_blank or "double-blank" in disabled):
+			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
+		if not (args.no_space_indent or "space-indent" in disabled):
+			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent(text_lines))
+		if not (args.no_trailing or "trailing" in disabled):
+			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
+		if not (args.no_final_newline or "final-newline" in disabled):
+			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
+			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
 	if not (args.no_personal or "personal" in disabled) and _is_tracked_file(path):
 		# A tracked file is published with the repository, and this repository is
 		# public. The check asks for the personal identifiers to stay out of it.
@@ -2054,7 +2089,27 @@ def _finding_key(finding):
 	path, line, rule, message = finding
 	return (str(path), -1 if line is None else line, message)
 
-def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
+def _write_output(path, content):
+	"""Atomically write `content` to `path`: temp file in the same directory, then rename."""
+	path = Path(path)
+	parent = path.parent
+	if str(parent) and not parent.exists():
+		parent.mkdir(parents=True, exist_ok=True)
+	fd, tmp = tempfile.mkstemp(prefix=".xlint-", dir=str(parent) if str(parent) else ".")
+	try:
+		with os.fdopen(fd, "w", encoding="utf-8") as handle:
+			handle.write(content)
+			handle.flush()
+			os.fsync(handle.fileno())
+		os.replace(tmp, path)
+	except BaseException:
+		try:
+			os.unlink(tmp)
+		except OSError:
+			pass
+		raise
+
+def draw(snapshot, skipped=(), notices=(), repo=(), error=None, output=None):
 	print(_CLEAR_SCREEN, end="")
 	print(f"=== {NAME} ===")
 	for notice in notices:
@@ -2065,7 +2120,8 @@ def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
 		print(f"{entry}: excluded by {reason} — nothing checked", flush=True)
 	found = [(path, line, rule, msg) for path in snapshot for line, rule, msg in snapshot[path]]
 	found.extend(repo)
-	for path, line, rule, msg in sorted(found, key=_finding_key):
+	ordered = sorted(found, key=_finding_key)
+	for path, line, rule, msg in ordered:
 		print(_finding_text(path, line, msg, rule), flush=True)
 	if found:
 		print(f"{len(found)} problem(s)", flush=True)
@@ -2075,11 +2131,13 @@ def draw(snapshot, skipped=(), notices=(), repo=(), error=None):
 		print("nothing checked", flush=True)
 	else:
 		print("clean", flush=True)
+	if output is not None:
+		_write_output(output, "".join(_finding_text(path, line, msg, rule) + "\n" for path, line, rule, msg in ordered))
 
-def _repo_report(rules, files):
+def _repo_report(rules, files, changed = None):
 	"""The repo findings, or the load/run error that replaced them."""
 	try:
-		return rules.repo_problems(files), None
+		return rules.repo_problems(files, changed = changed), None
 	except _RepoRuleError as error:
 		return [], str(error)
 
@@ -2101,7 +2159,7 @@ def watch(rules, args):
 		skipped = rules.skipped()
 		watcher = make_watcher(rules)
 		notices = watcher.notices()
-		draw(snapshot, skipped, notices, repo, error)
+		draw(snapshot, skipped, notices, repo, error, output=getattr(args, 'output', None))
 		while True:
 			changed = {}
 			reloaded = False
@@ -2120,7 +2178,7 @@ def watch(rules, args):
 				repo, error = _repo_report(rules, files)
 				skipped = rules.skipped()
 				notices = watcher.notices()
-				draw(snapshot, skipped, notices, repo, error)
+				draw(snapshot, skipped, notices, repo, error, output=getattr(args, 'output', None))
 				continue
 			dirty = False
 			for path, action in changed.items():
@@ -2142,13 +2200,40 @@ def watch(rules, args):
 				dirty = True
 				notices = current_notices
 			if dirty:
-				repo, error = _repo_report(rules, list(snapshot))
-				draw(snapshot, skipped, notices, repo, error)
+				repo_changed = False
+				changed_paths = set(changed)
+				delete_dir = False
+				if rules.repo is not None:
+					for path, action in changed.items():
+						if action == "delete_dir":
+							delete_dir = True
+							repo_changed = True
+							break
+						for entry in rules.repo.entries.values():
+							for rule in entry.rules:
+								if rule["selects"](path):
+									repo_changed = True
+									break
+							if repo_changed:
+								break
+						if repo_changed:
+							break
+				if repo_changed:
+					if delete_dir:
+						repo, error = _repo_report(rules, list(snapshot))
+					else:
+						repo, error = _repo_report(rules, list(snapshot), changed = changed_paths)
+				else:
+					# Repo rules did not need to re-run; drop findings for files that
+					# are no longer in scope so a deletion still clears the report.
+					repo = [item for item in repo if item[0] in snapshot]
+				draw(snapshot, skipped, notices, repo, error, output=getattr(args, 'output', None))
 
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
 	parser.add_argument("paths", nargs="*", type=Path, default=[Path(".")])
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
+	parser.add_argument("--output", "-o", type=Path, default=None, metavar="FILE", help="write the report to FILE (empty when clean)")
 	parser.add_argument("--no-repo-rules", action="store_true", help="do not load the checkout's repo rules")
 	parser.add_argument("--no-double-blank", action="store_true", help="disable double blank line check")
 	parser.add_argument("--no-space-indent", action="store_true", help="disable space indentation check")
@@ -2204,12 +2289,15 @@ def main():
 		print(f"{entry}: excluded by {reason} — nothing checked")
 	if not problems and not repo:
 		print("nothing checked" if skipped else "clean")
+		if args.output is not None:
+			_write_output(args.output, "")
 		return 0
-	for path, line, rule, msg in problems:
-		print(_finding_text(path, line, msg, rule))
-	for path, line, rule, msg in repo:
+	ordered = sorted(problems + repo, key=_finding_key)
+	for path, line, rule, msg in ordered:
 		print(_finding_text(path, line, msg, rule))
 	print(f"{len(problems) + len(repo)} problem(s)")
+	if args.output is not None:
+		_write_output(args.output, "".join(_finding_text(path, line, msg, rule) + "\n" for path, line, rule, msg in ordered))
 	return 1
 
 if __name__ == "__main__":

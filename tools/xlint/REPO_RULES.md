@@ -91,6 +91,14 @@ targets. Editing one reloads the module and redraws the report. A module that
 fails to load is shown in the report and retried when the module or config
 changes, rather than ending the watch.
 
+A redraw does not re-run every rule. A repo rule runs again only when one of
+the files it selects changed; otherwise its previous findings are reused,
+filtered to the files still in scope. A rule that compares files still sees
+its full selected set whenever any of its files changes, because it re-runs
+over all of them. A rule reload, or a one-shot run, forces a full pass and
+clears the cache. Findings for files that leave the scope are dropped even
+when no rule re-runs.
+
 ## Trust
 
 The module is repository code executed in-process on every run, including the

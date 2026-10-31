@@ -16,7 +16,7 @@ This is the first application of the "standard code shared across languages"
 idea: one function, every language. Tests in `tools/xlint/test/test_xlint.py`
 extended (`_every_check_on` flag list).
 
-## Chunk 2 — Output to a file (`--output` / `-o`)
+## Chunk 2 — Output to a file (`--output` / `-o`) — done 2026-10-31
 
 One-shot and watch mode. The file holds exactly what the terminal report holds;
 when there are no issues it is **empty (size 0)**. Watch mode rewrites it on
@@ -26,7 +26,16 @@ never sees a half-written file; and in watch mode the write must follow the
 same redraw ordering as the screen. Acceptance: `xlint . -o /tmp/out.txt`;
 `test -s /tmp/out.txt` is false iff clean.
 
-## Chunk 3 — Watch-mode rescan audit
+## Chunk 3 — Watch-mode rescan audit — done 2026-10-31
+
+The built-in `check_file` already runs only on changed files. Repo rules now
+skip individual rules whose selected files did not change, reusing cached
+findings filtered to the files still in scope; a rule that touches a changed
+file re-runs over its full selected set so cross-file rules still see every
+file. A full pass runs on rule reload and in one-shot mode, and clears the
+cache. Findings for deleted files are dropped even when no rule re-runs.
+Rules that compare files cannot be safely narrowed to changed files alone, so
+they re-run over their full selected set whenever any of their files changes.
 
 Does xlint rescan everything when something changes? Partially yes:
 `_repo_report(rules, list(snapshot))` re-runs every checkout's repo rules over
@@ -56,7 +65,7 @@ dispatcher that selects the wrapper by suffix and runs its checks, applying
 disabled flags. This is what makes "add a new language" a data change rather
 than a code change.
 
-## Chunk 6 — C support
+## Chunk 6 — C support — done 2026-10-31
 
 New suffixes `.c`, `.h` (and maybe `.cpp`/`.hpp`? decide). Rules: leading
 blank, trailing whitespace, double blank, trailing blank, final newline,
