@@ -17,10 +17,16 @@ LENGTHS = (100, 1000, 4000)
 REPS = 3
 COUNT_PROMPT = "List the integers from 1 to 40, separated by commas. Output only the numbers."
 
-def human_filler(target_tokens):
-	"""Approximate English filler, ~4 characters per token, with the task at the end."""
+def human_filler(target_tokens, tag=None):
+	"""Approximate English filler, ~4 characters per token, with the task at the end.
+
+	A tag makes the prompt textually unique at its start, so a repeat cannot reuse
+	Ollama's prompt-prefix KV cache and prefill is actually measured.
+	"""
 	target_chars = max(200, target_tokens * 4)
 	parts, n = [], 0
+	if tag is not None:
+		parts.append(f"Request {tag}.")
 	while sum(len(p) + 1 for p in parts) < target_chars:
 		n += 1
 		parts.append(f"Paragraph {n}: " + " ".join(WORDS[(n + i) % len(WORDS)] for i in range(30)))
@@ -95,8 +101,9 @@ def speed_for_model(xprompt, model, out_dir, host, threads, ctx):
 	call(xprompt, model, "Reply with exactly: OK", host, threads, min(ctx, 2048), num_predict=8)
 	result["memory"] = ps_entry(host, model)
 	for target in LENGTHS:
-		prompt = human_filler(target)
-		runs = [call(xprompt, model, prompt, host, threads, ctx) for _ in range(REPS)]
+		# a unique start per repeat defeats the prompt-prefix cache; otherwise
+		# repeats 2..n report a near-zero prefill and the median is not a measurement
+		runs = [call(xprompt, model, human_filler(target, tag=f"{target}-{i}"), host, threads, ctx) for i in range(REPS)]
 		result["lengths"][str(target)] = {
 			"prompt_tokens": median([r["prompt_tokens"] for r in runs]),
 			"prefill_s": median([r["prefill_s"] for r in runs]),

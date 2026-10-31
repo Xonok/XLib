@@ -16,6 +16,14 @@ class FillerTests(unittest.TestCase):
 	def test_filler_scales(self):
 		self.assertGreater(len(ops.human_filler(1000)), len(ops.human_filler(100)))
 
+	def test_filler_tag_changes_the_start(self):
+		plain = ops.human_filler(100)
+		tagged = ops.human_filler(100, tag="a")
+		self.assertTrue(tagged.startswith("Request a."))
+		self.assertNotEqual(plain.splitlines()[0], tagged.splitlines()[0])
+		self.assertTrue(tagged.endswith(ops.COUNT_PROMPT))
+		self.assertTrue(ops.human_filler(100, tag="b").startswith("Request b."))
+
 class HelperTests(unittest.TestCase):
 	def test_median(self):
 		self.assertEqual(ops.median([1, 3, None]), 2)
