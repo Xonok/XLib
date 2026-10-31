@@ -73,7 +73,7 @@ above and belongs to no rung of anything.
 
 | Transport | Models | How the trace is produced |
 |---|---|---|
-| `http` | OpenRouter `:free`, `space-bunny-free` | the model's own replies, parsed as the four-action protocol |
+| `http` | OpenRouter `:free`, `space-bunny-free`, Z.ai direct, Google's OpenAI-compatible route | the model's own replies, parsed as the four-action protocol |
 | `harness` | `big-pickle`, `inkling` — everything Zen or OpenRouter gates | one `opencode run` session, its **event stream** mapped onto the same four actions |
 
 A harness-gated model cannot be driven a turn at a time — the only route to it *is* a whole
@@ -139,6 +139,12 @@ HTTP is the default; the harness path exists only for models that are reachable 
 	retried briefly rather than deferred. A `:free` model that answers with a non-zero usage
 	cost is being served from the account's paid deposit — `transport.Refused`, not a
 	measurement (5REVVZE).
+	**Not every 429 is a quota.** Z.ai's free tier answers HTTP 429 code 1305, "The service
+	may be temporarily overloaded", when it is capacity-limited: the body names no quota and
+	no wait, so `parse_quota` finds nothing and the retry falls back to the transport's own
+	backoff. Measured 2026-11-01: one of seven `glm-4.7-flash` runs died this way on the
+	short retry after already writing the right answer; lengthening the retry past a minute
+	window let the rest complete. Treat it as transient, not as a day quota.
 - **Dotted names in `models.toml` must be quoted** — `[qwen3.8-27b]` is a nested TOML table,
 	not a name, and two models silently vanished from the registry that way. Dotted table
 	headers are quoted and `transport.validate_registry()` runs before every run.
