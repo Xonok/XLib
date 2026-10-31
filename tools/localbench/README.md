@@ -65,10 +65,16 @@ its own work, not whether the work was right.
 - Ollama's own metrics: `prompt_tokens`, `eval_tokens`, `prefill_s`, `gen_s` and the two
 	tok/s, from `prompt_eval_*` / `eval_*` in the final stream chunk;
 - the checker: `ok`, `contract_clean`, `reason`, `detail`, `checker_error`;
+- `truncated` and `prompt_expected_min`: a task with `min_prompt_tokens` (the needle rungs
+	do) is an instrument outcome, not a model result, when ollama trims the fixture to fit the
+	model's context — the run is marked `truncated`, not passed. Ollama clamps a requested
+	`num_ctx` to the model's own maximum and silently keeps half of an oversized prompt, so a
+	32k rung on a 32k-context model can report 16k tokens and look like a clean pass;
 - `verified`, `final_state_kept`, `xprompt_error`.
 
 `bench_version` changes when a task file or `run.py` changes, so rows measured under
-different instruments never look identical.
+different instruments never look identical. A truncated run is excluded from the ledger's
+rates and shown in its `trunc` column; `ledger.py --check` does not re-check one.
 
 ## Ledger
 
