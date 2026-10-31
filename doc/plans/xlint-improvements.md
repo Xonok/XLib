@@ -68,15 +68,16 @@ standard checks), `_python.py`, `_markdown.py`, `_js.py`, `_html.py` (exists),
 package so existing callers (`xlint <paths>`, tests importing `tools.xlint.xlint`)
 keep working. Tests must still pass without edits beyond import paths.
 
-## Chunk 5 — Language rule wrapper
+## Chunk 5 — Language rule wrapper — done 2026-10-31
 
-Introduce a per-language rule wrapper: each language declares a list of checks
-(some language-specific, most calling shared standard functions such as
-`check_leading_blank`, `check_trailing_blank`, `check_final_newline`,
-`check_trailing_whitespace`, `check_double_blank`). `check_file` becomes a
-dispatcher that selects the wrapper by suffix and runs its checks, applying
-disabled flags. This is what makes "add a new language" a data change rather
-than a code change.
+Implemented in `tools/xlint/_checks.py`: a `_Check` descriptor (attr, name,
+rule, produce) plus per-language check lists (`_py_checks`, `_md_checks`,
+`_js_checks`, `_html_checks`, `_c_checks`) and a `_SUFFIX_TO_LANGUAGE` map.
+`check_file` is now a dispatcher: it picks the language by suffix, runs each
+check unless its flag or canonical name is disabled, and applies the
+tracked-only gating for absolute-paths. Adding a language is now a data change
+(a new check list and suffix mapping) rather than editing the dispatcher.
+All 113 xlint tests pass and `xlint tools/xlint` is clean.
 
 ## Chunk 6 — C support — done 2026-10-31
 

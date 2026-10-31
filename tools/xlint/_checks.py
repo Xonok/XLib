@@ -158,6 +158,108 @@ def check_leading_blank(lines):
 	if lines and not lines[0].strip():
 		return [(1, "empty line at start of file")]
 	return []
+class _Check:
+	"""One entry in a language's check list.
+
+	`attr`/`name` are the disable flag attribute and canonical rule name;
+	`rule` is the rule id reported; `produce` returns (line, message) pairs.
+	"""
+
+	__slots__ = ("attr", "name", "rule", "tracked_only", "produce")
+
+	def __init__(self, attr, name, rule, produce, tracked_only=False):
+		self.attr = attr
+		self.name = name
+		self.rule = rule
+		self.tracked_only = tracked_only
+		self.produce = produce
+
+def _py_checks():
+	return [
+		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
+		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
+		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent_exempt(text, _python_string_lines(text))),
+		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
+		_Check("no_def_one_line", "def-one-line", "def-one-line", lambda lines, text, path, tracked: check_def_one_line(text)),
+		_Check("no_def_comment", "def-comment", "def-comment", lambda lines, text, path, tracked: check_def_comment(text)),
+		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
+		_Check("no_imports", "imports", "imports", lambda lines, text, path, tracked: check_imports(text)),
+		_Check("no_double_space", "double-space", "double-space", lambda lines, text, path, tracked: check_double_space(text, True)),
+		_Check("no_absolute_paths", "absolute-paths", "absolute-paths", lambda lines, text, path, tracked: check_absolute_paths(text, _python_string_lines(text) - _python_docstring_lines(text), path) if tracked else [], tracked_only=True),
+	]
+
+def _md_checks():
+	def _abs_exempt(text):
+		exempt = _frontmatter_exempt(text)
+		exempt.update(_fence_exempt(text))
+		exempt.update(_blockquote_exempt(text))
+		return exempt
+
+	def _space_exempt(text):
+		exempt = _frontmatter_exempt(text)
+		exempt.update(_fence_exempt(text))
+		return exempt
+
+	return [
+		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
+		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
+		_Check("no_absolute_paths", "absolute-paths", "absolute-paths", lambda lines, text, path, tracked: check_absolute_paths(text, _abs_exempt(text), path) if tracked else [], tracked_only=True),
+		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent_exempt(text, _space_exempt(text))),
+		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text, True)),
+		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
+		_Check("no_double_space", "double-space", "double-space", lambda lines, text, path, tracked: check_double_space(text, False)),
+	]
+
+def _js_checks():
+	return [
+		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
+		_Check("no_js_double_blank", "js-double-blank", "js-double-blank", lambda lines, text, path, tracked: check_js_double_blank(text)),
+		_Check("no_js_space_indent", "js-space-indent", "js-space-indent", lambda lines, text, path, tracked: check_js_space_indent(text, _js_exempt_lines(text))),
+		_Check("no_js_trailing", "js-trailing", "js-trailing", lambda lines, text, path, tracked: check_js_trailing_whitespace(text)),
+		_Check("no_js_final_newline", "js-final-newline", "js-final-newline", lambda lines, text, path, tracked: check_js_trailing_blank(text) + check_js_final_newline(lines)),
+	]
+
+def _html_checks():
+	return [
+		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
+		_Check("no_html_double_blank", "html-double-blank", "html-double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
+		_Check("no_html_space_indent", "html-space-indent", "html-space-indent", lambda lines, text, path, tracked: check_space_indent(text)),
+		_Check("no_html_trailing", "html-trailing", "html-trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
+		_Check("no_html_final_newline", "html-final-newline", "html-final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
+		_Check("no_html_unclosed", "html-unclosed", "html-unclosed", lambda lines, text, path, tracked: _html.check_html(text)["unclosed"]),
+		_Check("no_html_bad_closer", "html-bad-closer", "html-bad-closer", lambda lines, text, path, tracked: _html.check_html(text)["bad_closer"]),
+		_Check("no_html_depth", "html-depth", "html-depth", lambda lines, text, path, tracked: _html.check_html(text)["depth"]),
+	]
+
+def _c_checks():
+	return [
+		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
+		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
+		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent(text)),
+		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
+		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
+	]
+
+_LANGUAGE_CHECKS = {
+	"py": _py_checks(),
+	"md": _md_checks(),
+	"js": _js_checks(),
+	"html": _html_checks(),
+	"c": _c_checks(),
+}
+
+_SUFFIX_TO_LANGUAGE = {}
+for _s in (".py",):
+	_SUFFIX_TO_LANGUAGE[_s] = "py"
+for _s in (".md",):
+	_SUFFIX_TO_LANGUAGE[_s] = "md"
+for _s in _JS_SUFFIXES:
+	_SUFFIX_TO_LANGUAGE[_s] = "js"
+for _s in _HTML_SUFFIXES:
+	_SUFFIX_TO_LANGUAGE[_s] = "html"
+for _s in _C_SUFFIXES:
+	_SUFFIX_TO_LANGUAGE[_s] = "c"
+
 def check_file(path, args):
 	try:
 		lines = path.read_text().splitlines(keepends=True)
@@ -166,113 +268,23 @@ def check_file(path, args):
 	text_lines = [line.rstrip("\n") for line in lines]
 	problems = []
 	disabled = _disabled_canonical(args)
-	if path.suffix == ".py":
-		if not (args.no_leading_blank or "leading-blank" in disabled):
-			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
-		if not (args.no_double_blank or "double-blank" in disabled):
-			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
-		if not (args.no_space_indent or "space-indent" in disabled):
-			string_lines = _python_string_lines(text_lines)
-			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent_exempt(text_lines, string_lines))
-		if not (args.no_trailing or "trailing" in disabled):
-			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
-		if not (args.no_def_one_line or "def-one-line" in disabled):
-			problems.extend((line, "def-one-line", msg) for line, msg in check_def_one_line(text_lines))
-		if not (args.no_def_comment or "def-comment" in disabled):
-			problems.extend((line, "def-comment", msg) for line, msg in check_def_comment(text_lines))
-		if not (args.no_final_newline or "final-newline" in disabled):
-			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
-		if not (args.no_imports or "imports" in disabled):
-			problems.extend((line, "imports", msg) for line, msg in check_imports(text_lines))
-		if not (args.no_double_space or "double-space" in disabled):
-			problems.extend((line, "double-space", msg) for line, msg in check_double_space(text_lines, True))
-		if not (args.no_absolute_paths or "absolute-paths" in disabled) and _is_tracked_file(path):
-			# A path in a string literal is a value; a path in a docstring is a
-			# statement about where this file is. The check wants the second.
-			exempt = _python_string_lines(text_lines) - _python_docstring_lines(text_lines)
-			problems.extend((line, "absolute-paths", msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
-	elif path.suffix == ".md":
-		if not (args.no_leading_blank or "leading-blank" in disabled):
-			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
-		if not (args.no_double_blank or "double-blank" in disabled):
-			# The target of `check_trailing_blank`'s deferral. Without it a Markdown file
-			# ending in two blank lines is reported by neither check and passes clean.
-			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
-		if not _is_tracked_file(path):
-			# Untracked files are not subject to the absolute-path rule
-			pass
-		else:
-			exempt = _frontmatter_exempt(text_lines)
-			exempt.update(_fence_exempt(text_lines))
-			exempt.update(_blockquote_exempt(text_lines))
-			if not (args.no_absolute_paths or "absolute-paths" in disabled):
-				problems.extend((line, "absolute-paths", msg) for line, msg in check_absolute_paths(text_lines, exempt, path))
-		if not (args.no_space_indent or "space-indent" in disabled):
-			exempt = _frontmatter_exempt(text_lines)
-			exempt.update(_fence_exempt(text_lines))
-			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent_exempt(text_lines, exempt))
-		if not (args.no_trailing or "trailing" in disabled):
-			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines, True))
-		if not (args.no_final_newline or "final-newline" in disabled):
-			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
-		if not (args.no_double_space or "double-space" in disabled):
-			problems.extend((line, "double-space", msg) for line, msg in check_double_space(text_lines, False))
-	elif path.suffix in _JS_SUFFIXES:
-		if not (args.no_leading_blank or "leading-blank" in disabled):
-			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
-		if not (args.no_js_double_blank or "js-double-blank" in disabled):
-			problems.extend((line, "js-double-blank", msg) for line, msg in check_js_double_blank(text_lines))
-		if not (args.no_js_space_indent or "js-space-indent" in disabled):
-			exempt = _js_exempt_lines(text_lines)
-			problems.extend((line, "js-space-indent", msg) for line, msg in check_js_space_indent(text_lines, exempt))
-		if not (args.no_js_trailing or "js-trailing" in disabled):
-			problems.extend((line, "js-trailing", msg) for line, msg in check_js_trailing_whitespace(text_lines))
-		if not (args.no_js_final_newline or "js-final-newline" in disabled):
-			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_trailing_blank(text_lines))
-			problems.extend((line, "js-final-newline", msg) for line, msg in check_js_final_newline(lines))
-	elif path.suffix in _HTML_SUFFIXES:
-		if not (args.no_leading_blank or "leading-blank" in disabled):
-			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
-		if not (args.no_html_double_blank or "html-double-blank" in disabled):
-			problems.extend((line, "html-double-blank", msg) for line, msg in check_double_blank(text_lines))
-		if not (args.no_html_space_indent or "html-space-indent" in disabled):
-			problems.extend((line, "html-space-indent", msg) for line, msg in check_space_indent(text_lines))
-		if not (args.no_html_trailing or "html-trailing" in disabled):
-			problems.extend((line, "html-trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
-		if not (args.no_html_final_newline or "html-final-newline" in disabled):
-			problems.extend((line, "html-final-newline", msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, "html-final-newline", msg) for line, msg in check_final_newline(lines))
-		html_problems = _html.check_html(text_lines)
-		if not (args.no_html_unclosed or "html-unclosed" in disabled):
-			problems.extend((line, "html-unclosed", msg) for line, msg in html_problems["unclosed"])
-		if not (args.no_html_bad_closer or "html-bad-closer" in disabled):
-			problems.extend((line, "html-bad-closer", msg) for line, msg in html_problems["bad_closer"])
-		if not (args.no_html_depth or "html-depth" in disabled):
-			problems.extend((line, "html-depth", msg) for line, msg in html_problems["depth"])
-	elif path.suffix in _C_SUFFIXES:
-		if not (args.no_leading_blank or "leading-blank" in disabled):
-			problems.extend((line, "leading-blank", msg) for line, msg in check_leading_blank(text_lines))
-		if not (args.no_double_blank or "double-blank" in disabled):
-			problems.extend((line, "double-blank", msg) for line, msg in check_double_blank(text_lines))
-		if not (args.no_space_indent or "space-indent" in disabled):
-			problems.extend((line, "space-indent", msg) for line, msg in check_space_indent(text_lines))
-		if not (args.no_trailing or "trailing" in disabled):
-			problems.extend((line, "trailing", msg) for line, msg in check_trailing_whitespace(text_lines))
-		if not (args.no_final_newline or "final-newline" in disabled):
-			problems.extend((line, "final-newline", msg) for line, msg in check_trailing_blank(text_lines))
-			problems.extend((line, "final-newline", msg) for line, msg in check_final_newline(lines))
-	if not (args.no_personal or "personal" in disabled) and _is_tracked_file(path):
-		# A tracked file is published with the repository, and this repository is
-		# public. The check asks for the personal identifiers to stay out of it.
+	tracked = _is_tracked_file(path)
+	language = _SUFFIX_TO_LANGUAGE.get(path.suffix)
+	if language is not None:
+		for chk in _LANGUAGE_CHECKS[language]:
+			if getattr(args, chk.attr, False) or chk.name in disabled:
+				continue
+			if chk.tracked_only and not tracked:
+				continue
+			for line, msg in chk.produce(lines, text_lines, path, tracked):
+				problems.append((line, chk.rule, msg))
+	if not (args.no_personal or "personal" in disabled) and tracked:
 		problems.extend((line, "personal", msg) for line, msg in _personal.check(text_lines))
-	if not (args.no_banned_git or "banned-git" in disabled) and _is_tracked_file(path):
-		# Files whose subject is the ban legitimately quote it.
+	if not (args.no_banned_git or "banned-git" in disabled) and tracked:
 		_posix = path.as_posix()
 		_exempt_paths = ("AGENTS.md", "doc/working-tree.md", "tools/xlint/xlint.py", "tools/xlint/_banned_git.py", "tools/xlint/test/test_xlint.py")
 		if not any(_posix == candidate or _posix.endswith("/" + candidate) for candidate in _exempt_paths):
 			problems.extend((line, "banned-git", msg) for line, msg in _banned_git.check(text_lines))
 	return problems
 
-__all__ = ['check_double_blank', 'check_space_indent', 'check_space_indent_exempt', 'check_trailing_whitespace', 'check_double_space', '_line_has_double_space', 'check_absolute_paths', 'check_trailing_blank', 'check_final_newline', 'check_leading_blank', 'check_file']
+__all__ = ['check_double_blank', 'check_space_indent', 'check_space_indent_exempt', 'check_trailing_whitespace', 'check_double_space', '_line_has_double_space', 'check_absolute_paths', 'check_trailing_blank', 'check_final_newline', 'check_leading_blank', 'check_file', '_Check', '_LANGUAGE_CHECKS', '_SUFFIX_TO_LANGUAGE']
