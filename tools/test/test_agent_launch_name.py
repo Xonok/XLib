@@ -78,7 +78,7 @@ def _fixture(fn):
 @_fixture
 def test_an_allocation_names_the_window_and_stores_it_against_the_launcher(f):
 	pid = os.getpid()
-	xtest.equal(f.allocate(pid), "ws/secretary-1", "the first window is the bare role")
+	xtest.equal(f.allocate(pid), "ws/secretary-1", "the first window is numbered like every other")
 	key = "pid-%d@%d" % (pid, f.tool.proc_starttime(pid))
 	xtest.equal(f.read_ids().get(key), "ws/secretary-1", "the key records the start time")
 
@@ -180,10 +180,10 @@ def test_the_launcher_exports_the_name_it_allocated():
 		proc = subprocess.run([str(tools / "oc-agent"), "secretary"],
 			cwd=str(ws), env=env, capture_output=True, text=True)
 		xtest.equal(proc.returncode, 0, proc.stderr or "the launcher runs")
-		xtest.contains("\033]2;secretary\007", proc.stdout, "the window is named")
+		xtest.contains("\033]2;secretary-1\007", proc.stdout, "the window is named with its number")
 		exported = (root / "env.txt").read_text(encoding="utf-8")
 		xtest.contains("OPENCODE_AGENT_ID=ws/secretary-1", exported, "the allocated id is exported")
-		xtest.contains("OPENCODE_AGENT_NAME=secretary", exported, "the window name is exported")
+		xtest.contains("OPENCODE_AGENT_NAME=secretary-1", exported, "the window name is exported")
 		xtest.contains("OPENCODE_AGENT_ROLE=secretary", exported, "the role is exported")
 		ids = json.loads((root / ".agents" / "ids.json").read_text(encoding="utf-8"))
 		xtest.equal(ids, {}, "the number is given back when the window closes")
