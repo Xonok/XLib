@@ -62,8 +62,8 @@ Choosing the bump:
 
 Cosmetic issues are not bugs and are fixed without a bump. A first release is
 always `1_0_0`; after that the script reads the latest version in `xlib/`.
-Deprecations are marked in version terms and dropped after exactly 2 major
-versions.
+Deprecations are marked in version terms and dropped at the next major
+release.
 
 The mechanics live in `tools/release/README.md` — including that
 `release.py <library>` always writes, with no dry run.

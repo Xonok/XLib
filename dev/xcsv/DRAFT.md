@@ -128,9 +128,8 @@ concurrent writers; a release. `xlib/xcsv_1_1_0.py` stays untouched.
 consumes xcsv outside `dev/xcsv` and `xlib_dev`; the released file remains as
 the 1_1_0 contract.
 
-`doc/versioning.md` says deprecations are dropped after exactly two major
-versions, and the old SPEC planned 2_0_0 for exceptions-by-default and 3_0_0
-for tuple removal. Removing both at 2_0_0 is one major early.
+`doc/versioning.md` now says deprecations are dropped at the next major
+release, so removing both at 2_0_0 is no longer early — it is the policy.
 
 ## Open questions
 
