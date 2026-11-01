@@ -219,6 +219,50 @@ def proc_starttime(pid):
 	except (OSError, IndexError, ValueError):
 		return 0
 
+def pid_key_parts(key):
+	"""(pid, starttime) for a key that names a process, (None, None) otherwise.
+
+	A pid key is `pid-<pid>`, or `pid-<pid>@<starttime>` when the start time was
+	recorded. The start time is what tells a live process from a recycled pid:
+	`pid_max` on this machine is 32768, so a pid can be handed to an unrelated
+	process within hours.
+	"""
+	if not key.startswith("pid-"):
+		return None, None
+	rest = key[len("pid-"):]
+	pid, _, ticks = rest.partition("@")
+	try:
+		return int(pid), (int(ticks) if ticks else None)
+	except ValueError:
+		return None, None
+
+def pid_key(pid):
+	"""The key that names this process, with its start time when it has one."""
+	ticks = proc_starttime(pid)
+	if ticks:
+		return "pid-%d@%d" % (pid, ticks)
+	return "pid-%d" % pid
+
+def key_names_pid(key, pid):
+	"""True when `key` names the process `pid`, with or without a start time."""
+	return pid_key_parts(key)[0] == pid
+
+def key_is_live(key):
+	"""True when the process a pid key names is still the same process.
+
+	A key without a start time can only ask whether the pid exists, which is
+	what the old keys did. A key with one also compares the start time, so a pid
+	the kernel has since handed to somebody else does not keep the slot.
+	"""
+	pid, ticks = pid_key_parts(key)
+	if pid is None:
+		return True
+	if not is_process_alive(pid):
+		return False
+	if ticks is None:
+		return True
+	return proc_starttime(pid) == ticks
+
 def is_service(argv):
 	"""True for the opencode background service.
 
@@ -326,7 +370,7 @@ def pick_session_client(clients, session_id, cwd, known):
 	if len(same) == 1:
 		return same[0][0]
 	if same:
-		known_same = [c for c in same if "pid-%d" % c[0] in known]
+		known_same = [c for c in same if any(key_names_pid(k, c[0]) for k in known)]
 		if len(known_same) == 1:
 			return known_same[0][0]
 		return max(same, key=lambda c: proc_starttime(c[0]))[0]
@@ -357,18 +401,22 @@ def session_key():
 	the second answer and the service's pid the last: the service is one process
 	for the whole machine, so a key taken from it is shared by every session
 	attached to it.
+
+	A pid key carries the process's start time as well, because a pid alone does
+	not say the process is the same one: `pid_max` here is 32768, so a pid is
+	handed to an unrelated process within hours.
 	"""
 	name = os.environ.get("OPENCODE_AGENT_ID")
 	if name:
 		return name
 	pid = session_client_pid()
 	if pid:
-		return "pid-%s" % pid
+		return pid_key(pid)
 	session_id = os.environ.get("OPENCODE_SESSION_ID")
 	if session_id:
 		return "ses-%s" % session_id
 	service = opencode_service_pid()
-	return "pid-%s" % (service or os.getpid())
+	return pid_key(service or os.getpid())
 
 def workspace_root():
 	"""Workspace folder of this session.
@@ -444,12 +492,8 @@ def allocate_instance(role, tag, ids):
 				session_key_for_num = k
 				break
 		if session_key_for_num and session_key_for_num.startswith("pid-"):
-			try:
-				pid = int(session_key_for_num.split("-")[1])
-				if not is_process_alive(pid):
-					taken.discard(n_val)
-			except (ValueError, IndexError):
-				pass
+			if not key_is_live(session_key_for_num):
+				taken.discard(n_val)
 	for n in range(1, MAX_INSTANCES + 1):
 		if n not in taken:
 			return n
@@ -501,11 +545,8 @@ def service_keyed_ids(ids):
 	"""
 	leftovers = {}
 	for key, value in ids.items():
-		if not key.startswith("pid-"):
-			continue
-		try:
-			pid = int(key.split("-")[1])
-		except ValueError:
+		pid, _ = pid_key_parts(key)
+		if pid is None:
 			continue
 		if is_service(proc_argv(pid)):
 			leftovers[key] = value
@@ -597,6 +638,14 @@ def my_id():
 		absorbed = absorb_leftover(ids, key, agent_role())
 		if absorbed:
 			return qualify(absorbed)
+		# A key written before start times were recorded still names this
+		# process while its pid is alive. Take it over under the new shape
+		# rather than giving the session a new number.
+		pid = pid_key_parts(key)[0]
+		legacy = "pid-%d" % pid if pid is not None else None
+		if key not in ids and legacy in ids:
+			ids[key] = ids.pop(legacy)
+			save(IDS, ids)
 		if key in ids:
 			return qualify(retag_if_moved(ids, key, ids[key]))
 		tag = ws_tag()
@@ -618,19 +667,19 @@ def is_process_alive(pid):
 	return os.path.exists("/proc/%s" % pid)
 
 def recycle_dead_slots():
-	"""Remove ids.json entries for processes that no longer exist, freeing their instance numbers."""
+	"""Remove ids.json entries for processes that are gone or were never them.
+
+	A pid key records the process's start time, so a pid that the kernel has
+	since handed to an unrelated process does not keep the instance number,
+	the claims and the rule cursor of the session that died.
+	"""
 	ids = load(IDS, {})
 	claims = load(CLAIMS, {})
 	cursors = load(RULE_CURSOR, {})
 	dead_keys = []
 	for key in ids:
-		if key.startswith("pid-"):
-			try:
-				pid = int(key.split("-")[1])
-				if not is_process_alive(pid):
-					dead_keys.append(key)
-			except (ValueError, IndexError):
-				pass
+		if key.startswith("pid-") and not key_is_live(key):
+			dead_keys.append(key)
 	for key in dead_keys:
 		agent_id = ids[key]
 		ids.pop(key, None)
