@@ -113,6 +113,33 @@ class ModelListingTests(unittest.TestCase):
 				self.assertIn("1", out)
 				self.assertIn("4", out)
 
+	def test_implicit_latest_is_hidden_in_listing(self):
+		data = {"models": [
+			{"name": "m1:latest", "size": 1024, "capabilities": ["completion"], "details": {
+				"parameter_size": "7B", "quantization_level": "Q4_0", "context_length": 4096}},
+		]}
+		with mock.patch.object(xprompt, "fetch_tags", return_value=data):
+			buf = io.StringIO()
+			with mock.patch("sys.stdout", buf):
+				xprompt.list_models()
+			out = buf.getvalue()
+			self.assertIn("m1", out)
+			self.assertNotIn(":latest", out)
+
+	def test_detail_still_uses_the_raw_name(self):
+		data = {"models": [
+			{"name": "m1:latest", "size": 1024, "capabilities": ["completion"], "details": {}},
+		]}
+		seen = []
+		def fake_show(name, host=None):
+			seen.append(name)
+			return {"parameters": ""}
+		with mock.patch.object(xprompt, "fetch_tags", return_value=data):
+			with mock.patch.object(xprompt, "fetch_show", side_effect=fake_show):
+				with mock.patch("sys.stdout", io.StringIO()):
+					xprompt.list_models(detail=True)
+		self.assertEqual(seen, ["m1:latest"])
+
 class EndToEndJsonTests(unittest.TestCase):
 	def test_json_shape(self):
 		class Handler(http.server.BaseHTTPRequestHandler):
