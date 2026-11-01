@@ -122,6 +122,16 @@ class _Inotify:
 
 # Built-in never-show tags (Rule 1)
 _NEVER_SHOW_TAGS = {"cancelled", "archived"}
+
+def _is_queued(task: dict, state: dict) -> bool:
+	"""A task is queued (hidden) when it waits on a task that is not done or cancelled."""
+	dep = task.get("queued_on")
+	if not dep:
+		return False
+	dep_task = state.get(dep)
+	if dep_task is None:
+		return False
+	return dep_task.get("status") not in ("done", "cancelled")
 # Built-in always-show tags (Rule 3) — bypass tag rule only, not category
 _ALWAYS_SHOW_TAGS = {"critical", "emergency"}
 
@@ -262,17 +272,19 @@ def resolve_filter(cwd: Path, explicit: Path | None, no_filter: bool) -> tuple[P
 
 	return (None, None, "none")
 
-def select_tasks(state: dict, filter_data: dict | None) -> dict:
+def select_tasks(state: dict, filter_data: dict | None, show_queued: bool = False) -> dict:
 	"""
 	R14-R16: Select tasks by the five rules, in order.
 	Returns dict of task_id -> task for tasks of ANY status that pass.
 	A None filter passes everything except R16 rule 1 (never-show).
 	"""
 	if filter_data is None:
-		# No filter: only never-show excludes
+		# No filter: only never-show and queued (unresolved) excludes
 		result = {}
 		for task_id, task in state.items():
 			if task["tags"] & _NEVER_SHOW_TAGS:
+				continue
+			if not show_queued and _is_queued(task, state):
 				continue
 			result[task_id] = task
 		return result
@@ -288,6 +300,10 @@ def select_tasks(state: dict, filter_data: dict | None) -> dict:
 
 		# Rule 1: never-show tags exclude unconditionally
 		if task_tags & _NEVER_SHOW_TAGS:
+			continue
+
+		# Queued (unresolved dependency) tasks are hidden unless --show-queued
+		if not show_queued and _is_queued(task, state):
 			continue
 
 		# Rule 2: category not accepted by filter → exclude
@@ -393,6 +409,9 @@ def compute_metrics(state: dict, selected: dict, filter_data: dict | None) -> di
 			task_tags = task["tags"]
 			# Skip never-show (rule 1) — not counted as "filtered by this view"
 			if task_tags & _NEVER_SHOW_TAGS:
+				continue
+			# Skip queued (unresolved) — not counted as "filtered by this view"
+			if _is_queued(task, state):
 				continue
 			# Check if this task is in selected
 			if task["id"] in selected:
@@ -797,6 +816,11 @@ def read_csv(path: Path) -> dict:
 				tags_str = row[6] if len(row) > 6 and row[6] else ""
 				importance = row[7] if len(row) > 7 and row[7] else ""
 				description = unescape_description(row[8] if len(row) > 8 and row[8] else "")
+				queued_raw = row[9] if len(row) > 9 and row[9] else ""
+				try:
+					queued_on = int(queued_raw) if queued_raw else None
+				except (ValueError, TypeError):
+					queued_on = None
 
 				# Parse tags column: comma-separated, stripped, filtered empty
 				tags = set()
@@ -816,6 +840,7 @@ def read_csv(path: Path) -> dict:
 					"tags": tags,
 					"importance": importance,
 					"description": description,
+					"queued_on": queued_on,
 				}
 	except OSError as e:
 		sys.stderr.write(f"taskview: failed to read {path}: {e}\n")
@@ -845,6 +870,11 @@ def parse_args() -> argparse.Namespace:
 		"--no-filter",
 		action="store_true",
 		help="Skip filter discovery and apply no filter",
+	)
+	parser.add_argument(
+		"--show-queued",
+		action="store_true",
+		help="Show tasks queued behind an unresolved dependency (hidden by default)",
 	)
 	parser.add_argument(
 		"--watch",
@@ -899,7 +929,7 @@ def main() -> int:
 				else:
 					sys.stderr.write("taskview: filter file lost, showing all\n")
 
-		selected = select_tasks(state, current_filter_data)
+		selected = select_tasks(state, current_filter_data, show_queued=args.show_queued)
 		metrics = compute_metrics(state, selected, current_filter_data)
 		width, height = get_terminal_size(args.width)
 		view = build_view(selected, metrics, current_filter_data, width, height, current_source)

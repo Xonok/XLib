@@ -28,12 +28,12 @@ def load_board():
 		raise AssertionError(f"tools/taskboard/taskboard.py is not implemented yet: {error}") from error
 	return taskboard
 
-def seed_store(path, task_id=1, title="task", status="open", due_ts=None, chg_ts=1000, category="", tags="", importance="", description=""):
+def seed_store(path, task_id=1, title="task", status="open", due_ts=None, chg_ts=1000, category="", tags="", importance="", description="", queued_on=""):
 	"""Append one row to `path`, quietly, through the real writer."""
 	path = Path(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
 	with contextlib.redirect_stdout(io.StringIO()):
-		taskupdate.append_row(path, task_id, status, title, due_ts, chg_ts, category, tags, importance, description)
+		taskupdate.append_row(path, task_id, status, title, due_ts, chg_ts, category, tags, importance, description, queued_on)
 	return path
 
 class Store:
@@ -48,8 +48,8 @@ class Store:
 		self.close()
 	def close(self):
 		self._folder.cleanup()
-	def add(self, task_id=1, title="task", status="open", due_ts=None, chg_ts=1000, category="", tags="", importance="", description=""):
-		return seed_store(self.csv, task_id, title, status, due_ts, chg_ts, category, tags, importance, description)
+	def add(self, task_id=1, title="task", status="open", due_ts=None, chg_ts=1000, category="", tags="", importance="", description="", queued_on=""):
+		return seed_store(self.csv, task_id, title, status, due_ts, chg_ts, category, tags, importance, description, queued_on)
 	def rows(self):
 		"""The data rows, header and comments excluded."""
 		if not self.csv.exists():

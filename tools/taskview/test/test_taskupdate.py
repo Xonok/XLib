@@ -143,7 +143,7 @@ class TestR28CategoryTagsAccepted(unittest.TestCase):
 		self.assertEqual(rows[1][6], "y,z")
 
 class TestR32AllNineColumnsWritten(unittest.TestCase):
-	"""R32: Every write path writes all 9 columns, carrying forward unchanged fields."""
+	"""R32: Every write path writes all 10 columns, carrying forward unchanged fields."""
 
 	def setUp(self):
 		self.tmpdir = tempfile.TemporaryDirectory()
@@ -234,8 +234,8 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 			"description": row[8] if len(row) > 8 else "",
 		}
 
-	def assert_row_has_9_fields(self, row_dict):
-		"""Assert the row has all 9 columns (no short rows)."""
+	def assert_row_has_10_fields(self, row_dict):
+		"""Assert the row has all 10 columns (no short rows)."""
 		self.assertIn("id", row_dict)
 		self.assertIn("status", row_dict)
 		self.assertIn("title", row_dict)
@@ -260,7 +260,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["status"], "done")
 		self.assertEqual(latest["category"], "xlib", "category must survive done")
 		self.assertEqual(latest["tags"], "important,backend", "tags must survive done")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_cancel_preserves_category_and_tags(self):
 		# R29: cancel on task with category and tags → both survive
@@ -270,7 +270,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["status"], "cancelled")
 		self.assertEqual(latest["category"], "agents", "category must survive cancel")
 		self.assertEqual(latest["tags"], "frontend,ui", "tags must survive cancel")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_status_done_preserves_category_and_tags(self):
 		# R29: update --status done likewise
@@ -280,7 +280,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["status"], "done")
 		self.assertEqual(latest["category"], "maintenance", "category must survive update --status done")
 		self.assertEqual(latest["tags"], "server,urgent", "tags must survive update --status done")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_due_preserves_category(self):
 		# R29: update --due on categorised task → category survives
@@ -289,7 +289,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		latest = self.read_latest(1)
 		self.assertEqual(latest["category"], "projects", "category must survive update --due")
 		self.assertEqual(latest["tags"], "tag1", "tags must survive update --due")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_title_preserves_category_and_tags(self):
 		# R29: update --title carries forward category and tags
@@ -299,7 +299,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["title"], "New title")
 		self.assertEqual(latest["category"], "hobby")
 		self.assertEqual(latest["tags"], "t1,t2")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_importance_preserves_category_and_tags(self):
 		# R29: update --importance carries forward category and tags
@@ -309,7 +309,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["importance"], "high")
 		self.assertEqual(latest["category"], "hobby")
 		self.assertEqual(latest["tags"], "t3")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_add_with_no_category_writes_empty_field_not_omitted(self):
 		# R29: add with no --category → field written empty, not omitted (8 fields)
@@ -318,21 +318,21 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["category"], "", "empty category must be written as empty string")
 		self.assertEqual(latest["tags"], "", "empty tags must be written as empty string")
 		self.assertEqual(latest["importance"], "", "empty importance must be written as empty string")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_add_with_explicit_empty_category_writes_empty(self):
 		# R29: add --category "" writes empty (not omitted)
 		self.run_add("Explicit empty category", category="")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["category"], "")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_add_with_explicit_empty_tags_writes_empty(self):
 		# R29: add --tags "" writes empty
 		self.run_add("Explicit empty tags", tags="")
 		latest = self.read_latest(1)
 		self.assertEqual(latest["tags"], "")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_category_to_empty_preserves_other_fields(self):
 		# R29: update --category "" clears category but keeps others
@@ -342,7 +342,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["category"], "")
 		self.assertEqual(latest["tags"], "keepme")
 		self.assertEqual(latest["importance"], "medium")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_update_tags_to_empty_preserves_other_fields(self):
 		# R29: update --tags "" clears tags but keeps others
@@ -352,7 +352,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 		self.assertEqual(latest["tags"], "")
 		self.assertEqual(latest["category"], "keepme")
 		self.assertEqual(latest["importance"], "high")
-		self.assert_row_has_9_fields(latest)
+		self.assert_row_has_10_fields(latest)
 
 	def test_all_write_paths_produce_9_columns(self):
 		# R32: sanity check that every subcommand produces 9-column rows
@@ -369,7 +369,7 @@ class TestR32AllNineColumnsWritten(unittest.TestCase):
 
 		self.assertEqual(len(data_rows), 6) # 3 adds + 3 updates
 		for row in data_rows:
-			self.assertEqual(len(row), 9, f"Row must have 9 columns: {row}")
+			self.assertEqual(len(row), 10, f"Row must have 10 columns: {row}")
 
 class TestR30CSVResolution(unittest.TestCase):
 	"""R30: CSV resolves as --csv > $TASKVIEW_CSV > default (data-dir/tasks.csv)."""

@@ -28,8 +28,9 @@ categories with tags rather than splitting them.
 
 ## Data model
 
-Unchanged. The CSV layout stays 9 columns and no column is added, moved, or
-removed.
+The CSV layout is 10 columns: the original 9 plus `queued_on` (task id this task
+waits on, or empty). Adding the column is backward compatible: rows with fewer
+columns read the missing value as empty (R36).
 
 | Pos | Field | Meaning under this spec |
 |---|---|---|
@@ -42,6 +43,7 @@ removed.
 | 6 | `tags` | **subdivision within a category — no longer a membership axis** |
 | 7 | `importance` | unchanged |
 | 8 | `description` | **free-text description of the task; may be empty** |
+| 9 | `queued_on` | **task id this task is queued behind, or empty; the task is hidden until that task is done or cancelled** |
 
 ## Requirements
 
@@ -721,7 +723,7 @@ def describe_lines(text: str, width: int, max_lines: int) -> list[str]
 	# marking the cut with '...' on the last visible line.
 
 def read_csv(path: Path) -> dict
-	# R36, R37. Returns 9-key dict per task (id, status, title, due_ts, chg_ts, category, tags, importance, description).
+	# R36, R37. Returns 10-key dict per task (id, status, title, due_ts, chg_ts, category, tags, importance, description, queued_on).
 ```
 
 `taskupdate.py` keeps its CLI shape. `parse_due` and `read_last_id` are

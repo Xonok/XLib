@@ -155,7 +155,7 @@ def test_R11_every_stored_field_is_copied_to_the_new_row():
 		store.add(1, title="keep me", due_ts=_ts(2026, 10, 20), chg_ts=1000, category="xlib", tags="one,two", importance="high", description="details")
 		board.set_due(store.csv, 1, _ts(2026, 10, 27), 1000, NOW)
 		row = store.read_task(1)
-		xtest.equal(row, {"id": 1, "status": "open", "title": "keep me", "due_ts": str(_ts(2026, 10, 27)), "chg_ts": str(NOW), "category": "xlib", "tags": "one,two", "importance": "high", "description": "details"})
+		xtest.equal(row, {"id": 1, "status": "open", "title": "keep me", "due_ts": str(_ts(2026, 10, 27)), "chg_ts": str(NOW), "category": "xlib", "tags": "one,two", "importance": "high", "description": "details", "queued_on": ""})
 
 def test_R11_a_description_with_a_newline_survives_the_copy():
 	board = load_board()

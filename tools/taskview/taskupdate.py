@@ -22,7 +22,7 @@ except ImportError:
 
 # Kept for backwards compatibility with existing tests that mock it
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"
-FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance", "description"]
+FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance", "description", "queued_on"]
 
 def ensure_csv(path):
 	path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,11 +58,11 @@ def unescape_description(text: str) -> str:
 	"""Unescape newlines in description from CSV storage."""
 	return text.replace("\\n", "\n")
 
-def append_row(path, task_id, status, title, due_ts, chg_ts, category="", tags="", importance="", description=""):
+def append_row(path, task_id, status, title, due_ts, chg_ts, category="", tags="", importance="", description="", queued_on=""):
 	ensure_csv(path)
 	with path.open("a", encoding="utf-8", newline="") as f:
 		writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
-		writer.writerow([task_id, status, title or "", due_ts or "", chg_ts, category or "", tags or "", importance or "", escape_description(description or "")])
+		writer.writerow([task_id, status, title or "", due_ts or "", chg_ts, category or "", tags or "", importance or "", escape_description(description or ""), queued_on or ""])
 	print(f"Appended: id={task_id} status={status} title={title}")
 
 def read_task(path, task_id):
@@ -86,6 +86,7 @@ def read_task(path, task_id):
 					"tags": row[6] if len(row) > 6 else "",
 					"importance": row[7] if len(row) > 7 else "",
 					"description": unescape_description(row[8] if len(row) > 8 else ""),
+					"queued_on": row[9] if len(row) > 9 else "",
 				}
 	return current or None
 
@@ -109,6 +110,7 @@ def read_all(path):
 					"tags": row[6] if len(row) > 6 else "",
 					"importance": row[7] if len(row) > 7 else "",
 					"description": unescape_description(row[8] if len(row) > 8 else ""),
+					"queued_on": row[9] if len(row) > 9 else "",
 				}
 	return state
 
@@ -192,6 +194,18 @@ def clean_tags(tags: str, vocab: dict | None) -> str:
 		sys.exit(1)
 	return tags
 
+def clean_queued_on(value: str) -> str:
+	"""Normalise a --queued-on argument to a stored task id (or '' to clear)."""
+	if value is None:
+		return ""
+	if value.strip().lower() in ("", "none"):
+		return ""
+	try:
+		return str(int(value))
+	except ValueError:
+		print(f"Invalid queued-on value: {value}", file=sys.stderr)
+		sys.exit(1)
+
 def resolve_csv_path(args) -> Path:
 	"""
 	Resolve CSV path per R30: --csv > $TASKVIEW_CSV > <data-dir>/tasks.csv (R17/R18).
@@ -221,7 +235,7 @@ def main():
 	p_add.add_argument("--tags", default=None)
 	p_add.add_argument("--importance", default=None, choices=["low", "medium", "high", ""])
 	p_add.add_argument("--description", default=None)
-
+	p_add.add_argument("--queued-on", default=None, help="Task id this task is queued behind (or 'none' to clear)")
 	p_upd = sub.add_parser("update", help="Update existing task (by id)")
 	p_upd.add_argument("id", type=int)
 	p_upd.add_argument("--status", choices=["open", "done", "cancelled"])
@@ -232,6 +246,7 @@ def main():
 	p_upd.add_argument("--importance", default=None, choices=["low", "medium", "high", ""])
 	p_upd.add_argument("--description", default=None)
 	p_upd.add_argument("--keep-chg-ts", action="store_true", help="Keep the task's current change time (a correction, not a change)")
+	p_upd.add_argument("--queued-on", default=None, help="Task id this task is queued behind (or 'none' to clear)")
 
 	p_done = sub.add_parser("done", help="Mark task done")
 	p_done.add_argument("id", type=int)
@@ -241,7 +256,7 @@ def main():
 
 	p_show = sub.add_parser("show", help="Show one task by id")
 	p_show.add_argument("id", type=int)
-	p_show.add_argument("--field", help="Print just this field (id, status, title, due_ts, chg_ts, category, tags, importance)")
+	p_show.add_argument("--field", help="Print just this field (id, status, title, due_ts, chg_ts, category, tags, importance, description, queued_on)")
 
 	p_list = sub.add_parser("list", help="List tasks, id first")
 	p_list.add_argument("--status", help="Only tasks with this status (default: all)")
@@ -265,11 +280,12 @@ def main():
 		due_ts = parse_due(args.due) if args.due else ""
 		category = clean_category(args.category, vocab) if args.category else ""
 		tags = clean_tags(args.tags, vocab) if args.tags else ""
-		append_row(csv_path, task_id, args.status, args.title, due_ts, now, category, tags, args.importance, args.description)
+		queued_on = clean_queued_on(args.queued_on) if args.queued_on is not None else ""
+		append_row(csv_path, task_id, args.status, args.title, due_ts, now, category, tags, args.importance, args.description, queued_on)
 
 	elif args.cmd == "update":
 		if (args.status is None and args.title is None and args.due is None
-			and args.category is None and args.tags is None and args.importance is None and args.description is None):
+			and args.category is None and args.tags is None and args.importance is None and args.description is None and args.queued_on is None):
 			print("Nothing to update", file=sys.stderr)
 			sys.exit(1)
 		current = read_task(csv_path, args.id)
@@ -283,26 +299,29 @@ def main():
 		tags = args.tags if args.tags is not None else current["tags"]
 		importance = args.importance if args.importance is not None else current["importance"]
 		description = args.description if args.description is not None else current["description"]
+		queued_on = current["queued_on"] if "queued_on" in current else ""
+		if args.queued_on is not None:
+			queued_on = clean_queued_on(args.queued_on)
 		if args.category is not None:
 			category = clean_category(args.category, vocab)
 		if args.tags is not None:
 			tags = clean_tags(args.tags, vocab)
 		chg_ts = current["chg_ts"] if args.keep_chg_ts else now
-		append_row(csv_path, args.id, status, title, due_ts, chg_ts, category, tags, importance, description)
+		append_row(csv_path, args.id, status, title, due_ts, chg_ts, category, tags, importance, description, queued_on)
 
 	elif args.cmd == "done":
 		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"])
+		append_row(csv_path, args.id, "done", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"], current.get("queued_on", ""))
 
 	elif args.cmd == "cancel":
 		current = read_task(csv_path, args.id)
 		if not current:
 			print(f"Task {args.id} not found", file=sys.stderr)
 			sys.exit(1)
-		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"])
+		append_row(csv_path, args.id, "cancelled", current["title"], current["due_ts"], now, current["category"], current["tags"], current["importance"], current["description"], current.get("queued_on", ""))
 
 	elif args.cmd == "show":
 		current = read_task(csv_path, args.id)
@@ -327,6 +346,7 @@ def main():
 			print(f"  tags:        {current['tags'] or '(none)'}")
 			print(f"  importance:  {current['importance'] or '(none)'}")
 			print(f"  description: {current['description'] or '(none)'}")
+			print(f"  queued_on:   {current.get('queued_on') or '(none)'}")
 
 	elif args.cmd == "list":
 		state = read_all(csv_path) if csv_path.exists() else {}

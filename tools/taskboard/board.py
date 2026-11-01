@@ -159,7 +159,7 @@ def set_due(csv_path: Path, task_id: int, new_due_ts: int | None, expected_chg_t
 			raise StoreMissing(f"the task store {csv_path} does not exist")
 		taskupdate.append_row(
 			csv_path, task_id, row["status"], row["title"], new_due_ts, max(now, stored_chg_ts + 1),
-			row["category"], row["tags"], row["importance"], row["description"])
+			row["category"], row["tags"], row["importance"], row["description"], row.get("queued_on", ""))
 	return read_board(csv_path, now)
 
 def stored_due_ts(row: dict | None) -> int | None:
