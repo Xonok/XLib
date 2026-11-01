@@ -29,8 +29,3 @@ dev/xhttp/compare/web/
 tools/localbench/tasks/*/*/fixture/
 tools/localbench/tasks/*/*/broken/
 tools/localbench/tasks/*/*/reference/
-
-# xcsv_1_0_0.py is a frozen release (never edited) whose bundler emitted a leading
-# blank line. The bundler no longer does that, so newer releases are clean; this one
-# is dispositioned here rather than edited.
-xlib/xcsv_1_0_0.py

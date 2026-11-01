@@ -1,4 +1,3 @@
-
 ############   from file: csv_tok.py   ############
 
 def csv_tok_tokenize(line):
