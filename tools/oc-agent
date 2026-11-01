@@ -58,8 +58,10 @@ id="$(python3 "$coord" allocate --pid $$ --role "$AGENT")" \
 	|| die "could not allocate an instance for '$AGENT'"
 [ -n "$id" ] || die "agent-coord returned no id for '$AGENT'"
 
-name="${id##*/}"
-if [ "${name##*-}" = "1" ]; then TITLE="$AGENT"; else TITLE="$name"; fi
+# Every window carries its number, the first included: a bare `secretary` was
+# really secretary-1, and a name that sometimes has a number and sometimes not
+# is the same disagreement this ticket removes, one level down.
+TITLE="${id##*/}"
 printf '\033]2;%s\007' "$TITLE"
 # OpenCode v2 dropped OPENCODE_DISABLE_TERMINAL_TITLE and sets its own title
 # ("OC | <agent>") over ours. Turn that off for this window only, so the
