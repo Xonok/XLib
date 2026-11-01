@@ -109,7 +109,49 @@ def release(library, bump, force):
 	if target.is_file():
 		msg = f"{target.name} already exists in xlib/"
 		raise ValueError(msg)
+	# Scan every shipped source file (entry + internals), not tests: a dev
+	# dependency can hide in an internal module, and tests are not shipped.
+	import os as _os
+	for dirpath, dirnames, filenames in _os.walk(devdir):
+		dirnames[:] = [d for d in dirnames if d not in ("tests", "test", "__pycache__")]
+		for filename in filenames:
+			if not filename.endswith(".py"):
+				continue
+			_source = (Path(dirpath) / filename).read_text(encoding = "utf-8")
+			_marker = None
+			if "xlib_dev" in _source:
+				_marker = "xlib_dev"
+			elif "dev/" in _source:
+				_marker = "dev/"
+			elif re.search(r"\bfrom\s+dev(?:\.|\b)", _source):
+				_marker = "from dev"
+			elif re.search(r"\bimport\s+dev(?:\.|\b)", _source):
+				_marker = "import dev"
+			if _marker is not None:
+				msg = (f"refusing to release: {library} depends on a dev version "
+					f"(dev dependency: {_marker!r})")
+				raise ValueError(msg)
 	text = bundled(entry)
+	# A released library must not depend on a dev version: neither `xlib_dev`
+	# (the live dev tree) nor a `dev/` / `dev.` reference. dev -> dev is fine
+	# while developing, but the dev -> release boundary is policed here, not by
+	# a style rule, because only release.py owns the "is this releasable"
+	# question. Scanning the bundle (not the dev tree) keeps tests and other
+	# non-shipped files out of the check.
+	import re as _re
+	_dev_marker = None
+	if "xlib_dev" in text:
+		_dev_marker = "xlib_dev"
+	elif "dev/" in text:
+		_dev_marker = "dev/"
+	elif _re.search(r"\bfrom\s+dev(?:\.|\b)", text):
+		_dev_marker = "from dev"
+	elif _re.search(r"\bimport\s+dev(?:\.|\b)", text):
+		_dev_marker = "import dev"
+	if _dev_marker is not None:
+		msg = (f"refusing to release: {library} depends on a dev version "
+			f"(dev dependency: {_dev_marker!r})")
+		raise ValueError(msg)
 	code, said = linted(text, target.parent)
 	if code != 0:
 		raise ValueError(f"the bundle is not xlint-clean, and nothing this repository releases is:\n{said}")
