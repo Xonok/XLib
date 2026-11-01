@@ -24,13 +24,51 @@ except ImportError:
 DEFAULT_CSV = Path.home() / ".local" / "share" / "taskview" / "tasks.csv"
 FIELDNAMES = ["id", "status", "title", "due_ts", "chg_ts", "category", "tags", "importance", "description", "queued_on"]
 
+CANONICAL_HEADER = ",".join(FIELDNAMES)
+CANONICAL_SCHEMA_COMMENT = "// Schema: " + ",".join(FIELDNAMES)
+
+def _is_header_line(line):
+	"""True if line is the field-name header row (not a comment)."""
+	s = line.strip()
+	if not s or s.startswith("//"):
+		return False
+	return s.split(",", 1)[0].strip().strip('"') == "id"
+
 def ensure_csv(path):
 	path.parent.mkdir(parents=True, exist_ok=True)
 	if not path.exists():
 		with path.open("w", encoding="utf-8", newline="") as f:
 			f.write("// tasks.csv — append-only, last-write-wins by id\n")
-			f.write("// Schema: id,status,title,due_ts,chg_ts,category,tags,importance,description\n")
-			f.write("id,status,title,due_ts,chg_ts,category,tags,importance,description\n")
+			f.write(CANONICAL_SCHEMA_COMMENT + "\n")
+			f.write(CANONICAL_HEADER + "\n")
+		return
+	# Self-heal: rewrite a stale header/schema-comment line in an existing file.
+	# Metadata only — rows are never touched here (see migrate for full normalization).
+	try:
+		with path.open("r", encoding="utf-8", newline="") as f:
+			lines = f.readlines()
+	except OSError:
+		return
+	changed = False
+	out = []
+	for line in lines:
+		if _is_header_line(line):
+			if line.rstrip("\r\n") != CANONICAL_HEADER:
+				eol = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+				out.append(CANONICAL_HEADER + eol)
+				changed = True
+				continue
+		stripped = line.strip()
+		if stripped.startswith("// Schema:"):
+			if stripped != CANONICAL_SCHEMA_COMMENT:
+				eol = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+				out.append(CANONICAL_SCHEMA_COMMENT + eol)
+				changed = True
+				continue
+		out.append(line)
+	if changed:
+		with path.open("w", encoding="utf-8", newline="") as f:
+			f.writelines(out)
 
 def read_last_id(path):
 	if not path.exists():
@@ -221,6 +259,80 @@ def resolve_csv_path(args) -> Path:
 	data_dir = resolve_data_dir(args.data_dir, os.environ)
 	return resolve_csv(data_dir, None)
 
+def normalize_row(row):
+	"""Pad/truncate a data row to the canonical field count."""
+	row = list(row)
+	if len(row) < len(FIELDNAMES):
+		row = row + [""] * (len(FIELDNAMES) - len(row))
+	elif len(row) > len(FIELDNAMES):
+		row = row[:len(FIELDNAMES)]
+	return row
+
+def migrate_csv(path, apply=False):
+	"""Report (and optionally repair) mixed-format tasks.csv files.
+
+	AQQNPAN: the file may carry several row widths (legacy 5-column rows
+	alongside the current 10-column schema) and a stale header line. This
+	command reports the field-count distribution and, with --apply, rewrites
+	the file so the header is canonical and every data row is padded to the
+	canonical width. Comments are preserved as the two leading lines.
+	"""
+	if not path.exists():
+		print(f"taskupdate migrate: no file at {path}")
+		return 0
+	with path.open("r", encoding="utf-8", newline="") as f:
+		reader = csv.reader(f)
+		rows = list(reader)
+	# Separate leading comments/header from data rows
+	leading = []
+	data = []
+	for r in rows:
+		if not r:
+			continue
+		if r[0].startswith("//"):
+			leading.append(r)
+			continue
+		if r and r[0].strip().strip('"') == "id" and len(r) <= len(FIELDNAMES):
+			# header row
+			leading.append(r)
+			continue
+		data.append(r)
+
+	from collections import Counter
+	widths = Counter(len(r) for r in data)
+	header_stale = True
+	# detect header among leading
+	header_lines = [r for r in leading if r and r[0].strip().strip('"') == "id"]
+	header_stale = (not header_lines) or (header_lines[-1] != FIELDNAMES)
+
+	print(f"taskupdate migrate: {path}")
+	print(f"  data rows: {len(data)}")
+	print(f"  field widths: " + ", ".join(f"{w}={n}" for w, n in sorted(widths.items())))
+	print(f"  header stale: {header_stale}")
+
+	if not apply:
+		print("  dry run — pass --apply to rewrite")
+		return 0
+
+	# Rewrite
+	backup = path.with_suffix(path.suffix + ".bak")
+	try:
+		if not backup.exists():
+			import shutil
+			shutil.copy2(path, backup)
+	except OSError:
+		pass
+
+	with path.open("w", encoding="utf-8", newline="") as f:
+		f.write("// tasks.csv — append-only, last-write-wins by id\n")
+		f.write(CANONICAL_SCHEMA_COMMENT + "\n")
+		f.write(CANONICAL_HEADER + "\n")
+		writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+		for r in data:
+			writer.writerow(normalize_row(r))
+	print("  applied: file normalized")
+	return 0
+
 def main():
 	parser = argparse.ArgumentParser(description="Update taskview tasks (append-only)")
 	parser.add_argument("--csv", type=Path, default=None, help="Path to tasks.csv (default: resolved via $TASKVIEW_CSV or data dir)")
@@ -261,6 +373,9 @@ def main():
 	p_list = sub.add_parser("list", help="List tasks, id first")
 	p_list.add_argument("--status", help="Only tasks with this status (default: all)")
 	p_list.add_argument("--category", help="Only tasks in this category")
+
+	p_mig = sub.add_parser("migrate", help="Report/repair mixed-format tasks.csv (AQQNPAN)")
+	p_mig.add_argument("--apply", action="store_true", help="Rewrite the file normalized (default: dry run)")
 
 	args = parser.parse_args()
 	now = int(time.time())
@@ -364,6 +479,9 @@ def main():
 		for t in rows_out:
 			due = fmt_due(t["due_ts"]) if t["due_ts"] else "no due"
 			print(f"#{t['id']}  {t['status']:<9}  {due:<12}  {t['title']}")
+
+	elif args.cmd == "migrate":
+		migrate_csv(csv_path, apply=args.apply)
 
 if __name__ == "__main__":
 	main()

@@ -5,7 +5,7 @@ Tests for taskupdate.py — writer side (R28, R29, R30, read_last_id).
 Run with: python3 -m unittest tools.taskview.test.test_taskupdate -v
 """
 
-import csv,os,sys,tempfile,time,unittest
+import contextlib,csv,io,os,sys,tempfile,time,unittest
 from pathlib import Path
 
 # Import taskupdate by path (like test_xcsv.py does)
@@ -766,6 +766,52 @@ class TestIsolationGuard(unittest.TestCase):
 				content = f.read()
 			# We only assert our temp tree got the write
 			pass
+
+class TestMigrate(unittest.TestCase):
+	"""AQQNPAN: mixed-format tasks.csv detection and normalization."""
+
+	def setUp(self):
+		self.tmpdir = tempfile.TemporaryDirectory()
+		self.csv_path = Path(self.tmpdir.name) / "tasks.csv"
+		with self.csv_path.open("w", encoding="utf-8", newline="") as f:
+			f.write("// tasks.csv — append-only, last-write-wins by id\n")
+			f.write("// Schema: id,status,title,due_ts,chg_ts\n")
+			f.write("id,status,title,due_ts,chg_ts\n")
+			writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+			writer.writerow([1, "open", "Legacy five", "", "1000"])
+			writer.writerow([2, "open", "Eight cols", "", "1001", "xlib", "taskview", "high", "desc"])
+
+	def tearDown(self):
+		self.tmpdir.cleanup()
+
+	def test_dry_run_reports_mixed_widths(self):
+		buf = io.StringIO()
+		with contextlib.redirect_stdout(buf):
+			taskupdate.migrate_csv(self.csv_path, apply=False)
+		out = buf.getvalue()
+		self.assertIn("header stale: True", out)
+		self.assertIn("5=1", out)
+		self.assertIn("9=1", out)
+
+	def test_apply_normalizes_header_and_rows(self):
+		taskupdate.migrate_csv(self.csv_path, apply=True)
+		# header is now canonical
+		with self.csv_path.open() as f:
+			lines = f.readlines()
+		self.assertEqual(lines[1].strip(), taskupdate.CANONICAL_SCHEMA_COMMENT)
+		self.assertEqual(lines[2].strip(), taskupdate.CANONICAL_HEADER)
+		# all data rows padded to 10
+		state = taskupdate.read_all(self.csv_path)
+		self.assertEqual(len(state), 2)
+		for tid in (1, 2):
+			self.assertIn("queued_on", state[tid])
+
+	def test_apply_is_idempotent(self):
+		taskupdate.migrate_csv(self.csv_path, apply=True)
+		buf = io.StringIO()
+		with contextlib.redirect_stdout(buf):
+			taskupdate.migrate_csv(self.csv_path, apply=False)
+		self.assertIn("header stale: False", buf.getvalue())
 
 if __name__ == "__main__":
 	unittest.main()

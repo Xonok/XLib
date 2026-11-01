@@ -312,6 +312,13 @@ passing suite does not validate anything the spec merely describes in prose.
 - **R37** A row whose `chg_ts` is missing or unparseable, or whose `id` is not an
 	integer, is skipped rather than aborting the read. Fold order is file order,
 	last row per id wins.
+- **R57** The CSV's field-name header line is self-healing: `ensure_csv` rewrites
+	a stale header (and its `// Schema:` comment) to the canonical 10-column set
+	when the file already exists, without touching data rows. `taskupdate migrate`
+	reports the field-count distribution of a mixed-format file and, with
+	`--apply`, rewrites it so the header is canonical and every data row is
+	padded to the canonical width — making a header-driven reader agree with the
+	positional reader for every id (AQQNPAN). Default invocation is a dry run.
 
 ### Resolving a task reference
 
