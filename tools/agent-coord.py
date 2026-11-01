@@ -379,18 +379,28 @@ def pick_session_client(clients, session_id, cwd, known):
 def session_client_pid():
 	"""The pid of the opencode client that owns this session, or None.
 
-	The client is found by what it says about itself: the session id in its own
-	arguments, or the directory it works in. The service is never an answer.
+	The client is found by what it says about itself first: the session id in
+	its own arguments is exact, and every client names the session it serves.
+	Only when no client names this session does the ancestry answer, because
+	under opencode 2 the tool shell descends from the shared service -- and the
+	service's own parent is a client too, just not this session's. Asking the
+	ancestry first gave every session on the machine the one client that
+	happened to start the service.
 	"""
+	session_id = os.environ.get("OPENCODE_SESSION_ID")
+	clients = opencode_clients()
+	if session_id:
+		for pid, argv, _ in clients:
+			if session_id in argv:
+				return pid
 	pid = opencode_pid()
 	if pid:
 		return pid
-	clients = opencode_clients()
 	if not clients:
 		return None
 	known = set(load(IDS, {}).keys())
 	cwd = os.path.realpath(os.getcwd())
-	return pick_session_client(clients, os.environ.get("OPENCODE_SESSION_ID"), cwd, known)
+	return pick_session_client(clients, session_id, cwd, known)
 
 def session_key():
 	"""The key that stands for this session in `ids.json`.
@@ -418,6 +428,17 @@ def session_key():
 	service = opencode_service_pid()
 	return pid_key(service or os.getpid())
 
+def nearest_workspace(base):
+	"""The nearest folder at or above `base` that holds a `.agents` folder."""
+	base = os.path.realpath(base)
+	while True:
+		if os.path.isdir(os.path.join(base, ".agents")):
+			return base
+		parent = os.path.dirname(base)
+		if parent == base:
+			return None
+		base = parent
+
 def workspace_root():
 	"""Workspace folder of this session.
 
@@ -435,13 +456,9 @@ def workspace_root():
 			bases.append(cwd)
 	bases.append(os.path.realpath(os.getcwd()))
 	for base in bases:
-		while True:
-			if os.path.isdir(os.path.join(base, ".agents")):
-				return base
-			parent = os.path.dirname(base)
-			if parent == base:
-				break
-			base = parent
+		root = nearest_workspace(base)
+		if root:
+			return root
 	return ROOT
 
 def ws_tag():
@@ -710,6 +727,65 @@ def role_note_path(role, ws_root=None):
 
 def cmd_id(args):
 	print(my_id())
+
+def launch_workspace():
+	"""The workspace a window is opened in: the launcher's own directory.
+
+	Not the workspace of any session the launcher inherited: an agent that
+	starts a second window need not be in the directory that window opens in.
+	"""
+	return nearest_workspace(os.getcwd()) or ROOT
+
+def cmd_allocate(args):
+	"""Allocate an instance for a launcher that has no session yet.
+
+	A window is named before the opencode client exists, so the session key --
+	the client's pid -- is not there to allocate against. The launcher's own pid
+	is: it lives as long as the window, and the identity is written against it
+	with the start time, so a pid the kernel later recycles does not inherit the
+	number. The launcher exports the id it gets, and every tool in the session
+	reports that id instead of looking one up.
+	"""
+	key = pid_key(args.pid)
+	with locked():
+		recycle_dead_slots()
+		migrate_ids()
+		ids = load(IDS, {})
+		if key in ids:
+			print(qualify(ids[key]))
+			return
+		role = args.role or agent_role()
+		tag = os.path.basename(launch_workspace())
+		n = allocate_instance(role, tag, ids)
+		if n is None:
+			sys_stderr("no free instance for role %s in %s (limit %s)" % (role, tag, MAX_INSTANCES))
+			raise SystemExit(1)
+		agent_id = "%s/%s-%d" % (tag, role, n)
+		ids[key] = agent_id
+		save(IDS, ids)
+		print(agent_id)
+
+def cmd_free(args):
+	"""Give back the instance a launcher allocated, when the window closes.
+
+	The dead-pid reaper would collect it eventually, but a clean exit should not
+	leave a number occupied until the next launch notices.
+	"""
+	key = pid_key(args.pid)
+	with locked():
+		ids = load(IDS, {})
+		agent_id = ids.pop(key, None)
+		if agent_id is None:
+			return
+		save(IDS, ids)
+		claims = load(CLAIMS, {})
+		if agent_id in claims:
+			claims.pop(agent_id, None)
+			save(CLAIMS, claims)
+		cursors = load(RULE_CURSOR, {})
+		if agent_id in cursors:
+			cursors.pop(agent_id, None)
+			save(RULE_CURSOR, cursors)
 
 def cmd_workspace(args):
 	root = workspace_root()
@@ -1141,6 +1217,11 @@ def main():
 	parser = argparse.ArgumentParser(prog="agent-coord")
 	sub = parser.add_subparsers(dest="command", required=True)
 	sub.add_parser("id", help="print this agent's workspace-qualified id")
+	p = sub.add_parser("allocate", help="allocate an id for a launcher's window (prints it)")
+	p.add_argument("--pid", type=int, required=True, help="the launcher's pid, which lives as long as the window")
+	p.add_argument("--role", default=None, help="role (default: caller's role)")
+	p = sub.add_parser("free", help="give back the id a launcher allocated")
+	p.add_argument("--pid", type=int, required=True, help="the launcher's pid")
 	sub.add_parser("note", help="(deprecated) print this agent's instance notes file path")
 	sub.add_parser("instance-note", help="print this agent's instance notes file path")
 	sub.add_parser("workspace", help="print this session's workspace root and tag")
@@ -1203,7 +1284,8 @@ def main():
 	sp = cp.add_parser("reset", help="clear context state")
 	sp.add_argument("--type", default=None, help="reset only this type (else reset all)")
 	args = parser.parse_args()
-	{"id": cmd_id, "note": cmd_note, "instance-note": cmd_instance_note,
+	{"id": cmd_id, "allocate": cmd_allocate, "free": cmd_free,
+	 "note": cmd_note, "instance-note": cmd_instance_note,
 	 "workspace": cmd_workspace,
 	 "news": cmd_news, "check-clean": cmd_check_clean, "dispatch": cmd_dispatch,
 	 "role-note": cmd_role_note, "role-claim": cmd_role_claim,
