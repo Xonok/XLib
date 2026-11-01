@@ -67,6 +67,10 @@ def contains(item, container, message = None):
 	if item not in container:
 		raise AssertionError(_with(message, f"{item!r} not in {_short(container)}"))
 
+def not_contains(item, container, message = None):
+	if item in container:
+		raise AssertionError(_with(message, f"{item!r} in {_short(container)}"))
+
 def kind(value, kind_, message = None):
 	if not isinstance(value, kind_):
 		msg = _with(message, f"expected {kind_.__name__}, got {type(value).__name__}")
@@ -103,6 +107,9 @@ class TestCase:
 
 	def contains(self, item, container, message = None):
 		contains(item, container, message)
+
+	def not_contains(self, item, container, message = None):
+		not_contains(item, container, message)
 
 	def kind(self, value, kind_, message = None):
 		kind(value, kind_, message)

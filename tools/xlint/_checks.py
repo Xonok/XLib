@@ -282,7 +282,7 @@ def check_file(path, args):
 		problems.extend((line, "personal", msg) for line, msg in _personal.check(text_lines))
 	if not (args.no_banned_git or "banned-git" in disabled) and tracked:
 		_posix = path.as_posix()
-		_exempt_paths = ("AGENTS.md", "doc/working-tree.md", "tools/xlint/xlint.py", "tools/xlint/_banned_git.py", "tools/xlint/test/test_xlint.py")
+		_exempt_paths = ("AGENTS.md", "doc/working-tree.md", "tools/xlint/xlint.py", "tools/xlint/_banned_git.py", "tools/xlint/test/test_xlint_git.py")
 		if not any(_posix == candidate or _posix.endswith("/" + candidate) for candidate in _exempt_paths):
 			problems.extend((line, "banned-git", msg) for line, msg in _banned_git.check(text_lines))
 	return problems

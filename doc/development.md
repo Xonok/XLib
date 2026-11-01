@@ -186,7 +186,7 @@ library, in `dev/xtest/`. A suite can also be run on its own:
 
 ```
 python3 dev/xtest/xtest.py tools/xlint/test     # a folder
-python3 dev/xtest/xtest.py tools/xlint/test/test_xlint.py   # one file
+python3 dev/xtest/xtest.py tools/xlint/test/test_xlint_imports.py   # one file
 ```
 
 **A test file that cannot be run is a test file that does not exist**, and one

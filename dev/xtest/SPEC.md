@@ -53,6 +53,7 @@ Test definition:
 | `true(x, message=None)` | Assert `x` is truthy |
 | `raises(exc, fn, message=None)` | Assert `fn()` raises `exc` (or subclass); catches wrong type / no raise |
 | `contains(item, container, message=None)` | Assert `item in container` |
+| `not_contains(item, container, message=None)` | Assert `item not in container` |
 | `kind(value, kind_, message=None)` | Assert `isinstance(value, kind_)` |
 | `test(fn)` | Decorator: register `fn` in global `_registry`; returns `fn` unchanged |
 | `TestCase` | A test case with `setUp`, `tearDown` and the assertions as methods |
@@ -108,6 +109,7 @@ Each helper formats a readable message:
 	- Wrong type: `expected {exc.__name__}, got {type(e).__name__}: {e}`
 	- None raised: `expected {exc.__name__}, but nothing raised`
 - `contains`: `{item!r} not in {container!r}`
+- `not_contains`: `{item!r} in {container!r}`
 - `kind`: `expected {kind_.__name__}, got {type(value).__name__}`
 
 ## Planned Changes

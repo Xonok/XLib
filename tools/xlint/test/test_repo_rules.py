@@ -14,7 +14,7 @@ A fixture checkout needs a `.git` entry because a path outside a checkout has
 no repo rules. It is created as a directory, except in the worktree test where
 it is the file a real worktree carries.
 """
-import subprocess,sys,tempfile,threading,time,unittest
+import subprocess,sys,tempfile,threading,time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -505,67 +505,66 @@ def test_watch_reloads_a_changed_config_target():
 		finally:
 			_stop_watch(proc)
 
-class TestIncrementalRepoRules(unittest.TestCase):
-	"""Repo rules are re-run only when their selected files change."""
+"""Repo rules are re-run only when their selected files change."""
 
-	def test_findings_for_a_deleted_file_are_dropped_without_a_rerun(self):
-		with tempfile.TemporaryDirectory() as folder:
-			root = _checkout(folder)
-			(root / "other.py").write_text("x = 2\n", encoding="utf-8")
-			_module(root, _flag_rule("flag", paths = None))
-			rules = xlint._Rules([root])
-			all_files = rules.files()
-			first = rules.repo_problems(all_files)
-			self.assertEqual(len(first), 3)
-			(root / "other.py").unlink()
-			remaining = rules.files()
-			second = rules.repo_problems(remaining, changed=set())
-			self.assertEqual(len(second), 2)
-			self.assertTrue(all(path.name != "other.py" for path, _, _, _ in second))
+def test_findings_for_a_deleted_file_are_dropped_without_a_rerun():
+	with tempfile.TemporaryDirectory() as folder:
+		root = _checkout(folder)
+		(root / "other.py").write_text("x = 2\n", encoding="utf-8")
+		_module(root, _flag_rule("flag", paths = None))
+		rules = xlint._Rules([root])
+		all_files = rules.files()
+		first = rules.repo_problems(all_files)
+		xtest.equal(len(first), 3)
+		(root / "other.py").unlink()
+		remaining = rules.files()
+		second = rules.repo_problems(remaining, changed=set())
+		xtest.equal(len(second), 2)
+		xtest.true(all(path.name != "other.py" for path, _, _, _ in second))
 
-	def test_a_changed_file_triggers_a_rerun_over_the_full_set(self):
-		with tempfile.TemporaryDirectory() as folder:
-			root = _checkout(folder)
-			(root / "a.py").write_text("marker = 1\n", encoding="utf-8")
-			(root / "b.py").write_text("x = 2\n", encoding="utf-8")
-			_module(root, (
-				"def rules():\n"
-				"\treturn [{\"name\": \"cross\", \"check\": check}]\n"
-				"\n"
-				"def check(files):\n"
-				"\tmarker = \"mar\" + \"ker\"\n"
-				"\tseen = sorted(path.name for path, lines in files if any(marker in line for line in lines))\n"
-				"\treturn [(path, None, \"sees \" + \",\".join(seen)) for path, lines in files if path.name == \"b.py\"]\n"
-			))
-			rules = xlint._Rules([root])
-			files = rules.files()
-			first = rules.repo_problems(files)
-			self.assertTrue(any("a.py" in message for _, _, _, message in first))
-			(root / "a.py").write_text("x = 1\n", encoding="utf-8")
-			changed = {root / "a.py"}
-			second = rules.repo_problems(rules.files(), changed=changed)
-			self.assertFalse(any("a.py" in message for _, _, _, message in second))
+def test_a_changed_file_triggers_a_rerun_over_the_full_set():
+	with tempfile.TemporaryDirectory() as folder:
+		root = _checkout(folder)
+		(root / "a.py").write_text("marker = 1\n", encoding="utf-8")
+		(root / "b.py").write_text("x = 2\n", encoding="utf-8")
+		_module(root, (
+			"def rules():\n"
+			"\treturn [{\"name\": \"cross\", \"check\": check}]\n"
+			"\n"
+			"def check(files):\n"
+			"\tmarker = \"mar\" + \"ker\"\n"
+			"\tseen = sorted(path.name for path, lines in files if any(marker in line for line in lines))\n"
+			"\treturn [(path, None, \"sees \" + \",\".join(seen)) for path, lines in files if path.name == \"b.py\"]\n"
+		))
+		rules = xlint._Rules([root])
+		files = rules.files()
+		first = rules.repo_problems(files)
+		xtest.true(any("a.py" in message for _, _, _, message in first))
+		(root / "a.py").write_text("x = 1\n", encoding="utf-8")
+		changed = {root / "a.py"}
+		second = rules.repo_problems(rules.files(), changed=changed)
+		xtest.true(not any("a.py" in message for _, _, _, message in second))
 
-	def test_an_unchanged_rule_reuses_its_cached_findings(self):
-		with tempfile.TemporaryDirectory() as folder:
-			root = _checkout(folder)
-			_module(root, (
-				"_counter = {\"n\": 0}\n"
-				"def rules():\n"
-				"\treturn [{\"name\": \"counter\", \"check\": check}]\n"
-				"\n"
-				"def check(files):\n"
-				"\t_counter[\"n\"] += 1\n"
-				"\treturn [(path, 1, \"run \" + str(_counter[\"n\"])) for path, lines in files]\n"
-			))
-			rules = xlint._Rules([root])
-			files = rules.files()
-			first = rules.repo_problems(files)
-			self.assertTrue(any("run 1" in message for _, _, _, message in first))
-			second = rules.repo_problems(files, changed=set())
-			self.assertTrue(any("run 1" in message for _, _, _, message in second))
-			third = rules.repo_problems(files, changed=set(files))
-			self.assertTrue(any("run 2" in message for _, _, _, message in third))
+def test_an_unchanged_rule_reuses_its_cached_findings():
+	with tempfile.TemporaryDirectory() as folder:
+		root = _checkout(folder)
+		_module(root, (
+			"_counter = {\"n\": 0}\n"
+			"def rules():\n"
+			"\treturn [{\"name\": \"counter\", \"check\": check}]\n"
+			"\n"
+			"def check(files):\n"
+			"\t_counter[\"n\"] += 1\n"
+			"\treturn [(path, 1, \"run \" + str(_counter[\"n\"])) for path, lines in files]\n"
+		))
+		rules = xlint._Rules([root])
+		files = rules.files()
+		first = rules.repo_problems(files)
+		xtest.true(any("run 1" in message for _, _, _, message in first))
+		second = rules.repo_problems(files, changed=set())
+		xtest.true(any("run 1" in message for _, _, _, message in second))
+		third = rules.repo_problems(files, changed=set(files))
+		xtest.true(any("run 2" in message for _, _, _, message in third))
 
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))

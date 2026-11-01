@@ -66,3 +66,14 @@ def test_kind():
 if __name__ == "__main__":
 	import sys
 	sys.exit(xtest.run(__file__))
+
+def test_not_contains_pass():
+	xtest.not_contains("z", "banana")
+
+def test_not_contains_fail():
+	try:
+		xtest.not_contains("a", "banana")
+	except AssertionError:
+		pass
+	else:
+		raise AssertionError("expected not_contains to raise")
