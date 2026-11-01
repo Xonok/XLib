@@ -72,6 +72,7 @@ Numbered so tests can cite them. Each is one testable behaviour.
 	| `categories` | list of strings | `[]` | task categories to include; empty = all (R4) |
 	| `tags` | list of strings | `[]` | tags to include; empty = no tag restriction |
 	| `include_bucket` | bool | `false` | include uncategorised tasks (R3) |
+	| `exclude_categories` | list of strings | `[]` | task categories to exclude (blacklist); applied even when `categories` is empty |
 	| `limits.upcoming` | int | `5` | UPCOMING rows the layout reserves; spare lines become more rows (R29) |
 	| `limits.queue_breakdown` | bool | `true` | show the due-horizon breakdown |
 
@@ -146,7 +147,9 @@ passing suite does not validate anything the spec merely describes in prose.
 	1. Its tags include `cancelled` or `archived` → **excluded**, unconditionally.
 	2. Its category is not accepted by the active filter → **excluded**. Accepted
 	 means: the filter's `categories` is empty (R4), or the task's category is
-	 one of them, or the task is uncategorised and `include_bucket` is true.
+	 one of them, or the task is uncategorised and `include_bucket` is true;
+	 and the task's category is not in the filter's `exclude_categories`
+	 (category blacklist).
 	3. Its tags include `critical` or `emergency` → **included**, bypassing the
 	 tag rule only.
 	4. The filter's `tags` is non-empty and does not overlap the task's tags →

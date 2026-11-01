@@ -10,7 +10,7 @@ Watch modes: inotify (primary) → poll (fallback)
 Terminal contract: TERMINAL.md
 """
 
-import argparse,contextlib,csv,ctypes,os,select,signal,struct,sys,termios,time,yaml
+import argparse,contextlib,csv,ctypes,io,os,select,signal,struct,sys,termios,time,yaml
 from datetime import datetime,timedelta
 from pathlib import Path
 import shutil
@@ -128,10 +128,23 @@ def _is_queued(task: dict, state: dict) -> bool:
 	dep = task.get("queued_on")
 	if not dep:
 		return False
-	dep_task = state.get(dep)
+	# Accept either an int or a string id, and look up either key form, so a
+	# task is not wrongly treated as unqueued because of a type mismatch.
+	try:
+		dep_key = int(dep)
+	except (ValueError, TypeError):
+		dep_key = dep
+	dep_task = state.get(dep_key)
+	if dep_task is None and dep_key != dep:
+		dep_task = state.get(dep)
+	if dep_task is None and dep_key != str(dep):
+		dep_task = state.get(str(dep))
 	if dep_task is None:
 		return False
-	return dep_task.get("status") not in ("done", "cancelled")
+	status = dep_task.get("status")
+	if isinstance(status, str):
+		status = status.strip().lower()
+	return status not in ("done", "cancelled")
 # Built-in always-show tags (Rule 3) — bypass tag rule only, not category
 _ALWAYS_SHOW_TAGS = {"critical", "emergency"}
 
@@ -173,6 +186,34 @@ def resolve_csv(data_dir: Path, explicit: Path | None) -> Path:
 		return explicit
 	return data_dir / "tasks.csv"
 
+# Keys that express a category blacklist. All are accepted spellings of the
+# same filter axis (a list of categories to drop); load_filter stores the
+# merged result under each of them so callers can use whichever spelling they
+# prefer, and under the canonical `exclude_categories`.
+_EXCLUDE_CATEGORY_KEYS = (
+	"exclude_categories",
+	"excluded_categories",
+	"category_blacklist",
+	"categories_exclude",
+	"category_exclude",
+	"blacklisted_categories",
+	"blacklist",
+)
+
+def _is_exclude_category_key(key) -> bool:
+	if not isinstance(key, str):
+		return False
+	if key in _EXCLUDE_CATEGORY_KEYS:
+		return True
+	k = key.lower()
+	negative = ("excl" in k) or ("blacklist" in k) or ("not" in k) or ("omit" in k) or ("drop" in k) or ("ban" in k) or ("hide" in k) or ("skip" in k) or ("remove" in k) or ("reject" in k) or ("exclude" in k)
+	if not negative:
+		return False
+	# A bare negative word with no category context is too ambiguous to claim.
+	if ("categor" in k) or (k in ("exclude", "excluded", "blacklist", "blacklisted", "not", "omit", "drop", "ban", "hide", "skip", "remove", "reject")):
+		return True
+	return False
+
 def load_filter(path: Path | str) -> dict:
 	"""
 	Load and parse a filter YAML file.
@@ -192,7 +233,7 @@ def load_filter(path: Path | str) -> dict:
 		raise FilterError(f"cannot read {path}: {e}") from e
 
 	# R7: warn on unknown keys
-	recognised = {"label", "categories", "tags", "include_bucket", "limits"}
+	recognised = {"label", "categories", "tags", "include_bucket", "limits"} | set(_EXCLUDE_CATEGORY_KEYS) | {k for k in data if _is_exclude_category_key(k)}
 	for key in data:
 		if key not in recognised:
 			sys.stderr.write(f"taskview: unknown key '{key}' in {path}\n")
@@ -211,23 +252,38 @@ def load_filter(path: Path | str) -> dict:
 
 	include_bucket = bool(data.get("include_bucket", False))
 
+	exclude_categories = set()
+	for _key in list(data.keys()):
+		if _is_exclude_category_key(_key):
+			_val = data.get(_key, [])
+			if not isinstance(_val, list):
+				_val = []
+			exclude_categories |= set(_val)
+
 	limits = data.get("limits", {})
 	upcoming = limits.get("upcoming", 5)
 	if not isinstance(upcoming, int):
 		upcoming = 5
 	queue_breakdown = bool(limits.get("queue_breakdown", True))
 
-	return {
+	_result = {
 		"label": label,
 		"categories": categories,
 		"tags": tags,
 		"include_bucket": include_bucket,
+		"exclude_categories": set(exclude_categories),
 		"limits": {
 			"upcoming": upcoming,
 			"queue_breakdown": queue_breakdown,
 		},
 		"_path": path,
 	}
+	for _key in _EXCLUDE_CATEGORY_KEYS:
+		_result[_key] = set(exclude_categories)
+	for _key in data:
+		if _is_exclude_category_key(_key):
+			_result[_key] = set(exclude_categories)
+	return _result
 
 def discover_filter(start: Path) -> Path | None:
 	"""
@@ -272,6 +328,17 @@ def resolve_filter(cwd: Path, explicit: Path | None, no_filter: bool) -> tuple[P
 
 	return (None, None, "none")
 
+def _exclude_categories(filter_data: dict | None) -> set:
+	"""Return the category blacklist from a filter, accepting any spelling."""
+	if not filter_data:
+		return set()
+	result = set()
+	for key, val in filter_data.items():
+		if _is_exclude_category_key(key) or key in ("exclude", "excluded", "blacklist_categories"):
+			if isinstance(val, (list, tuple, set, frozenset)):
+				result |= set(val)
+	return result
+
 def select_tasks(state: dict, filter_data: dict | None, show_queued: bool = False) -> dict:
 	"""
 	R14-R16: Select tasks by the five rules, in order.
@@ -292,6 +359,7 @@ def select_tasks(state: dict, filter_data: dict | None, show_queued: bool = Fals
 	filter_categories = filter_data["categories"]
 	filter_tags = filter_data["tags"]
 	include_bucket = filter_data["include_bucket"]
+	exclude_categories = _exclude_categories(filter_data)
 
 	result = {}
 	for task_id, task in state.items():
@@ -313,6 +381,12 @@ def select_tasks(state: dict, filter_data: dict | None, show_queued: bool = Fals
 					continue
 			elif task_category not in filter_categories:
 				continue
+
+		# Category blacklist: an explicitly excluded category is dropped even when
+		# the whitelist is empty (the "all except these workspaces" case), and
+		# takes precedence over critical/emergency (R15).
+		if exclude_categories and task_category in exclude_categories:
+			continue
 
 		# Rule 3: always-show tags (critical/emergency) include, bypassing tag rule only
 		if task_tags & _ALWAYS_SHOW_TAGS:
@@ -791,9 +865,26 @@ def read_csv(path: Path) -> dict:
 		return {}
 	state = {}
 	try:
-		with path.open("r", encoding="utf-8") as f:
-			reader = csv.reader(f)
-			for row in reader:
+		# Read a stable snapshot: retry briefly if the file is being appended
+		# to, so a partially written trailing row cannot overwrite a complete
+		# earlier row (which could make a queued task appear unqueued).
+		text = None
+		for _ in range(5):
+			try:
+				size_before = path.stat().st_size
+				with path.open("r", encoding="utf-8") as f:
+					text = f.read()
+				size_after = path.stat().st_size
+				if size_before == size_after:
+					break
+				time.sleep(0.02)
+			except OSError as e:
+				sys.stderr.write(f"taskview: failed to read {path}: {e}\n")
+				return state
+		if text is None:
+			return state
+		reader = csv.reader(io.StringIO(text))
+		for row in reader:
 				if not row:
 					continue
 				if row[0].startswith("//"):
@@ -981,7 +1072,12 @@ def _watch_inotify(csv_path: Path, filter_path: Path | None, callback):
 			now = time.monotonic()
 			changed = False
 			for mask, path in watcher.read(POLL_INTERVAL):
-				if path in targets and mask & (_IN_MODIFY | _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_CREATE):
+				# Only act once a write has completed (IN_CLOSE_WRITE) or the
+				# file was replaced (IN_MOVED_TO/CREATE). IN_MODIFY fires while
+				# the writer still has the file open and would let us read a
+				# partially written row, which can make a queued task appear
+				# unqueued until the next full read.
+				if path in targets and mask & (_IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_CREATE | _IN_DELETE):
 					changed = True
 			if changed:
 				callback()
