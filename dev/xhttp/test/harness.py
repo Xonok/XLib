@@ -7,7 +7,7 @@ Two jobs:
 1. Put `dev/` on sys.path so `from xhttp import xhttp` works, whatever
 	directory the suite is launched from. xhttp.py does `from ._ import ...`,
 	which only resolves when the library is imported as a package with
-	`dev/xhttp/` beneath it — the same way `dev/xcsv/tests/test_xcsv.py` does it.
+	`dev/xhttp/` beneath it — the same way `dev/xcsv/test/test_xcsv.py` does it.
 	`dev/` is a namespace package, so it needs no `__init__.py`.
 2. Provide the fakes and probes the tests need, so each test file stays about
 	HTTP behaviour and not about scaffolding.

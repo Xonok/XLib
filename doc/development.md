@@ -173,7 +173,7 @@ Traceability, both directions:
 
 Where they live: a library's tests go in a `test/` folder in its dev folder, not
 `tests/` — the human's ruling, 2026-09-30. `dev/xprod/` already complies; the
-other four dev libraries still use `tests/` and are being renamed (epiq `2VD2XZC`).
+all dev libraries now comply (`dev/xconf`, `dev/xcsv`, `dev/xschema`, `dev/xtest` renamed 2026-11-01).
 
 **How they are run: one command.**
 

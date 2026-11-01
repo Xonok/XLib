@@ -28,7 +28,7 @@ dev/xcsv/
 		__init__.py
 		csv_tok.py
 		csv_ser.py
-	tests/           tests (the ruling is `test/`; four libraries are being renamed)
+	test/            tests
 	SPEC.md          the map: modules, data flow, invariants, decisions
 	VERSIONS.md      one entry per release, newest first
 ```

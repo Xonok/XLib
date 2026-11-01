@@ -183,7 +183,7 @@ Not wrong, but the dual naming is confusing. Consider aligning with SPEC: rename
 
 **No tests exist for xcsv.** The repo has tests for `xschema`, `pybundle`, `xconf`, `xtest` but not `xcsv`. Given the tokenizer/serializer complexity and the schema migration path (v1→v2→v3), tests are essential before release.
 
-The existing test file `xcsv/tests/test_xcsv.py` is minimal (106 lines) and covers:
+The existing test file `xcsv/test/test_xcsv.py` is minimal (106 lines) and covers:
 - Basic tokenize/serialize
 - Schema parsing
 - Parse line with schema
