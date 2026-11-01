@@ -576,6 +576,25 @@ def parse_tool_calls_from_content(text):
 				out.append(call)
 		if out:
 			return out
+	# line-delimited JSON objects: a model may emit one call per line with
+	# nested argument objects, which the non-greedy brace regex above cannot
+	# span and the whole-body parse rejects as soon as there are two calls.
+	out = []
+	for line in text.splitlines():
+		line = line.strip().rstrip(",")
+		if not line.startswith(("{", "[")):
+			continue
+		try:
+			obj = json.loads(line)
+		except json.JSONDecodeError:
+			continue
+		items = obj if isinstance(obj, list) else [obj]
+		for it in items:
+			call = normalize_call(it)
+			if call:
+				out.append(call)
+	if out:
+		return out
 	# bash fallback: a fenced block that is not a recognized tool call and
 	# looks like a command (common when the model writes the command directly)
 	if "bash" in ENABLED_TOOLS:
