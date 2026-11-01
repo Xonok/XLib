@@ -46,27 +46,20 @@ if [ -n "$names" ] && ! printf '%s\n' "$names" | grep -qxF -- "$AGENT"; then
 	exit 1
 fi
 
-# Claim a slot for this launch. The slot number names the window, so two
-# terminals running the same agent stay distinguishable.
-STATE="/tmp/oc-agent/$AGENT"
-mkdir -p "$STATE"
+# Take this window's name from agent-coord. It is the one allocator: the number
+# in the title is the number every tool in the session reports, and the notes
+# file is the one that number names. Allocating it here would be a second
+# allocator, which is exactly the disagreement this replaces. The key is this
+# launcher's pid: it lives as long as the window, and the client that owns the
+# session is its child, so the window can be named before that client exists.
+self="$(readlink -f "$0")"
+coord="$(dirname "$self")/agent-coord.py"
+id="$(python3 "$coord" allocate --pid $$ --role "$AGENT")" \
+	|| die "could not allocate an instance for '$AGENT'"
+[ -n "$id" ] || die "agent-coord returned no id for '$AGENT'"
 
-for slotdir in "$STATE"/"$AGENT".*; do
-	[ -d "$slotdir" ] || continue
-	pidfile="$slotdir/pid"
-	[ -f "$pidfile" ] || { rm -rf "$slotdir"; continue; }
-	pid=$(<"$pidfile")
-	if ! kill -0 "$pid" 2>/dev/null; then rm -rf "$slotdir"; fi
-done
-
-N=""
-for i in $(seq 1 99); do
-	if mkdir "$STATE/$AGENT.$i" 2>/dev/null; then N=$i; break; fi
-done
-[ -n "$N" ] || die "all 99 slots busy for '$AGENT'"
-
-echo $$ > "$STATE/$AGENT.$N/pid"
-TITLE="$AGENT"; [ "$N" -gt 1 ] && TITLE="$AGENT-$N"
+name="${id##*/}"
+if [ "${name##*-}" = "1" ]; then TITLE="$AGENT"; else TITLE="$name"; fi
 printf '\033]2;%s\007' "$TITLE"
 # OpenCode v2 dropped OPENCODE_DISABLE_TERMINAL_TITLE and sets its own title
 # ("OC | <agent>") over ours. Turn that off for this window only, so the
@@ -78,10 +71,16 @@ if [ -n "$existing_cli_config" ] && printf '%s' "$existing_cli_config" | jq -e .
 else
 	export OPENCODE_CLI_CONFIG_CONTENT='{"terminal":{"title":false}}'
 fi
+# Three names for one identity, exported so the session carries all of them: the
+# role the tool files and the board use, the id agent-coord allocated, and the
+# window name the title is made of (a `/new` session has no title of its own,
+# and this is what lets the title plugin put the window's name on it).
 export OPENCODE_AGENT_ROLE="$AGENT"
+export OPENCODE_AGENT_ID="$id"
+export OPENCODE_AGENT_NAME="$TITLE"
 
 cleanup() {
-	rm -rf "$STATE/$AGENT.$N"
+	python3 "$coord" free --pid $$ >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -117,8 +116,8 @@ session_id=$(printf '%s' "$created" | jq -r '.data.id // empty' 2>/dev/null)
 # Attach to the session just created. Run in the current project directory
 # (agents are global via ~/.config/opencode/agent).
 #
-# Run the TUI in the background so the script can wait for it and hold its slot
-# until the window closes.
+# Run the TUI in the background so the script can wait for it and hold the
+# window's identity until the window closes.
 #
 # An asynchronous command is handed /dev/null for stdin when job control is off,
 # which is exactly this script: the TUI opens, draws, and never sees a keystroke,
