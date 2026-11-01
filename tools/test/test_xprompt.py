@@ -50,6 +50,22 @@ class OptionTests(unittest.TestCase):
 		self.assertEqual(calls[0]["function"]["name"], "ls")
 		self.assertEqual(calls[0]["function"]["arguments"], {"path": "."})
 
+	def test_parses_multiple_unfenced_json_calls(self):
+		content = "\n".join([
+			'{"name": "read", "arguments": {"path": "csvsum.py"}}',
+			'{"name": "write", "arguments": {"path": "csvsum.py", "content": "x"}}',
+			'{"name": "bash", "arguments": {"command": "python3 test_csvsum.py", "timeout": 30}}',
+		])
+		calls = xprompt.parse_tool_calls_from_content(content)
+		self.assertEqual([c["function"]["name"] for c in calls], ["read", "write", "bash"])
+		self.assertEqual(calls[1]["function"]["arguments"]["path"], "csvsum.py")
+		self.assertEqual(calls[2]["function"]["arguments"]["timeout"], 30)
+
+	def test_parses_single_unfenced_nested_json_call(self):
+		calls = xprompt.parse_tool_calls_from_content('{"name": "read", "arguments": {"path": "a.txt"}}')
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0]["function"]["arguments"], {"path": "a.txt"})
+
 class PromptFileTests(unittest.TestCase):
 	def test_parse_args_keeps_prompt_file_order(self):
 		_, segments, _ = xprompt.parse_args(["m", "--prompt", "a", "--prompt-file", "f.txt", "--prompt", "b"])
