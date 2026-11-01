@@ -233,6 +233,14 @@ def fetch_show(model, host=None):
 	return data
 
 
+def display_name(name):
+	# Ollama stores an untagged model as `<name>:latest`; the tag is the
+	# registry's default, not part of the name the user chose.
+	if name.endswith(":latest"):
+		return name[:-len(":latest")]
+	return name
+
+
 def list_models(detail=False, host=None):
 	data = fetch_tags(host)
 	models = data.get("models", [])
@@ -250,12 +258,13 @@ def list_models(detail=False, host=None):
 				raise
 			except Exception as e:
 				show_data[name] = {}
-	width = max(len(m.get("name", "")) for m in models)
+	width = max(len(display_name(m.get("name", ""))) for m in models)
 	param_width = 8
 	quant_width = 10
 	ctx_width = 8
-	for m in sorted(models, key=lambda x: x.get("name", "")):
+	for m in sorted(models, key=lambda x: display_name(x.get("name", ""))):
 		name = m.get("name", "")
+		shown = display_name(name)
 		size = human_size(m.get("size", 0))
 		caps = ", ".join(m.get("capabilities", []))
 		details = m.get("details", {}) or {}
@@ -268,7 +277,7 @@ def list_models(detail=False, host=None):
 		ctx = details.get("context_length")
 		if ctx is None:
 			ctx = "-"
-		row = f"{name:<{width}}  {size:>6}  {str(param):>{param_width}}  {str(quant):<{quant_width}}  {str(ctx):>{ctx_width}}"
+		row = f"{shown:<{width}}  {size:>6}  {str(param):>{param_width}}  {str(quant):<{quant_width}}  {str(ctx):>{ctx_width}}"
 		if detail:
 			sd = show_data.get(name, {}) or {}
 			params_str = sd.get("parameters", "") if isinstance(sd, dict) else ""
