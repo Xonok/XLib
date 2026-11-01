@@ -6,6 +6,12 @@ Don't change files that carry uncommitted changes you did not make. Before your 
 
 The per-person state files live in the private Agents workspace at `personal/<person>/XLib/`; this checkout carries none, so there is nothing here to exempt from the dirty-file rule. The exemption and its reasoning are in that workspace's own working-tree rule (`KK8RRNQ`, 2026-10-28).
 
+## The root checkout stays on `master`
+
+**Agents must not move the main (root) checkout off `master`.** No `git switch`, no changing HEAD, no checking out another branch in it — unless the human explicitly authorizes it in the current conversation. The human always works on `master`; other branches are for agent work when they need them, and the human only goes to another branch when they explicitly want to.
+
+This rule is about **branch movement**, not about avoiding changes. Editing files on `master` is normal and expected; the human does most of their work there. Worktrees (`.work/<ticket>-<slug>`) exist for work that might break something — the human's system, or a tool they depend on — not as a default for routine work. If you need a different branch, make a worktree; do not move the checkout the human is standing in. (Human, 2026-11-01.)
+
 ## The boundary is the worktree
 
 **Work in a worktree, one per ticket.** `git worktree add .work/<ticket>-<slug> -b fix/<ticket>-<slug> master` gives you your own checkout, so two agents cannot edit one file in one place, and a commit in one cannot land on another's branch. The root checkout is shared, and so is its **index**: a commit made there can carry another session's staged work under your subject. That happened on 2026-10-21, and the recovery kept both works.
