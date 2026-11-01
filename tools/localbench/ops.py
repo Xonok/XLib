@@ -7,6 +7,7 @@ page a speed and memory figure.
 
     ops.py --models m1,m2 --out DIR [--xprompt PATH] [--host H] [--threads 4] [--ctx 8192]
     ops.py --concurrency m1,m2,m3 --out DIR [same options] [--model-option MODEL:KEY=VALUE]
+    ops.py --stress m1,m2,m3 --out DIR [same options] [--stress-minutes 10]
 
 --model-option applies to one model only and wins over the shared options, e.g.
 --model-option gemma4:e4b:num_gpu=0 pins the model off the card. The effective option
@@ -72,11 +73,21 @@ def api_ps(host):
 	except Exception:
 		return {"models": []}
 
-def ps_entry(host, model):
-	for m in api_ps(host).get("models", []):
-		if m.get("name", "").split(":")[0] == model.split(":")[0] or m.get("name") == model or m.get("model") == model:
+def ps_lookup(ps, model):
+	"""Exact tag match, tolerating a `:latest` suffix on either side.
+
+	Matching the family alone (`gemma4:e4b` against `gemma4:12b`) silently returns the
+	wrong entry when two tags of one family are resident, which the stress summary would
+	then report as memory.
+	"""
+	for m in ps.get("models", []):
+		name = m.get("name") or m.get("model") or ""
+		if name.removesuffix(":latest") == model.removesuffix(":latest"):
 			return {"size": m.get("size"), "size_vram": m.get("size_vram")}
 	return None
+
+def ps_entry(host, model):
+	return ps_lookup(api_ps(host), model)
 
 def call(xprompt, model, prompt, host, threads, ctx, num_predict=64, max_turns=1, extra=None):
 	base = ["temperature=0", "seed=42", f"num_ctx={ctx}", f"num_thread={threads}", f"num_predict={num_predict}"]
@@ -154,10 +165,93 @@ def concurrency(xprompt, models, out_dir, host, threads, ctx, rounds=3, model_op
 		json.dump(result, f, indent=1, sort_keys=True)
 	return result
 
+STRESS_PLAN = ((100, 64), (500, 96), (1000, 64))
+
+def proc_sample():
+	"""Load, memory and the counters that only move under real pressure."""
+	sample = {"ts": round(time.time(), 3), "loadavg": list(os.getloadavg())}
+	with open("/proc/vmstat") as f:
+		for line in f:
+			name, _, value = line.partition(" ")
+			if name in ("pswpin", "pswpout", "oom_kill"):
+				sample[name] = int(value)
+	with open("/proc/meminfo") as f:
+		for line in f:
+			name, _, value = line.partition(":")
+			if name in ("MemAvailable", "SwapFree"):
+				sample[name] = int(value.split()[0])
+	return sample
+
+def stress_drift(calls):
+	"""Per-target drift, so a rotating prompt mix cannot fake a trend.
+
+	Comparing the first and last third of all calls confounds elapsed time with target
+	length, because the rotation gives each third a different mix: 12 rounds of a 3-cycle
+	make the first third [100, 500, 1000, 100] and the last [1000, 100, 500, 1000].
+	"""
+	drifts, by_target = [], {}
+	for target in sorted({c["target"] for c in calls}):
+		walls = [c["wall_s"] for c in calls if c["target"] == target]
+		half = max(1, len(walls) // 2)
+		first, last = median(walls[:half]), median(walls[-half:])
+		by_target[str(target)] = {"calls": len(walls), "wall_median_s": median(walls),
+			"drift_x": round(last / first, 2) if first else None}
+		if first:
+			drifts.append(last / first)
+	return by_target, round(median(drifts), 2) if drifts else None
+
+def stress(xprompt, models, out_dir, host, threads, ctx, minutes=10, model_options=None):
+	"""Sustained mixed calls on a resident set, for the acceptance question.
+
+	The concurrency arm proves three short calls overlap; this asks whether they keep
+	overlapping under load, so latency drift, swap and OOM are the evidence. Rounds are
+	the unit, so the run may overrun the clock by one round of the slowest model.
+	"""
+	model_options = model_options or {}
+	for m in models:
+		call(xprompt, m, count_prompt(f"warm-{m}"), host, threads, min(ctx, 2048), num_predict=32, extra=model_options.get(m))
+	before = proc_sample()
+	ps_before = api_ps(host)
+	deadline = time.time() + minutes * 60
+	calls, samples, round_no = [], [], 0
+	while time.time() < deadline:
+		round_no += 1
+		plan = [(m, *STRESS_PLAN[(round_no + i) % len(STRESS_PLAN)]) for i, m in enumerate(models)]
+		with ThreadPoolExecutor(max_workers=len(models)) as ex:
+			futs = [ex.submit(call, xprompt, m, human_filler(target, tag=f"stress-{round_no}-{m}"), host, threads,
+				min(ctx, max(2048, target * 2)), num_predict=num_predict, extra=model_options.get(m))
+				for m, target, num_predict in plan]
+			rows = [f.result() for f in futs]
+		for (m, target, _), row in zip(plan, rows):
+			calls.append({"round": round_no, "model": m, "target": target, **row})
+		samples.append(proc_sample())
+	after = proc_sample()
+	ps_after = api_ps(host)
+	summary = {}
+	for m in models:
+		mcalls = [c for c in calls if c["model"] == m]
+		by_target, drift = stress_drift(mcalls)
+		entry = ps_lookup(ps_after, m) or {}
+		summary[m] = {"calls": len(mcalls),
+			"failures": sum(1 for c in mcalls if c.get("error") or c.get("exit") != 0),
+			"wall_median_s": median([c["wall_s"] for c in mcalls]),
+			"by_target": by_target, "drift_x": drift,
+			"size_vram_mb": round((entry.get("size_vram") or 0) / 2**20) if entry else None,
+			"size_ram_mb": round((entry.get("size") or 0) / 2**20) if entry else None}
+	result = {"models": models, "minutes": minutes, "rounds": round_no,
+		"options": {m: list(model_options.get(m) or []) for m in models},
+		"before": before, "after": after, "ps_before": ps_before, "ps_after": ps_after,
+		"summary": summary, "calls": calls, "samples": samples}
+	with open(os.path.join(out_dir, "stress.json"), "w", encoding="utf-8") as f:
+		json.dump(result, f, indent=1, sort_keys=True)
+	return result
+
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--models", default=None)
 	ap.add_argument("--concurrency", default=None)
+	ap.add_argument("--stress", default=None)
+	ap.add_argument("--stress-minutes", type=int, default=10)
 	ap.add_argument("--out", required=True)
 	ap.add_argument("--xprompt", default=None)
 	ap.add_argument("--host", default=None)
@@ -165,8 +259,8 @@ def main():
 	ap.add_argument("--ctx", type=int, default=8192)
 	ap.add_argument("--model-option", action="append", default=[], metavar="MODEL:KEY=VALUE")
 	args = ap.parse_args()
-	if not args.models and not args.concurrency:
-		fail("pass --models and/or --concurrency")
+	if not args.models and not args.concurrency and not args.stress:
+		fail("pass --models, --concurrency and/or --stress")
 	xprompt = resolve_xprompt(args.xprompt)
 	os.makedirs(args.out, exist_ok=True)
 	model_options = {}
@@ -183,6 +277,10 @@ def main():
 		models = [x.strip() for x in args.concurrency.split(",") if x.strip()]
 		r = concurrency(xprompt, models, args.out, args.host, args.threads, args.ctx, model_options=model_options)
 		print(json.dumps(r["concurrent"], indent=1))
+	if args.stress:
+		models = [x.strip() for x in args.stress.split(",") if x.strip()]
+		r = stress(xprompt, models, args.out, args.host, args.threads, args.ctx, args.stress_minutes, model_options=model_options)
+		print(json.dumps(r["summary"], indent=1))
 
 if __name__ == "__main__":
 	main()
