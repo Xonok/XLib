@@ -38,9 +38,10 @@ and takes a file-like sink, so the `bundle(entry) -> str` this script used to ca
 is bridged here rather than added to the bundler — the spec's seven functions stay
 as written, which was the human's ruling on 2026-10-17.
 
-All five libraries in `dev/` bundle and every bundle is xlint-clean, measured
-2026-10-17. Nothing has been released since: the last six files in `xlib/` predate
-the rewrite.
+The five released libraries (xconf, xcsv, xhttp, xschema, xtest) bundle and every
+bundle is xlint-clean, measured 2026-10-17. Releases since then (xhttp 1_0_1 and
+later, xtest 1_1_0, xcsv 1_1_0) were produced by this script, so the "nothing
+released since the rewrite" note above no longer holds.
 
 It does **not** resolve imports. Cross-library dependencies must already be written
 as versioned imports (`from xlib import somelib_5_9_27`) in the dev library's own
