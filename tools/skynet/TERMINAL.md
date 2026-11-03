@@ -15,6 +15,12 @@ numbers still add up.
 	shared-memory files that SQLite opens and closes for a read cannot wake the
 	tool into redrawing itself. Polling is the fallback for a kernel that has no
 	inotify, not a parallel refresh path.
+- **A burst of writes is one frame.** Frames are floored to one a second, and
+	the wakeups in between coalesce into the next one; a resize and a due quota
+	refresh are drawn at once. A redraw re-reads only the messages created in
+	the last fifteen minutes and the ones that have not finished, and
+	reconciles against the whole window when the row count changes or every ten
+	minutes — so the cost does not grow with the 28-day window on every write.
 - **Fits the height.** The two tables split the rows the pane has; a section
 	that leaves rows out says `… +N more`; below six lines the display falls
 	back to the one-line counts. A full frame never scrolls its header away.
@@ -46,4 +52,5 @@ numbers still add up.
 
 Enforced by `test/test_render.py` (height and width sweeps),
 `test/test_terminal.py` (cursor, alternate screen, inotify),
+`test/test_stats.py` (the watch's incremental read),
 `test/test_render_table.py` and `test/test_quota.py` (the quota line).
