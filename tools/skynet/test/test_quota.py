@@ -43,6 +43,22 @@ def _db(folder, rows):
 	conn.close()
 	return str(path)
 
+def _messages(folder, rows):
+	"""A temporary message database; each row is (time, model id, cost)."""
+	path = Path(folder) / "messages.db"
+	conn = sqlite3.connect(path)
+	conn.execute("CREATE TABLE session_message (id TEXT, type TEXT, time_created INTEGER, time_updated INTEGER, session_id TEXT, data TEXT)")
+	for index, (created, model, cost) in enumerate(rows):
+		stamp = int(created.timestamp() * 1000)
+		data = json.dumps({"model": {"providerID": "cursor", "id": model}, "cost": cost})
+		conn.execute(
+			"INSERT INTO session_message (id, type, time_created, time_updated, session_id, data) "
+			"VALUES (?, 'assistant', ?, ?, 'ses_1', ?)",
+			(f"msg_{index}", stamp, stamp, data))
+	conn.commit()
+	conn.close()
+	return str(path)
+
 def _go_value(access=ACCESS, expires=None, server="https://opencode.ai/console"):
 	"""The JSON an opencode credential row carries."""
 	if expires is None:
@@ -253,6 +269,88 @@ def test_an_openrouter_http_failure_is_unavailable():
 	credential = {"state": "ok", "key": OR_KEY}
 	openrouter = skynet.openrouter_quota(credential, _Fetch({OR_URL: skynet._HTTPFailure(403)}))
 	xtest.equal(openrouter["state"], "unavailable", "403 leaves the field unknown")
+
+# --- Cursor ----------------------------------------------------------------
+
+CURSOR_CONFIG = {
+	"limit": 80,
+	"period_end": "2026-10-31T00:00:00+00:00",
+	"period_days": 30,
+}
+
+def _cursor_sample(folder, rows, state=None):
+	"""`cursor_quota` against a temporary message database and state path."""
+	db = _messages(folder, rows)
+	path = Path(folder) / "quota.json"
+	if state is not None:
+		_save(path, state)
+	quota = skynet.cursor_quota(now=NOW, db_path=db, config=CURSOR_CONFIG, state_path=str(path))
+	pace = skynet.compute_pace(quota, quota["day_start_used"], NOW)
+	return quota, pace, path
+
+def test_cursor_today_is_the_days_spend_even_on_a_late_start():
+	# The regression: a day of usage followed by the first read at 12:00 used
+	# to set the baseline to the whole day and show today at 0%.
+	with tempfile.TemporaryDirectory() as folder:
+		quota, pace, _path = _cursor_sample(folder, [
+			(_utc(2026, 10, 25, 23), "grok-4.6", 5.0),
+			(_utc(2026, 10, 26, 9), "grok-4.6", 1.0),
+			(_utc(2026, 10, 26, 10), "claude-sonnet-5-5", 1.0),
+		])
+	xtest.equal(quota["used"], 700_000_000, "the period meter is every message in the period")
+	xtest.equal(quota["day_start_used"], 500_000_000, "the baseline is the spend before today")
+	xtest.equal(round(pace["today"]), 75, "today's $2 is 75% of the $2.67 daily allowance")
+
+def test_cursor_today_overrides_a_baseline_written_at_the_first_read():
+	# A file written before the fix carries day_start_used == last_used; the
+	# exact day spend repairs it instead of keeping today at zero.
+	with tempfile.TemporaryDirectory() as folder:
+		state = {"version": 1, "cursor": {
+			"day": "2026-10-26",
+			"day_start_used": 200_000_000,
+			"last_used": 200_000_000,
+			"last_seen": int(NOW.timestamp()),
+			"period_start": "2026-10-01T00:00:00+00:00",
+		}}
+		quota, pace, path = _cursor_sample(folder, [
+			(_utc(2026, 10, 26, 9), "grok-4.6", 2.0),
+		], state=state)
+		saved = _load(path)["cursor"]["day_start_used"]
+	xtest.equal(quota["day_start_used"], 0, "the day's spend sets the baseline, not the first reading")
+	xtest.equal(round(pace["today"]), 75, "the day is counted after the repair")
+	xtest.equal(saved, 0, "the repaired baseline is persisted")
+
+def test_cursor_pools_split_grok_and_composer_from_the_rest():
+	with tempfile.TemporaryDirectory() as folder:
+		quota, _pace, _path = _cursor_sample(folder, [
+			(_utc(2026, 10, 25, 9), "grok-4.6", 1.0),
+			(_utc(2026, 10, 26, 9), "grok-4.6", 1.0),
+			(_utc(2026, 10, 26, 10), "claude-sonnet-5-5", 2.0),
+		])
+		pool = dict(quota, used=quota["cursor_used"])
+		other = dict(quota, used=quota["other_used"])
+		pool_today = skynet.compute_pace(pool, quota["cursor_day_start_used"], NOW)["today"]
+		other_today = skynet.compute_pace(other, quota["other_day_start_used"], NOW)["today"]
+	xtest.equal((quota["cursor_used"], quota["other_used"]), (200_000_000, 200_000_000), "grok is the pool and the rest is other")
+	xtest.equal(round(pool_today), 38, "yesterday's pool spend is not today's")
+	xtest.equal(round(other_today), 75, "today's $2 of other is 75%")
+
+def test_cursor_without_a_state_path_still_computes_the_day():
+	with tempfile.TemporaryDirectory() as folder:
+		db = _messages(folder, [(_utc(2026, 10, 26, 9), "grok-4.6", 2.0)])
+		quota = skynet.cursor_quota(now=NOW, db_path=db, config=CURSOR_CONFIG)
+		pace = skynet.compute_pace(quota, quota["day_start_used"], NOW)
+	xtest.equal(quota["state"], "ok", "a sample without a state file is still a sample")
+	xtest.equal(round(pace["today"]), 75, "the day share comes from the messages alone")
+
+def test_cursor_usage_before_the_period_is_not_counted():
+	with tempfile.TemporaryDirectory() as folder:
+		quota, _pace, _path = _cursor_sample(folder, [
+			(_utc(2026, 9, 30, 12), "grok-4.6", 9.0),
+			(_utc(2026, 10, 26, 9), "grok-4.6", 2.0),
+		])
+	xtest.equal(quota["used"], 200_000_000, "the period meter starts at the period start")
+	xtest.equal(quota["day_start_used"], 0, "the older message is neither period nor day spend")
 
 # --- pace ------------------------------------------------------------------
 

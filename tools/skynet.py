@@ -348,6 +348,10 @@ def _to_microcents(value):
 		return int(round(number * MICROCENTS_PER_DOLLAR))
 	return int(round(number))
 
+def _dollars_to_microcents(value):
+	"""A dollar amount as microcents, rounded to the nearest one."""
+	return int(round(value * MICROCENTS_PER_DOLLAR))
+
 def _parse_time_any(value):
 	"""A time as a datetime, accepting datetimes, ISO strings and timestamps."""
 	if isinstance(value, datetime.datetime):
@@ -588,59 +592,76 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		return {"state": "unavailable"}
 	start_ts = start.timestamp()
 	end_ts = end.timestamp()
+	# The UTC day the quota line calls "today". The message timestamps give
+	# the day's spend exactly, so a baseline sampled at the first read is not
+	# needed and cannot lose usage that happened before that read.
+	today_start_ts = max(start_ts, now.astimezone(datetime.timezone.utc).replace(
+		hour=0, minute=0, second=0, microsecond=0).timestamp())
 	used_dollars = 0.0
+	day_dollars = 0.0
 	cursor_pool_dollars = 0.0
+	cursor_pool_day_dollars = 0.0
 	other_pool_dollars = 0.0
+	other_pool_day_dollars = 0.0
 	for created, model_id, cost in collected:
 		if not (start_ts <= created < end_ts):
 			continue
+		today = created >= today_start_ts
 		used_dollars += cost
+		if today:
+			day_dollars += cost
 		lowered = model_id.lower()
 		if "grok" in lowered or "composer" in lowered:
 			cursor_pool_dollars += cost
+			if today:
+				cursor_pool_day_dollars += cost
 		else:
 			other_pool_dollars += cost
-	used_micro = int(round(used_dollars * MICROCENTS_PER_DOLLAR))
-	cursor_pool_micro = int(round(cursor_pool_dollars * MICROCENTS_PER_DOLLAR))
-	other_pool_micro = int(round(other_pool_dollars * MICROCENTS_PER_DOLLAR))
-	baseline = None
+			if today:
+				other_pool_day_dollars += cost
+	used_micro = _dollars_to_microcents(used_dollars)
+	day_micro = _dollars_to_microcents(day_dollars)
+	cursor_pool_micro = _dollars_to_microcents(cursor_pool_dollars)
+	cursor_pool_day_micro = _dollars_to_microcents(cursor_pool_day_dollars)
+	other_pool_micro = _dollars_to_microcents(other_pool_dollars)
+	other_pool_day_micro = _dollars_to_microcents(other_pool_day_dollars)
+	source = {
+		"state": "ok",
+		"product": "cursor",
+		"start": start,
+		"end": end,
+		"period_start": start.isoformat(),
+		"limit": limit_micro,
+		"used": used_micro,
+		"days_left": _days_left(end, now),
+		"cursor_used": cursor_pool_micro,
+		"other_used": other_pool_micro,
+	}
+	baseline = update_day_state(state_path, source, now, key="cursor", day_used=day_micro)
+	# Per-pool day baselines, so each pool gets its own pace/today.
+	cursor_pool_source = {
+		"state": "ok",
+		"product": "cursor",
+		"start": start,
+		"end": end,
+		"period_start": start.isoformat(),
+		"limit": limit_micro,
+		"used": cursor_pool_micro,
+		"days_left": _days_left(end, now),
+	}
+	other_pool_source = {
+		"state": "ok",
+		"product": "cursor",
+		"start": start,
+		"end": end,
+		"period_start": start.isoformat(),
+		"limit": limit_micro,
+		"used": other_pool_micro,
+		"days_left": _days_left(end, now),
+	}
+	cursor_pool_baseline = update_day_state(state_path, cursor_pool_source, now, key="cursor_pool", day_used=cursor_pool_day_micro)
+	other_pool_baseline = update_day_state(state_path, other_pool_source, now, key="cursor_other", day_used=other_pool_day_micro)
 	if state_path is not None:
-		source = {
-			"state": "ok",
-			"product": "cursor",
-			"start": start,
-			"end": end,
-			"period_start": start.isoformat(),
-			"limit": limit_micro,
-			"used": used_micro,
-			"days_left": _days_left(end, now),
-			"cursor_used": cursor_pool_micro,
-			"other_used": other_pool_micro,
-		}
-		baseline = update_day_state(state_path, source, now, key="cursor")
-		# Per-pool day baselines, so each pool gets its own pace/today.
-		cursor_pool_source = {
-			"state": "ok",
-			"product": "cursor",
-			"start": start,
-			"end": end,
-			"period_start": start.isoformat(),
-			"limit": limit_micro,
-			"used": cursor_pool_micro,
-			"days_left": _days_left(end, now),
-		}
-		other_pool_source = {
-			"state": "ok",
-			"product": "cursor",
-			"start": start,
-			"end": end,
-			"period_start": start.isoformat(),
-			"limit": limit_micro,
-			"used": other_pool_micro,
-			"days_left": _days_left(end, now),
-		}
-		cursor_pool_baseline = update_day_state(state_path, cursor_pool_source, now, key="cursor_pool") if state_path is not None else None
-		other_pool_baseline = update_day_state(state_path, other_pool_source, now, key="cursor_other") if state_path is not None else None
 		# Persist the configuration alongside the day state.
 		try:
 			stored = _load_day_state(state_path, "cursor")
@@ -738,7 +759,7 @@ def _write_day_state(state_path, go_state, key="go"):
 		file.write("\n")
 	os.replace(temporary, path)
 
-def update_day_state(state_path, go, now, key="go"):
+def update_day_state(state_path, go, now, key="go", day_used=None):
 	"""The reading today is measured against, persisted for the next run.
 
 	The provider has no daily history, so the first successful read of a new
@@ -746,6 +767,12 @@ def update_day_state(state_path, go, now, key="go"):
 	as the previous day. A missing baseline for the current day is filled the
 	same way, so a cold start does not leave `today` unavailable. A new paid
 	period or a meter that fell restarts the day at the current reading.
+
+	`day_used` is for a source that can report the day's spend from history —
+	Cursor's message log has the timestamps. The baseline is then derived from
+	that spend rather than from the first reading, so a late first read, a
+	restart or a baseline written by an earlier version cannot lose the day.
+	Without a `state_path` the baseline is computed and returned but not saved.
 	"""
 	if go["state"] != "ok":
 		return None
@@ -754,7 +781,9 @@ def update_day_state(state_path, go, now, key="go"):
 	today = utc.date().isoformat()
 	last_used = _number(stored.get("last_used"))
 	baseline = _number(stored.get("day_start_used")) if stored.get("day") == today else None
-	if stored.get("period_start") != go["period_start"]:
+	if day_used is not None:
+		baseline = max(0, go["used"] - max(0, int(day_used)))
+	elif stored.get("period_start") != go["period_start"]:
 		# The provider reset the monthly meter. Keep the day continuous by
 		# carrying the pre-reset spend into the new baseline, so today's share
 		# does not jump back to zero in the middle of the day.
@@ -776,10 +805,11 @@ def update_day_state(state_path, go, now, key="go"):
 	for field in ("limit", "period_end", "period_days", "period_length", "product"):
 		if field in stored and field not in state:
 			state[field] = stored[field]
-	try:
-		_write_day_state(state_path, state, key)
-	except (OSError, TypeError, ValueError):
-		pass
+	if state_path is not None:
+		try:
+			_write_day_state(state_path, state, key)
+		except (OSError, TypeError, ValueError):
+			pass
 	return baseline
 
 def sample_quota(now=None, state_path=None, fetch=None, db_path=None, cursor_config=None, cursor_db_path=None):

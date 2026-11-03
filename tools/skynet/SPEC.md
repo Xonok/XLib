@@ -30,6 +30,10 @@ The rate/share split is the human's 2026-10-26 ruling: pacing is done by
 stopping for the day or switching to OpenRouter, so the useful number is how
 much of the day's allowance is gone.
 
+Cursor is a third source (`Y23C99K`): its spend is the local message log
+rather than a provider meter, and it carries the same used/pace/today
+figures, split into the Cursor pool and everything else.
+
 ## Architecture
 
 The quota code stays in `tools/skynet.py` (DRAFT Q9 A). It is one feature in
@@ -92,6 +96,24 @@ dollars and is not shown on the first line (DRAFT Q5 A, Q6 A).
 
 The counter appears to reset at UTC midnight. Use it as the provider reports it;
 do not re-derive a day from local request counts (DRAFT Q6 A).
+
+### Cursor
+
+The local message log, read-only: `session_message` rows of type `assistant`
+whose `model.providerID` is `cursor`, with `time_created` in the current
+period. `used` is the sum of their `cost`. There is no provider meter: the
+limit and the period end are configuration in `quota.json`, rolled forward by
+the period length when `now` passes the end (the default is `$80`, ending on
+the 16th). Q7's provider-counter rule is reversed for Cursor only.
+
+The spend is split into the Cursor pool (a model id containing `grok` or
+`composer`) and everything else (`cursor/other`), each with its own pace and
+today.
+
+The day share is exact rather than sampled: the message timestamps give the
+current UTC day's spend, so a late first read, a restart or an old state file
+cannot lose the day. The persisted baseline is derived from it
+(`used - day_used`, clamped at zero).
 
 ### Credentials
 
@@ -426,6 +448,27 @@ characters.
 	does not prevent the render.
 - **R7.4** A successful Go read updates the day state in both modes.
 
+### Cursor
+
+Numbered after R8 because the section was added by `Y23C99K`; the existing
+rule ids keep their numbers.
+
+- **R9.1** Read `session_message` rows of type `assistant` whose
+	`model.providerID` is `cursor`, read-only, with `time_created` in the
+	current period.
+- **R9.2** `used` is the sum of their `cost`; the limit and period end come
+	from `quota.json`, rolled forward by the period length at the end. An
+	empty log with no configuration is `absent`.
+- **R9.3** Split the spend into the pool (`grok`, `composer`) and
+	`cursor/other`, each with its own `used`, pace and today.
+- **R9.4** Derive today from the messages on the current UTC day, not from a
+	baseline taken at the first read; a late first read, a restart or a stale
+	baseline cannot change it.
+- **R9.5** Persist the derived baseline (`used - day_used`, at least zero) so
+	the state file agrees with the meter.
+- **R9.6** When Cursor is `ok` it is the source of pace and today; Go is a
+	sibling used/limit field.
+
 ### Tests and docs
 
 - **R8.1** Tests use `xtest`; no test touches the network or the real
@@ -453,7 +496,7 @@ characters.
 | Q4 | Width fallback | B — abbreviate first, then drop |
 | Q5 | Free usage | A — internal only; no free field |
 | Q6 | OpenRouter day | A — use the API's UTC-day counter |
-| Q7 | Quota source | A — provider counters only |
+| Q7 | Quota source | A — provider counters only; Cursor's local `cost` column is the exception (`Y23C99K`) |
 | Q8 | API failure | A — `?` for configured-but-unreadable; omit unconfigured |
 | Q9 | Code layout | A — keep the quota code in `skynet.py` |
 | Q10 | 5-hour and week meters | A — do not show them on the first line |
@@ -463,7 +506,7 @@ characters.
 - Token refresh and any write to `opencode.db` (Q1 A).
 - Free-usage display; the provider counters already exclude free usage (Q5 A).
 - A local-day OpenRouter counter (Q6 A).
-- Quota dollars from the local `cost` column (Q7 A).
+- Quota dollars from the local `cost` column, except Cursor (Q7 A, `Y23C99K`).
 - The 5-hour and week meters on the first line (Q10 A).
 - A background fetch thread.
 - Per-model quota history; the API has no daily history.
@@ -478,6 +521,8 @@ characters.
 - The Go meter has no daily history; a cold start mid-day attributes the
 	usage before its first read to the previous day, so `today` starts at 0%
 	from that read rather than covering the whole calendar day.
+- Cursor's day share covers the messages the local log still holds; a message
+	deleted from the log takes its cost out of both the period and the day.
 - The Go meter may lag; the day share moves only when the meter does, so it can
 	jump in a batch rather than smoothly.
 - The Go meter is not Zen list price; quota dollars are the meter's unit.
