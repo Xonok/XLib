@@ -12,7 +12,6 @@ goes to the section that has more to show.
 Terminal contract: TERMINAL.md.
 """
 import argparse,contextlib,ctypes,datetime,json,math,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
-from collections import defaultdict
 from pathlib import Path
 
 NAME = "Skynet"
@@ -28,6 +27,10 @@ _CLEAR_SCREEN = "\033[2J\033[H"
 _ENTER_WATCH = "\033[?25l\033[?1049h"
 _LEAVE_WATCH = "\033[?25h\033[?1049l"
 _POLL_SECONDS = 1.0
+# The floor between frames while the database is being written: a burst of
+# writes redraws once, not once per write. A resize and the quota refresh are
+# not held back by it.
+_REDRAW_FLOOR_SECONDS = 1.0
 _FALLBACK_SIZE = (80, 24)
 _EVENT_HEADER = struct.Struct("=iIII")
 _IN_MODIFY = 0x00000002
@@ -1193,6 +1196,20 @@ _STATS_FIELDS = """json_extract(data, '$.model.id'),
 _WINDOW_ROWS_QUERY = f"SELECT {_STATS_FIELDS} FROM session_message WHERE type = 'assistant' AND time_created >= ? ORDER BY time_created"
 _WINDOW_STAMPS_QUERY = "SELECT id, time_updated FROM session_message WHERE type = 'assistant' AND time_created >= ?"
 _CHANGED_ROWS_QUERY = f"SELECT id, time_updated, {_STATS_FIELDS} FROM session_message WHERE id IN "
+# What a watch redraw re-reads: the messages created within this many seconds,
+# and the ones that have not finished. `time_created` is indexed, but the
+# `type` filter needs the row behind each index entry, so scanning the whole
+# window costs a page read per message (60 ms at 62k rows in 2026-11) and has
+# to grow with the database. The count over `time_created` alone is covered by
+# the index and says when rows appeared or went away, and the window is
+# otherwise reconciled on a timer.
+_TAIL_SECONDS = 900
+_RECONCILE_SECONDS = 600
+_WINDOW_COUNT_QUERY = "SELECT count(*) FROM session_message WHERE time_created >= ?"
+_TAIL_ROWS_QUERY = f"SELECT id, time_updated, {_STATS_FIELDS} FROM session_message WHERE type = 'assistant' AND time_created >= ? ORDER BY time_created"
+# The position of `finish` in a `_STATS_FIELDS` tuple; a message without one
+# may still be written.
+_FINISH_INDEX = 10
 
 def _connect():
 	"""A read-only connection to the message database; nothing here writes it."""
@@ -1219,34 +1236,116 @@ def _rows_by_id(conn, ids):
 class StatsCache:
 	"""The window's parsed rows, kept between watch redraws.
 
-	A redraw is dominated by unpacking the message JSON: the 28-day window is
-	about 45k rows and 300 MB of JSON, near 0.8 s, while the `(id, time_updated)`
-	scan that says what changed is about 60 ms. An assistant message is written
-	once and then updated in place while it streams, so the watch keeps what it
-	parsed and re-reads only the ids whose `time_updated` moved — during a burst,
-	usually the single message being written.
+	A redraw used to be dominated by unpacking the message JSON, so the cache
+	kept the parsed rows and re-read only the messages whose `time_updated`
+	moved. Finding those by scanning the whole window now costs a page read per
+	message and grows with the database, so a redraw instead re-reads the
+	recently created tail and the messages that have not finished. A row is
+	written once and then updated in place while it streams, so those two sets
+	cover what can change; a deletion or a window slide changes the row count,
+	which the indexed count sees, and that triggers a full reconcile. One more
+	reconcile runs every `_RECONCILE_SECONDS` in case an old message is written
+	again after it finished.
+
+	The per-model sums are kept alongside the rows and folded as a row arrives,
+	so a redraw does not re-read the window into them either.
 	"""
 
 	def __init__(self):
 		self._rows = {}
 		self._stamps = {}
+		self._by_model = {}
+		self._open = set()
+		self._oldest = None
+		self._window_count = None
+		self._reconciled_at = 0.0
 
 	def load(self, limit_seconds):
 		"""The window's rows now, parsing only the ones new or changed since the last call."""
 		cutoff = (time.time() - limit_seconds) * 1000
 		conn = _connect()
 		try:
-			stamps = dict(conn.execute(_WINDOW_STAMPS_QUERY, (cutoff,)))
-			changed = [message_id for message_id, stamp in stamps.items() if self._stamps.get(message_id) != stamp]
-			fetched = _rows_by_id(conn, changed)
+			count = conn.execute(_WINDOW_COUNT_QUERY, (cutoff,)).fetchone()[0]
+			if (self._window_count != count
+					or time.monotonic() - self._reconciled_at >= _RECONCILE_SECONDS):
+				self._reconcile(conn, cutoff)
+			else:
+				self._read_tail(conn, cutoff)
 		finally:
 			conn.close()
-		self._rows = {message_id: row for message_id, row in self._rows.items() if message_id in stamps}
-		for message_id, stamp, *row in fetched:
-			self._rows[message_id] = tuple(row)
-			stamps[message_id] = stamp
-		self._stamps = {message_id: stamp for message_id, stamp in stamps.items() if message_id in self._rows}
+		self._window_count = count
+		self._drop_expired(cutoff / 1000)
 		return list(self._rows.values())
+
+	def stats(self):
+		"""The window's per-model sums, kept current as rows arrive and leave."""
+		return self._by_model
+
+	def _remember(self, message_id, row):
+		"""Put a parsed row in the cache and fold it into its model's sums."""
+		if message_id in self._rows:
+			self._forget(message_id)
+		self._rows[message_id] = row
+		stats = self._by_model.get(row[0])
+		if stats is None:
+			stats = _stats_entry(time.time())
+			self._by_model[row[0]] = stats
+		_fold_row(stats, row, 1)
+		if row[_FINISH_INDEX] is None:
+			self._open.add(message_id)
+		if self._oldest is None or row[1] < self._oldest:
+			self._oldest = row[1]
+
+	def _forget(self, message_id):
+		"""Drop a row from the cache and subtract it from its model's sums."""
+		row = self._rows.pop(message_id, None)
+		if row is None:
+			return
+		self._open.discard(message_id)
+		stats = self._by_model.get(row[0])
+		if stats is None:
+			return
+		_fold_row(stats, row, -1)
+		if _is_refusal(row[8], row[9]) and stats["last_refusal"] == row[1]:
+			remaining = [other[1] for other in self._rows.values()
+				if other[0] == row[0] and _is_refusal(other[8], other[9])]
+			stats["last_refusal"] = max(remaining, default=0)
+
+	def _drop_expired(self, cutoff):
+		"""Forget the rows that have slid out of the window."""
+		if self._oldest is None or self._oldest >= cutoff:
+			return
+		for message_id in [message_id for message_id, row in self._rows.items()
+				if row[1] < cutoff]:
+			self._forget(message_id)
+		self._oldest = min((row[1] for row in self._rows.values()), default=None)
+
+	def _reconcile(self, conn, cutoff):
+		"""Re-read the window's change stamps, and forget the rows that are gone."""
+		stamps = dict(conn.execute(_WINDOW_STAMPS_QUERY, (cutoff,)))
+		changed = [message_id for message_id, stamp in stamps.items()
+			if self._stamps.get(message_id) != stamp]
+		for message_id, stamp, *row in _rows_by_id(conn, changed):
+			self._remember(message_id, tuple(row))
+			self._stamps[message_id] = stamp
+		for message_id in [message_id for message_id in self._rows
+				if message_id not in stamps]:
+			self._forget(message_id)
+		self._stamps = dict(stamps)
+		self._reconciled_at = time.monotonic()
+
+	def _read_tail(self, conn, cutoff):
+		"""Re-read the recently created rows and the messages still being written."""
+		since = max(cutoff, (time.time() - _TAIL_SECONDS) * 1000)
+		fetched = conn.execute(_TAIL_ROWS_QUERY, (since,)).fetchall()
+		seen = {message_id for message_id, *_rest in fetched}
+		fetched += _rows_by_id(conn, [message_id for message_id in self._open
+			if message_id not in seen])
+		for message_id, stamp, *row in fetched:
+			if self._stamps.get(message_id) == stamp:
+				continue
+			self._remember(message_id, tuple(row))
+			self._stamps[message_id] = stamp
 
 def human_age(seconds):
 	if seconds < 0:
@@ -1270,55 +1369,71 @@ def human_tokens(n):
 		return f"{n / 1000:.0f}k"
 	return str(n)
 
-def aggregate(rows, now):
-	by_model = defaultdict(lambda: {
+def _stats_entry(now):
+	"""A model's sums, empty."""
+	return {
 		"msgs": 0, "input": 0, "output": 0, "total": 0,
 		"reasoning": 0, "cache_read": 0, "cache_write": 0,
 		"refusals": 0, "last_refusal": 0,
 		"finish_stop": 0, "finish_tool_calls": 0, "finish_length": 0, "finish_unknown": 0,
 		"other_errors": 0, "last_other_error": 0,
 		"first_seen": now, "last_seen": 0,
-	})
-	for (model, created, token_in, token_out, token_total,
-		 token_reasoning, cache_read, cache_write,
-		 error_type, error_message, finish, session_id) in rows:
-		stats = by_model[model]
-		stats["msgs"] += 1
-		if token_in is not None:
-			stats["input"] += int(token_in)
-		if token_out is not None:
-			stats["output"] += int(token_out)
-		if token_total is not None:
-			stats["total"] += int(token_total)
-		if token_reasoning is not None:
-			stats["reasoning"] += int(token_reasoning)
-		if cache_read is not None:
-			stats["cache_read"] += int(cache_read)
-		if cache_write is not None:
-			stats["cache_write"] += int(cache_write)
+	}
+
+def _is_refusal(error_type, error_message):
+	"""Whether one message row is a refusal: aborted, or a rate-limit error."""
+	return (
+		error_type == "aborted"
+		or (error_type == "provider.error"
+			and "rate limit" in (error_message or "").lower())
+	)
+
+def _fold_row(stats, row, sign):
+	"""Add (`sign` 1) or remove (`sign` -1) one message from a model's sums.
+
+	The counts and token sums are exact in both directions. The two `last_*`
+	maxima are only raised here; the caller lowers them when the row that held
+	the maximum goes away, because the remaining rows are its to know.
+	"""
+	(model, created, token_in, token_out, token_total,
+	 token_reasoning, cache_read, cache_write,
+	 error_type, error_message, finish, session_id) = row
+	stats["msgs"] += sign
+	for key, value in (("input", token_in), ("output", token_out),
+			("total", token_total), ("reasoning", token_reasoning),
+			("cache_read", cache_read), ("cache_write", cache_write)):
+		if value is not None:
+			stats[key] += sign * int(value)
+	if sign > 0:
 		stats["first_seen"] = min(stats["first_seen"], created)
 		stats["last_seen"] = max(stats["last_seen"], created)
-
-		is_refusal = (
-			error_type == "aborted"
-			or (error_type == "provider.error"
-				and "rate limit" in (error_message or "").lower())
-		)
-		if is_refusal:
-			stats["refusals"] += 1
+	if _is_refusal(error_type, error_message):
+		stats["refusals"] += sign
+		if sign > 0:
 			stats["last_refusal"] = max(stats["last_refusal"], created)
-		elif error_type is not None:
-			stats["other_errors"] += 1
+	elif error_type is not None:
+		stats["other_errors"] += sign
+		if sign > 0:
 			stats["last_other_error"] = max(stats["last_other_error"], created)
+	if finish == "stop":
+		stats["finish_stop"] += sign
+	elif finish == "tool-calls":
+		stats["finish_tool_calls"] += sign
+	elif finish == "length":
+		stats["finish_length"] += sign
+	elif finish == "unknown":
+		stats["finish_unknown"] += sign
 
-		if finish == "stop":
-			stats["finish_stop"] += 1
-		elif finish == "tool-calls":
-			stats["finish_tool_calls"] += 1
-		elif finish == "length":
-			stats["finish_length"] += 1
-		elif finish == "unknown":
-			stats["finish_unknown"] += 1
+def aggregate(rows, now):
+	"""Per-model sums over `rows`, keyed by model id."""
+	by_model = {}
+	for row in rows:
+		model = row[0]
+		stats = by_model.get(model)
+		if stats is None:
+			stats = _stats_entry(now)
+			by_model[model] = stats
+		_fold_row(stats, row, 1)
 	return by_model
 
 def used_models(by_model):
@@ -1478,13 +1593,15 @@ def plural(count, noun):
 	"""`count` and its noun, agreeing in number."""
 	return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
-def render(rows, now, height=None, width=None, quota=None):
+def render(rows, now, height=None, width=None, quota=None, by_model=None):
 	"""The whole display: the header, then the Today table and the Window table.
 
 	`height` is the number of lines the display may use, and `width` the
 	columns it may use; the caps on the rows come from the first, the columns
 	and the model names from the second, so the render fits the pane it has.
 	`quota` is a `sample_quota` result; without one the header is unchanged.
+	`by_model` is the window's sums when the caller already has them (the watch
+	keeps them current); without one they are aggregated from `rows`.
 	"""
 	if height is None or width is None:
 		size = terminal_size()
@@ -1492,7 +1609,7 @@ def render(rows, now, height=None, width=None, quota=None):
 			height = size.lines
 		if width is None:
 			width = size.columns
-	all_stats = aggregate(rows, now)
+	all_stats = by_model if by_model is not None else aggregate(rows, now)
 	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	today_cutoff = local_midnight.timestamp()
 	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
@@ -1541,9 +1658,10 @@ def db_stamp():
 	return tuple(values)
 
 def build_report(window_hours, now, height=None, width=None, quota=None, cache=None):
-	"""The whole display; `cache` keeps the watch from re-parsing the window each frame."""
-	rows = cache.load(window_hours * 3600) if cache is not None else load_stats(window_hours * 3600)
-	return render(rows, now, height, width, quota)
+	"""The whole display; `cache` keeps the watch from re-reading the window each frame."""
+	if cache is None:
+		return render(load_stats(window_hours * 3600), now, height, width, quota)
+	return render(cache.load(window_hours * 3600), now, height, width, quota, cache.stats())
 
 def draw(text):
 	print(_CLEAR_SCREEN, end="")
@@ -1598,18 +1716,33 @@ def watch(window_hours):
 		size = terminal_size()
 		watcher = _db_watcher()
 		stamp = db_stamp()
+		last_draw = time.monotonic()
+		dirty = False
 		try:
 			while True:
 				stamp, changed = _db_changed(watcher, stamp)
+				dirty = dirty or changed
 				refresh_quota = time.monotonic() >= quota_due
 				current_size = terminal_size()
-				if not changed and current_size == size and not refresh_quota:
+				if not dirty and not refresh_quota and current_size == size:
 					continue
+				# A write is a hint that another may follow; wait out the floor so
+				# a burst becomes one frame. A resize is drawn at once, and so is a
+				# quota refresh that is already due.
+				if current_size == size:
+					wait = _REDRAW_FLOOR_SECONDS - (time.monotonic() - last_draw)
+					if wait > 0:
+						time.sleep(wait)
 				if refresh_quota:
 					quota = sample_quota()
 					quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
-				size = current_size
+				size = terminal_size()
+				# The stamp is taken before the read, so a write during the draw
+				# wakes the next frame instead of being missed.
+				stamp = db_stamp()
 				draw(build_report(window_hours, time.time(), quota=quota, cache=cache))
+				last_draw = time.monotonic()
+				dirty = False
 		finally:
 			if watcher is not None:
 				watcher.close()
