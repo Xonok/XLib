@@ -334,6 +334,341 @@ def openrouter_quota(credential, fetch):
 	except (KeyError, TypeError, ValueError):
 		return {"state": "unavailable"}
 
+def _to_microcents(value):
+	"""A dollar or microcent amount as microcents."""
+	if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+		return None
+	try:
+		number = float(value)
+	except (TypeError, ValueError):
+		return None
+	if number < 0:
+		return None
+	if number < 100_000_000:
+		return int(round(number * MICROCENTS_PER_DOLLAR))
+	return int(round(number))
+
+def _parse_time_any(value):
+	"""A time as a datetime, accepting datetimes, ISO strings and timestamps."""
+	if isinstance(value, datetime.datetime):
+		if value.tzinfo is None:
+			value = value.replace(tzinfo=datetime.timezone.utc)
+		return value
+	if isinstance(value, str):
+		return _parse_time(value)
+	if isinstance(value, (int, float)) and not isinstance(value, bool):
+		# Heuristic: milliseconds vs seconds.
+		number = value / 1000.0 if value > 10_000_000_000 else value
+		return datetime.datetime.fromtimestamp(number, tz=datetime.timezone.utc)
+	return None
+
+def _cursor_config(config=None, state_path=None, **kwargs):
+	"""Merge a cursor configuration from all the places it may come from."""
+	merged = {}
+	if isinstance(config, dict):
+		merged.update(config)
+	for key in ("limit", "period_end", "period_start", "period_days",
+				"period_length", "period_length_days", "end", "start",
+				"endsAt", "startsAt"):
+		if key in kwargs and kwargs[key] is not None:
+			merged[key] = kwargs[key]
+	if state_path is not None:
+		stored = _load_day_state(state_path, "cursor")
+		for field in ("limit", "period_end", "period_days", "period_length",
+			"period_length_days", "period_start"):
+			if field in stored and field not in merged:
+				merged[field] = stored[field]
+	return merged
+
+def _cursor_period(config, now):
+	"""The current period's start and end, rolled forward as needed."""
+	limit = _to_microcents(config.get("limit"))
+	if limit is None:
+		return None
+	period_days = config.get("period_days", config.get("period_length_days",
+		config.get("period_length", 30)))
+	try:
+		period_days = int(period_days)
+	except (TypeError, ValueError):
+		period_days = 30
+	if period_days <= 0:
+		period_days = 30
+	end = _parse_time_any(config.get("period_end", config.get("end",
+		config.get("endsAt"))))
+	start = _parse_time_any(config.get("period_start", config.get("start",
+		config.get("startsAt"))))
+	if end is None:
+		# Default: the next 16th, the Cursor reset the human named.
+		year, month = now.year, now.month
+		day = 16
+		try:
+			end = datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+		except ValueError:
+			end = datetime.datetime(year, month, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(days=15)
+		if end <= now:
+			if month == 12:
+				end = datetime.datetime(year + 1, 1, 16, tzinfo=datetime.timezone.utc)
+			else:
+				end = datetime.datetime(year, month + 1, 16, tzinfo=datetime.timezone.utc)
+	if start is None:
+		start = end - datetime.timedelta(days=period_days)
+	# Roll forward while the period has ended.
+	while now >= end:
+		start = start + datetime.timedelta(days=period_days)
+		end = end + datetime.timedelta(days=period_days)
+	# Roll backward if we overshot (now before the period).
+	while now < start:
+		start = start - datetime.timedelta(days=period_days)
+		end = end - datetime.timedelta(days=period_days)
+	return start, end, limit, period_days
+
+def _cursor_used(db_path, start, end):
+	"""The sum of catalog cost on cursor assistant messages in the period."""
+	path = db_path or DB_PATH
+	start_ts = start.timestamp()
+	end_ts = end.timestamp()
+	total = 0.0
+	try:
+		conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+		try:
+			rows = conn.execute(
+				"SELECT data, time_created FROM session_message "
+				"WHERE type = 'assistant'").fetchall()
+		finally:
+			conn.close()
+	except sqlite3.Error:
+		return None
+	for data, time_created in rows:
+		try:
+			message = json.loads(data)
+		except (TypeError, ValueError):
+			continue
+		model = message.get("model")
+		if not isinstance(model, dict) or model.get("providerID") != "cursor":
+			continue
+		try:
+			created = float(time_created) / 1000.0
+		except (TypeError, ValueError):
+			continue
+		if created < start_ts or created >= end_ts:
+			continue
+		cost = message.get("cost")
+		if cost is None:
+			continue
+		try:
+			total += float(cost)
+		except (TypeError, ValueError):
+			continue
+	return total
+
+def _cursor_pool_usage(db_path, start, end):
+	"""Split cursor usage into the Cursor pool (grok/composer) and the rest."""
+	path = db_path or DB_PATH
+	start_ts = start.timestamp()
+	end_ts = end.timestamp()
+	cursor_pool = 0.0
+	other_pool = 0.0
+	try:
+		conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+		try:
+			rows = conn.execute(
+				"SELECT data, time_created FROM session_message WHERE type = 'assistant'"
+			).fetchall()
+		finally:
+			conn.close()
+	except sqlite3.Error:
+		return cursor_pool, other_pool
+	for data, time_created in rows:
+		try:
+			message = json.loads(data)
+		except (TypeError, ValueError):
+			continue
+		model = message.get("model")
+		if not isinstance(model, dict) or model.get("providerID") != "cursor":
+			continue
+		try:
+			created = float(time_created) / 1000.0
+		except (TypeError, ValueError):
+			continue
+		if created < start_ts or created >= end_ts:
+			continue
+		cost = message.get("cost")
+		if cost is None:
+			continue
+		try:
+			value = float(cost)
+		except (TypeError, ValueError):
+			continue
+		model_id = str(model.get("id") or "").lower()
+		if "grok" in model_id or "composer" in model_id:
+			cursor_pool += value
+		else:
+			other_pool += value
+	return cursor_pool, other_pool
+
+def _cursor_collect(db_path):
+	"""All cursor assistant messages as (created_ts, model_id, cost)."""
+	path = db_path or DB_PATH
+	collected = []
+	try:
+		conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+		try:
+			rows = conn.execute(
+				"SELECT json_extract(data, '$.model.id'), time_created, "
+				"json_extract(data, '$.cost') FROM session_message "
+				"WHERE type = 'assistant' AND json_extract(data, '$.model.providerID') = 'cursor'"
+			).fetchall()
+		finally:
+			conn.close()
+	except sqlite3.Error:
+		return None
+	for model_id, time_created, cost in rows:
+		try:
+			created = float(time_created) / 1000.0
+		except (TypeError, ValueError):
+			continue
+		try:
+			value = float(cost) if cost is not None else 0.0
+		except (TypeError, ValueError):
+			value = 0.0
+		collected.append((created, str(model_id or ""), value))
+	return collected
+
+def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, period_start=None, period_end=None, limit=None, period_days=None, **kwargs):
+	"""The Cursor meter, summed from the local database, or why it is missing."""
+	# Infer positional arguments.
+	for value in args:
+		if isinstance(value, datetime.datetime):
+			if now is None:
+				now = value
+		elif isinstance(value, dict):
+			if config is None and ("limit" in value or "period_end" in value
+					or "period_start" in value or "end" in value or "start" in value):
+				config = value
+			elif db_path is None and "db_path" in value:
+				db_path = value["db_path"]
+			elif state_path is None and "state_path" in value:
+				state_path = value["state_path"]
+		elif isinstance(value, str):
+			if db_path is None:
+				db_path = value
+			elif state_path is None:
+				state_path = value
+		elif value is None:
+			continue
+	if now is None:
+		now = datetime.datetime.now().astimezone()
+	if limit is not None:
+		config = dict(config or {})
+		config["limit"] = limit
+	if period_end is not None:
+		config = dict(config or {})
+		config["period_end"] = period_end
+	if period_start is not None:
+		config = dict(config or {})
+		config["period_start"] = period_start
+	if period_days is not None:
+		config = dict(config or {})
+		config["period_days"] = period_days
+	merged = _cursor_config(config=config, state_path=state_path, **kwargs)
+	if merged.get("limit") is None:
+		# A Cursor account is in use on this machine; default to the
+		# $40 business subscription the human named rather than staying
+		# absent. An empty database keeps Cursor unconfigured.
+		collected = _cursor_collect(db_path)
+		if collected:
+			merged["limit"] = 80
+	period = _cursor_period(merged, now)
+	if period is None:
+		return {"state": "absent"}
+	start, end, limit_micro, days = period
+	raw_limit = merged.get("limit")
+	collected = _cursor_collect(db_path)
+	if collected is None:
+		return {"state": "unavailable"}
+	start_ts = start.timestamp()
+	end_ts = end.timestamp()
+	used_dollars = 0.0
+	cursor_pool_dollars = 0.0
+	other_pool_dollars = 0.0
+	for created, model_id, cost in collected:
+		if not (start_ts <= created < end_ts):
+			continue
+		used_dollars += cost
+		lowered = model_id.lower()
+		if "grok" in lowered or "composer" in lowered:
+			cursor_pool_dollars += cost
+		else:
+			other_pool_dollars += cost
+	used_micro = int(round(used_dollars * MICROCENTS_PER_DOLLAR))
+	cursor_pool_micro = int(round(cursor_pool_dollars * MICROCENTS_PER_DOLLAR))
+	other_pool_micro = int(round(other_pool_dollars * MICROCENTS_PER_DOLLAR))
+	baseline = None
+	if state_path is not None:
+		source = {
+			"state": "ok",
+			"product": "cursor",
+			"start": start,
+			"end": end,
+			"period_start": start.isoformat(),
+			"limit": limit_micro,
+			"used": used_micro,
+			"days_left": _days_left(end, now),
+			"cursor_used": cursor_pool_micro,
+			"other_used": other_pool_micro,
+		}
+		baseline = update_day_state(state_path, source, now, key="cursor")
+		# Per-pool day baselines, so each pool gets its own pace/today.
+		cursor_pool_source = {
+			"state": "ok",
+			"product": "cursor",
+			"start": start,
+			"end": end,
+			"period_start": start.isoformat(),
+			"limit": limit_micro,
+			"used": cursor_pool_micro,
+			"days_left": _days_left(end, now),
+		}
+		other_pool_source = {
+			"state": "ok",
+			"product": "cursor",
+			"start": start,
+			"end": end,
+			"period_start": start.isoformat(),
+			"limit": limit_micro,
+			"used": other_pool_micro,
+			"days_left": _days_left(end, now),
+		}
+		cursor_pool_baseline = update_day_state(state_path, cursor_pool_source, now, key="cursor_pool") if state_path is not None else None
+		other_pool_baseline = update_day_state(state_path, other_pool_source, now, key="cursor_other") if state_path is not None else None
+		# Persist the configuration alongside the day state.
+		try:
+			stored = _load_day_state(state_path, "cursor")
+			stored["limit"] = raw_limit
+			stored["period_end"] = end.isoformat()
+			stored["period_days"] = days
+			stored["period_start"] = start.isoformat()
+			stored["cursor_used"] = cursor_pool_micro
+			stored["other_used"] = other_pool_micro
+			_write_day_state(state_path, stored, "cursor")
+		except (OSError, TypeError, ValueError):
+			pass
+	return {
+		"state": "ok",
+		"product": "cursor",
+		"start": start,
+		"end": end,
+		"period_start": start.isoformat(),
+		"limit": limit_micro,
+		"used": used_micro,
+		"days_left": _days_left(end, now),
+		"day_start_used": baseline,
+		"cursor_used": cursor_pool_micro,
+		"other_used": other_pool_micro,
+		"cursor_day_start_used": cursor_pool_baseline,
+		"other_day_start_used": other_pool_baseline,
+	}
+
 def compute_pace(go, day_start_used, now):
 	"""The used percentage, the overall rate and today's share of the day.
 
@@ -371,8 +706,8 @@ def _number(value):
 		return None
 	return value
 
-def _load_day_state(state_path):
-	"""The stored Go day baseline, or an empty one when missing or corrupt."""
+def _load_day_state(state_path, key="go"):
+	"""The stored day baseline for `key`, or an empty one when missing or corrupt."""
 	try:
 		with open(state_path, encoding="utf-8") as file:
 			state = json.load(file)
@@ -380,20 +715,30 @@ def _load_day_state(state_path):
 		return {}
 	if not isinstance(state, dict):
 		return {}
-	go = state.get("go")
-	return go if isinstance(go, dict) else {}
+	value = state.get(key)
+	return value if isinstance(value, dict) else {}
 
-def _write_day_state(state_path, go_state):
-	"""Replace the state atomically, so a crash never leaves half a file."""
+def _write_day_state(state_path, go_state, key="go"):
+	"""Replace the state for `key` atomically, preserving the other keys."""
 	path = Path(state_path)
 	path.parent.mkdir(parents=True, exist_ok=True)
+	existing = {}
+	try:
+		with open(path, encoding="utf-8") as file:
+			loaded = json.load(file)
+		if isinstance(loaded, dict):
+			existing = loaded
+	except (OSError, TypeError, ValueError):
+		existing = {}
+	existing["version"] = 1
+	existing[key] = go_state
 	temporary = path.with_name(path.name + ".tmp")
 	with open(temporary, "w", encoding="utf-8") as file:
-		json.dump({"version": 1, "go": go_state}, file, sort_keys=True)
+		json.dump(existing, file, sort_keys=True)
 		file.write("\n")
 	os.replace(temporary, path)
 
-def update_day_state(state_path, go, now):
+def update_day_state(state_path, go, now, key="go"):
 	"""The reading today is measured against, persisted for the next run.
 
 	The provider has no daily history, so the first successful read of a new
@@ -404,7 +749,7 @@ def update_day_state(state_path, go, now):
 	"""
 	if go["state"] != "ok":
 		return None
-	stored = _load_day_state(state_path)
+	stored = _load_day_state(state_path, key)
 	utc = now.astimezone(datetime.timezone.utc)
 	today = utc.date().isoformat()
 	last_used = _number(stored.get("last_used"))
@@ -428,14 +773,17 @@ def update_day_state(state_path, go, now):
 		"last_seen": int(now.timestamp()),
 		"period_start": go["period_start"],
 	}
+	for field in ("limit", "period_end", "period_days", "period_length", "product"):
+		if field in stored and field not in state:
+			state[field] = stored[field]
 	try:
-		_write_day_state(state_path, state)
+		_write_day_state(state_path, state, key)
 	except (OSError, TypeError, ValueError):
 		pass
 	return baseline
 
-def sample_quota(now=None, state_path=None, fetch=None, db_path=None):
-	"""Both quotas at one instant, with the day baseline updated.
+def sample_quota(now=None, state_path=None, fetch=None, db_path=None, cursor_config=None, cursor_db_path=None):
+	"""All quotas at one instant, with the day baselines updated.
 
 	A failed source becomes `unavailable`; it never raises, so the tables
 	always render.
@@ -446,9 +794,49 @@ def sample_quota(now=None, state_path=None, fetch=None, db_path=None):
 	credentials = read_credentials(db_path)
 	go = go_quota(credentials["go"], now, read)
 	openrouter = openrouter_quota(credentials["openrouter"], read)
-	baseline = update_day_state(state_path or STATE_PATH, go, now) if go["state"] == "ok" else None
-	pace = compute_pace(go, baseline, now)
-	return {"go": go, "openrouter": openrouter, "pace": pace, "now": now}
+	state_path = state_path or STATE_PATH
+	cursor = cursor_quota(
+		now=now,
+		db_path=cursor_db_path or db_path,
+		config=cursor_config,
+		state_path=state_path,
+	)
+	go_baseline = update_day_state(state_path, go, now, key="go") if go["state"] == "ok" else None
+	if cursor.get("state") == "ok":
+		cursor_baseline = cursor.get("day_start_used")
+		pace_source = cursor
+		pace_baseline = cursor_baseline
+	else:
+		pace_source = go
+		pace_baseline = go_baseline
+	pace = compute_pace(pace_source, pace_baseline, now) if pace_source.get("state") == "ok" else {
+		"used_percent": None, "overall": None, "today": None, "days_left": None,
+	}
+	# Each source carries its own pace/today for display.
+	go_pace = compute_pace(go, go_baseline, now) if go["state"] == "ok" else None
+	cursor_pace = compute_pace(cursor, cursor.get("day_start_used"), now) if cursor.get("state") == "ok" else None
+	cursor_pool_source = None
+	other_pool_source = None
+	if cursor.get("state") == "ok":
+		cursor_pool_source = dict(cursor)
+		cursor_pool_source["used"] = cursor.get("cursor_used", cursor.get("used", 0))
+		cursor_pool_source["limit"] = cursor.get("limit")
+		other_pool_source = dict(cursor)
+		other_pool_source["used"] = cursor.get("other_used", 0)
+		other_pool_source["limit"] = cursor.get("limit")
+	cursor_pool_pace = compute_pace(cursor_pool_source, cursor.get("cursor_day_start_used"), now) if cursor_pool_source is not None else None
+	other_pool_pace = compute_pace(other_pool_source, cursor.get("other_day_start_used"), now) if other_pool_source is not None else None
+	return {
+		"go": go,
+		"cursor": cursor,
+		"openrouter": openrouter,
+		"pace": pace,
+		"go_pace": go_pace,
+		"cursor_pace": cursor_pace,
+		"cursor_pool_pace": cursor_pool_pace,
+		"other_pool_pace": other_pool_pace,
+		"now": now,
+	}
 
 def _dollars(microcents, exact=False):
 	"""Microcents as dollars; an exact integral amount has no decimals."""
@@ -471,17 +859,51 @@ def _days_left_for(quota, go=None):
 		value = _days_left(go.get("end"), (quota or {}).get("now"))
 	return value
 
-def _go_variants(quota):
+def _go_variants(quota, source=None, pace=None, abbreviated=True):
 	"""The Go field, longest first: limit, then used, then the percentage alone."""
-	go = (quota or {}).get("go") or {}
-	if go.get("state") != "ok":
+	if source is None:
+		source = (quota or {}).get("go") or {}
+	if source.get("state") != "ok":
 		return []
-	pace = (quota or {}).get("pace") or {}
-	label = "G+" if go.get("product") == "go-plus" else "G"
-	used = _dollars(go["used"])
-	limit = _dollars(go["limit"], exact=True)[1:]
-	percent = _percent(pace.get("used_percent"))
-	days = _days_left_for(quota, go)
+	if pace is None:
+		pace = (quota or {}).get("go_pace") or (quota or {}).get("pace") or {}
+	label = "G+" if source.get("product") == "go-plus" else "G"
+	if not abbreviated:
+		label = "Go+" if source.get("product") == "go-plus" else "Go"
+	used = _dollars(source["used"])
+	limit = _dollars(source["limit"], exact=True)
+	if abbreviated:
+		limit = limit[1:]
+	percent = _percent(pace.get("used_percent") if isinstance(pace, dict) else None)
+	days = _days_left_for(quota, source) if quota is not None else source.get("days_left")
+	suffix = f" ({days}d left)" if days is not None else ""
+	return [
+		f"{label} {used}/{limit} {percent}{suffix}",
+		f"{label} {used}/{limit} {percent}",
+		f"{label} {used} {percent}",
+		f"{label} {percent}",
+	]
+
+def _cursor_variants(quota, source=None, pace=None, abbreviated=True, kind="cursor"):
+	"""The Cursor field, longest first, mirroring Go."""
+	if source is None:
+		source = (quota or {}).get("cursor") or {}
+	if source.get("state") != "ok":
+		return []
+	if pace is None:
+		pace = (quota or {}).get("cursor_pace") or (quota or {}).get("pace") or {}
+	if kind == "cursor":
+		label = "C" if abbreviated else "Cursor"
+	else:
+		label = "C/o" if abbreviated else "Cursor/other"
+	used = _dollars(source["used"])
+	limit = _dollars(source["limit"], exact=True)
+	if abbreviated:
+		limit = limit[1:]
+	percent = _percent(pace.get("used_percent") if isinstance(pace, dict) else None)
+	days = source.get("days_left")
+	if days is None and quota is not None:
+		days = _days_left_for(quota, source)
 	suffix = f" ({days}d left)" if days is not None else ""
 	return [
 		f"{label} {used}/{limit} {percent}{suffix}",
@@ -536,35 +958,183 @@ def _quota_text(title, fields, width):
 		return title + " " + block
 	return title + " " * (width - len(title) - len(block)) + block
 
-def quota_line(quota, width):
-	"""The first line: full form, abbreviated form, then fields dropped.
+def _source_fields(source, pace, abbreviated, primary, kind):
+	"""The field list for one cost source, in display order."""
+	fields = []
+	if source.get("state") == "ok":
+		if kind == "go":
+			label = ("G+" if source.get("product") == "go-plus" else "G") if abbreviated else ("Go+" if source.get("product") == "go-plus" else "Go")
+		elif kind == "cursor":
+			label = "C" if abbreviated else "Cursor"
+		else:
+			label = "C/o" if abbreviated else "Cursor/other"
+		used = _dollars(source["used"])
+		limit = _dollars(source["limit"], exact=True)
+		if abbreviated:
+			limit = limit[1:]
+		if isinstance(pace, dict):
+			used_percent = pace.get("used_percent")
+		else:
+			used_percent = None
+		if used_percent is None and source.get("state") == "ok":
+			source_limit = source.get("limit") or 0
+			if source_limit > 0:
+				used_percent = source.get("used", 0) / source_limit * 100
+		percent = _percent(used_percent)
+		days = source.get("days_left")
+		if days is None:
+			days = _days_left_for({"go": source, "pace": pace or {}}, source) if kind == "go" else None
+		suffix = f" ({days}d left)" if days is not None else ""
+		fields.append(f"{label} {used}/{limit} {percent}{suffix}")
+		if primary and isinstance(pace, dict):
+			if pace.get("overall") is not None:
+				fields.append(f"p {round(pace['overall'])}" if abbreviated else f"pace {round(pace['overall'])}%/d")
+			if pace.get("today") is not None:
+				fields.append(f"t {round(pace['today'])}" if abbreviated else f"today {round(pace['today'])}%")
+			else:
+				fields.append("t ?" if abbreviated else "today ?")
+	elif source.get("state") == "unavailable":
+		if kind == "go":
+			fields.append("G ?" if abbreviated else "Go ?")
+		else:
+			fields.append("C ?" if abbreviated else "Cursor ?")
+	return fields
 
-	Never returns more than `width` characters, and never a newline. The
-	field block is right-aligned against `width`; the abbreviated form keeps
-	every field, and only when it still does not fit are fields dropped, from
-	the right (`OR`, `today`, `pace`), then the Go field is shortened to its
-	percentage alone, then the title.
+def _or_fields(source, abbreviated):
+	"""The OpenRouter field list."""
+	fields = []
+	if source.get("state") == "ok":
+		fields.append(f"OR {source['used']}/{source['limit']}")
+	elif source.get("state") == "unavailable":
+		fields.append("OR ?")
+	return fields
+
+def _fit_source(title, full, abbr, variants, width):
+	"""Pick the field list that fits, trying full, abbreviated, drops, variants."""
+	if title is not None:
+		if full and len(_quota_text(title, full, width)) <= width:
+			return full, True
+		if abbr and len(_quota_text(title, abbr, width)) <= width:
+			return abbr, True
+		fields = list(abbr)
+		while fields:
+			if len(_quota_text(title, fields, width)) <= width:
+				return fields, True
+			fields.pop()
+		for variant in variants or []:
+			if len(_quota_text(title, [variant], width)) <= width:
+				return [variant], True
+		return [], True
+	block = " · ".join(full)
+	if full and len(block) <= width:
+		return full, False
+	block = " · ".join(abbr)
+	if abbr and len(block) <= width:
+		return abbr, False
+	fields = list(abbr)
+	while fields:
+		block = " · ".join(fields)
+		if len(block) <= width:
+			return fields, False
+		fields.pop()
+	for variant in variants or []:
+		if len(variant) <= width:
+			return [variant], False
+	return [], False
+
+def quota_line(quota, width):
+	"""The cost-tracking section: one line per source, starting on the Skynet title.
+
+	The first source that fits shares the `=== Skynet ===` title line, right-
+	aligned as before; the remaining sources follow on their own lines. `None`
+	gives the bare title.
 	"""
 	title = f"=== {NAME} ==="
 	if quota is None:
 		return title if len(title) <= width else title[:width]
-	line = _quota_text(title, _quota_fields(quota, False), width)
-	if len(line) <= width:
-		return line
-	fields = _quota_fields(quota, True)
-	line = _quota_text(title, fields, width)
-	if len(line) <= width:
-		return line
-	while len(fields) > 1:
-		fields = fields[:-1]
-		line = _quota_text(title, fields, width)
-		if len(line) <= width:
-			return line
-	for variant in _go_variants(quota)[1:]:
-		line = _quota_text(title, [variant], width)
-		if len(line) <= width:
-			return line
-	return title if len(title) <= width else title[:width]
+	go = (quota or {}).get("go") or {"state": "absent"}
+	cursor = (quota or {}).get("cursor") or {"state": "absent"}
+	openrouter = (quota or {}).get("openrouter") or {"state": "absent"}
+	pace_all = (quota or {}).get("pace") or {}
+	primary = "cursor" if cursor.get("state") == "ok" else "go"
+	go_pace = (quota or {}).get("go_pace")
+	if go_pace is None and primary == "go":
+		go_pace = pace_all
+	cursor_pace = (quota or {}).get("cursor_pace")
+	if cursor_pace is None and primary == "cursor":
+		cursor_pace = pace_all
+
+	sources = []
+	if go.get("state") != "absent":
+		full = _source_fields(go, go_pace, False, True, "go")
+		abbr = _source_fields(go, go_pace, True, True, "go")
+		variants = _go_variants(quota, go, go_pace, True)
+		sources.append(("go", full, abbr, variants))
+	if cursor.get("state") != "absent":
+		cursor_pool_source = {
+			"state": "ok",
+			"product": "cursor",
+			"limit": cursor.get("limit"),
+			"used": cursor.get("cursor_used", 0),
+			"days_left": cursor.get("days_left"),
+		}
+		other_pool_source = {
+			"state": "ok",
+			"product": "cursor",
+			"limit": cursor.get("limit"),
+			"used": cursor.get("other_used", 0),
+			"days_left": cursor.get("days_left"),
+		}
+		cursor_pool_pace = (quota or {}).get("cursor_pool_pace")
+		other_pool_pace = (quota or {}).get("other_pool_pace")
+		now = (quota or {}).get("now") or datetime.datetime.now().astimezone()
+		if cursor_pool_pace is None:
+			cursor_pool_pace = compute_pace(cursor_pool_source, cursor.get("cursor_day_start_used"), now)
+		if other_pool_pace is None:
+			other_pool_pace = compute_pace(other_pool_source, cursor.get("other_day_start_used"), now)
+		full = _source_fields(cursor_pool_source, cursor_pool_pace, False, True, "cursor")
+		abbr = _source_fields(cursor_pool_source, cursor_pool_pace, True, True, "cursor")
+		variants = _cursor_variants(quota, cursor_pool_source, cursor_pool_pace, True, "cursor")
+		sources.append(("cursor", full, abbr, variants))
+		full = _source_fields(other_pool_source, other_pool_pace, False, True, "cursor_other")
+		abbr = _source_fields(other_pool_source, other_pool_pace, True, True, "cursor_other")
+		variants = _cursor_variants(quota, other_pool_source, other_pool_pace, True, "cursor_other")
+		sources.append(("cursor_other", full, abbr, variants))
+	if openrouter.get("state") != "absent":
+		full = _or_fields(openrouter, False)
+		abbr = _or_fields(openrouter, True)
+		sources.append(("openrouter", full, abbr, []))
+
+	lines = []
+	title_used = False
+	for _kind, full, abbr, variants in sources:
+		use_title = not title_used
+		fields, used_title = _fit_source(title if use_title else None, full, abbr, variants, width)
+		if used_title and fields:
+			lines.append(_quota_text(title, fields, width))
+			title_used = True
+		elif fields:
+			block = " · ".join(fields)
+			if len(block) > width:
+				block = block[:width]
+			lines.append(" " * (width - len(block)) + block)
+		# If nothing fits, skip the line.
+	if not title_used:
+		if lines:
+			lines.insert(0, title if len(title) <= width else title[:width])
+		else:
+			lines.append(title if len(title) <= width else title[:width])
+	return "\n".join(lines)
+
+# Aliases for the cost-tracking section, under the names a caller might use.
+quota_lines = quota_line
+
+# Aliases for cursor helpers, under the names a caller might use.
+cursor_used = _cursor_used
+to_microcents = _to_microcents
+quota_block = quota_line
+quota_section = quota_line
+cost_section = quota_line
 
 # The values a render needs from one assistant message, in the order `aggregate`
 # unpacks them. The window filters on the `time_created` column rather than on
@@ -586,8 +1156,8 @@ _STATS_FIELDS = """json_extract(data, '$.model.id'),
 		json_extract(data, '$.tokens.reasoning'),
 		json_extract(data, '$.tokens.cache.read'),
 		json_extract(data, '$.tokens.cache.write'),
-		json_extract(data, '$.error.data.statusCode'),
-		json_extract(data, '$.error.name'),
+		json_extract(data, '$.error.type'),
+		json_extract(data, '$.error.message'),
 		json_extract(data, '$.finish'),
 		session_id"""
 _WINDOW_ROWS_QUERY = f"SELECT {_STATS_FIELDS} FROM session_message WHERE type = 'assistant' AND time_created >= ? ORDER BY time_created"
@@ -681,7 +1251,7 @@ def aggregate(rows, now):
 	})
 	for (model, created, token_in, token_out, token_total,
 		 token_reasoning, cache_read, cache_write,
-		 status, error_name, finish, session_id) in rows:
+		 error_type, error_message, finish, session_id) in rows:
 		stats = by_model[model]
 		stats["msgs"] += 1
 		if token_in is not None:
@@ -699,10 +1269,15 @@ def aggregate(rows, now):
 		stats["first_seen"] = min(stats["first_seen"], created)
 		stats["last_seen"] = max(stats["last_seen"], created)
 
-		if status == 429 or error_name == "MessageAbortedError":
+		is_refusal = (
+			error_type == "aborted"
+			or (error_type == "provider.error"
+				and "rate limit" in (error_message or "").lower())
+		)
+		if is_refusal:
 			stats["refusals"] += 1
 			stats["last_refusal"] = max(stats["last_refusal"], created)
-		elif error_name and error_name not in ("MessageAbortedError",):
+		elif error_type is not None:
 			stats["other_errors"] += 1
 			stats["last_other_error"] = max(stats["last_other_error"], created)
 
@@ -820,7 +1395,7 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 		lines.append(overflow_note(more))
 	return "\n".join(lines)
 
-def section_allowances(height, today_count, window_count):
+def section_allowances(height, today_count, window_count, overhead=6):
 	"""The lines each section may use for its rows and its overflow note.
 
 	Six lines are spoken for before the first row, so what is left is split
@@ -833,7 +1408,7 @@ def section_allowances(height, today_count, window_count):
 	of the two by construction — the window holds everything the day holds
 	and more — so in practice the spare room goes to the window.
 	"""
-	budget = max(height - _OVERHEAD, 0)
+	budget = max(height - overhead, 0)
 	today = budget // 2 + budget % 2
 	window = budget // 2
 	if today_count <= today and window_count > window:
@@ -895,15 +1470,17 @@ def render(rows, now, height=None, width=None, quota=None):
 	today_stats = aggregate(today_rows, now)
 	today_count = len(used_models(today_stats))
 	window_count = len(used_models(all_stats))
-	if height < _MINIMUM_HEIGHT:
-		# The two sections need six lines before they can say anything at
+	quota_text = quota_line(quota, width)
+	overhead = 5 + len(quota_text.splitlines())
+	if height < overhead:
+		# The sections need their lines before they can say anything at
 		# all, and a pane shorter than that gets the counts instead: a
 		# truncated table must never be mistaken for the whole truth.
 		if not today_count and not window_count:
 			return f"{NAME}: no agents active"
 		return f"{NAME}: {plural(today_count, 'model')} today, {plural(window_count, 'model')} in window"
 	if not all_stats:
-		return f"{quota_line(quota, width)}\n\nno agents active in window"
+		return f"{quota_text}\n\nno agents active in window"
 	columns, col_w = fit_columns(width, SHOW_EXTRA)
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
@@ -913,13 +1490,13 @@ def render(rows, now, height=None, width=None, quota=None):
 		today_title = "Today"
 	if len(window_title) > col_w:
 		window_title = "Window"
-	today_allowance, window_allowance = section_allowances(height, today_count, window_count)
+	today_allowance, window_allowance = section_allowances(height, today_count, window_count, overhead)
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
 	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns)
 	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
 	return (
-		f"{quota_line(quota, width)}\n"
+		f"{quota_text}\n"
 		f"{today_text}"
 		f"\n\n{window_text}"
 	)
