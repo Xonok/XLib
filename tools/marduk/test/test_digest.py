@@ -202,6 +202,18 @@ def test_accept_all_publishes_every_candidate_without_a_model():
 	xtest.equal(memory["last_model"], "accept-all", "the bypass is named in the memory")
 	xtest.equal(calls, [], "the bypass calls no model")
 
+def test_an_accept_all_memory_is_re_filtered_when_the_filter_is_enabled():
+	memory = {"version": 2, "last_eval_day": digest._day(YESTERDAY), "last_model": "accept-all",
+		"published": [{"title": "Old unfiltered item", "why": "accepted", "url": "https://a.example/0",
+			"day": digest._day(YESTERDAY), "at": NOW}],
+		"candidates": [_candidate(0, "Candidate", digest._day(YESTERDAY))]}
+	call,calls = _call(keep=_keep_json((0, "passes the rule")))
+	conditions = _source().check(NOW, memory, items=[], call=call)
+	xtest.equal(len(conditions), 1, "the old accept-all list is replaced by the filtered one")
+	xtest.equal(conditions[0].title, "Candidate", "the filter ran")
+	xtest.equal(memory["last_model"], "good", "the filter model is remembered")
+	xtest.equal([entry[0] for entry in calls], ["good"], "the filter is called once")
+
 def test_old_weekly_memory_is_reset():
 	memory = {"week": "2026-W44", "last_eval": 1000.0,
 		"published": [{"title": "Old weekly", "why": "why", "url": "https://a.example/0"}]}
