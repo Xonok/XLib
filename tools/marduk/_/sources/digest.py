@@ -1,4 +1,4 @@
-"""Pull world-news feeds once a day and publish one item from yesterday."""
+"""Pull world-news feeds once a day and publish the items that pass the reader's rules."""
 
 import json,os,subprocess,time,urllib.request
 import xml.etree.ElementTree as ET
@@ -8,9 +8,15 @@ from .. import event
 
 DEFAULT_PULL_MODEL="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 DEFAULT_EVAL_MODELS=("opencode/big-pickle","opencode/deepseek-v4.1-flash")
+DEFAULT_RULES=(
+	"Keep news that will still matter in a month: structural change, major events, national or global scale.",
+	"Drop entertainment, celebrity, sport, routine accidents, routine weather, forecasts, opinion and campaign process detail.",
+	"Do not treat a death toll as the point of a story; if it matters, it matters for something else.",
+	"Judge each candidate independently; keeping nothing is a valid result.",
+)
 
 class Digest:
-	"""One daily run: pull the feeds, then pick yesterday's most important item."""
+	"""One daily run: pull the feeds, then keep yesterday's news that passes the rules."""
 
 	def __init__(self,id:str,options:dict):
 		self.id=id
@@ -26,6 +32,7 @@ class Digest:
 		self.max_seen=int(options.get("max_seen",2000))
 		self.max_age_days=float(options.get("max_age_days",3.0))
 		self.candidate_days=float(options.get("candidate_days",3.0))
+		self.rules=_rules(options.get("rules"))
 		self.accept_all=bool(options.get("accept_all",False))
 		self.run_dir=options.get("run_dir") or _default_run_dir()
 
@@ -40,7 +47,7 @@ class Digest:
 		return []
 
 	def check(self,now:float,memory:dict|None=None,items=None,call=None)->list[event.Condition]:
-		"""Pull new items, evaluate yesterday's candidates, and return the latest pick."""
+		"""Pull new items, filter yesterday's candidates, and return the day's news."""
 		memory={} if memory is None else memory
 		self._migrate(memory)
 		call=(lambda model,prompt,timeout: _run_model(model,prompt,timeout,self.run_dir)) if call is None else call
@@ -49,7 +56,7 @@ class Digest:
 		if fresh:
 			memory.setdefault("candidates",[]).extend(self._pull(fresh,now,memory,call))
 		self._prune(now,memory)
-		self._evaluate(now,memory,call)
+		self._filter(now,memory,call)
 		return self._conditions(now,memory)
 
 	def _migrate(self,memory:dict)->None:
@@ -104,62 +111,36 @@ class Digest:
 			seen[item["url"]]=now
 		return result
 
-	def _evaluate(self,now:float,memory:dict,call)->None:
-		"""Pick exactly one candidate from yesterday, once that day has ended."""
+	def _filter(self,now:float,memory:dict,call)->None:
+		"""Keep every candidate from yesterday that passes the reader's rules."""
 		target=_day(now-86400)
-		if memory.get("last_eval_day")==target:
+		if memory.get("last_eval_day")==target and (memory.get("last_model")!="accept-all" or self.accept_all):
 			return
 		candidates=[item for item in memory.get("candidates") or [] if item.get("day")==target]
+		memory["published"]=[]
+		memory.pop("published_pool",None)
 		if not candidates:
+			memory["last_model"]="no candidates"
 			return
-		memory["published_pool"]=list(candidates)
-		if self.accept_all:
-			memory["published"]=[{
-				"title":item.get("title",""),
-				"why":item.get("summary","") or "accepted (accept_all mode)",
-				"url":item.get("url",""),
-				"day":target,
-				"at":now,
-			} for item in candidates]
-			memory["last_eval_day"]=target
-			memory["last_model"]="accept-all"
-			memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
-			return
-		prompt=_eval_prompt(candidates)
-		text,model=_eval_with_fallback(self.eval_models,prompt,self.timeout_seconds,call)
-		data=_json(text)
-		items=data.get("items")
-		if not isinstance(items,list) or not items:
-			raise ValueError(f"{model} did not pick an item")
-		chosen=None
-		for entry in items:
-			if not isinstance(entry,dict):
-				continue
-			index=_index(entry.get("candidate"),len(candidates))
-			if index is None:
-				continue
-			why=_text(entry.get("why")) or candidates[index].get("summary") or "picked from yesterday's candidates"
-			chosen={
-				"title":_text(entry.get("title")) or candidates[index]["title"],
-				"why":why,
-				"url":candidates[index]["url"],
-				"day":target,
-				"at":now,
-			}
-			break
-		if chosen is None:
-			raise ValueError(f"{model} returned no usable item")
-		memory["published"]=[chosen]
 		memory["last_eval_day"]=target
-		memory["last_model"]=model
+		if self.accept_all:
+			memory["published"]=[_kept_item(item,item.get("title",""),
+				item.get("summary","") or "accepted (accept_all mode)",target,now) for item in candidates]
+			memory["last_model"]="accept-all"
+		else:
+			prompt=_filter_prompt(candidates,self.rules)
+			text,model=_eval_with_fallback(self.eval_models,prompt,self.timeout_seconds,call)
+			memory["published"]=_kept_items(text,candidates,target,now)
+			memory["last_model"]=model
 		memory["candidates"]=[item for item in memory.get("candidates") or [] if item.get("day")!=target]
 
 	def _conditions(self,now:float,memory:dict)->list[event.Condition]:
-		"""The daily pick(s); accept_all publishes every candidate."""
+		"""The day's kept items; a day that kept nothing clears the source's news."""
 		published=memory.get("published") or []
+		day=published[0]["day"] if published else _day(now-86400)
 		if not published:
-			return []
-		day=published[-1]["day"]
+			return [event.Condition(self.id,f"{self.id}:{day}","news","World news",event.STATE_OK,
+				"no news kept","nothing passed the rules",checked=_day_end(now),replace=True)]
 		result=[]
 		for index,item in enumerate(published):
 			if len(published)==1:
@@ -167,7 +148,7 @@ class Digest:
 			else:
 				key=f"{self.id}:{item['day']}:{index}"
 			result.append(event.Condition(self.id,key,"news","World news",event.STATE_INFO,
-				item["title"],f"Pick for {item['day']}. {item['why']} — {item['url']}",
+				item["title"],f"Kept for {item['day']}. {item['why']} — {item['url']}",
 				checked=_day_end(now),replace=True))
 		return result
 
@@ -207,6 +188,18 @@ def _models(value:object)->list[str]:
 	if not isinstance(value,list) or not value:
 		raise ValueError("eval_models must be a non-empty list")
 	return [_model(entry,"eval_models entry") for entry in value]
+
+def _rules(value:object)->list[str]:
+	if value is None:
+		return list(DEFAULT_RULES)
+	if not isinstance(value,list) or not value:
+		raise ValueError("rules must be a non-empty list of strings")
+	rules=[]
+	for entry in value:
+		if not isinstance(entry,str) or not entry.strip():
+			raise ValueError("a rule must be a non-empty string")
+		rules.append(entry.strip())
+	return rules
 
 def _fetch(feeds:list[dict],timeout:float,max_items:int)->list[dict]:
 	items=[]
@@ -280,9 +273,9 @@ def _date(value:str)->float:
 
 def _pull_prompt(items:list[dict])->str:
 	lines=[
-		"Compress these world-news feed items into candidates for a daily digest.",
+		"Compress these world-news feed items into candidates for a later filter.",
+		"Keep every item; only merge exact duplicates. Do not decide importance or drop topics.",
 		"Return only JSON: {\"candidates\":[{\"item\": <number>, \"title\": \"<one line>\", \"summary\": \"<one sentence>\"}]}.",
-		"Keep every item that reports a real world event; merge duplicates; drop sport, celebrity, routine market moves and opinion.",
 		"Items:",
 	]
 	for index,item in enumerate(items):
@@ -291,18 +284,43 @@ def _pull_prompt(items:list[dict])->str:
 			lines.append(item["summary"][:400])
 	return "\n".join(lines)
 
-def _eval_prompt(candidates:list[dict])->str:
+def _filter_prompt(candidates:list[dict],rules:list[str])->str:
 	lines=[
-		"You are the editor of a daily world-news digest.",
-		"Pick exactly one candidate — the most interesting or important story from yesterday.",
-		"Prefer structural change: war, election, disaster, economy, law, science, public health. Reject sport, celebrity, routine market moves, routine weather and opinion.",
-		"Return only JSON: {\"items\":[{\"candidate\": <number>, \"title\": \"<one line>\", \"why\": \"<one sentence>\"}]}.",
-		"One item, not zero and not two.",
-		"Candidates (all published yesterday):",
+		"You are filtering a world-news feed for one reader. Keep every candidate that passes the reader's rules; drop the rest.",
+		"Judge each candidate independently. There is no quota and no need to keep something: an empty keep list is a valid answer, and keeping every candidate is valid when they all pass.",
+		"Several candidates may describe the same event. Keep only the clearest one of each event; do not publish duplicates.",
+		"Return only JSON: {\"keep\":[{\"candidate\": <number>, \"why\": \"<one sentence: which rule it passes>\"}]}.",
+		"The reader's rules, which override any general idea of newsworthiness:",
 	]
+	for rule in rules:
+		lines.append(f"- {rule}")
+	lines.append("Candidates (all published yesterday):")
 	for index,item in enumerate(candidates):
 		lines.append(f"[{index}] {item['title']} — {item.get('summary','')} ({item['source']})")
 	return "\n".join(lines)
+
+def _kept_item(item:dict,title:str,why:str,day:str,now:float)->dict:
+	return {"title":title or item.get("title",""),"why":why,"url":item.get("url",""),
+		"source":item.get("source",""),"day":day,"at":now}
+
+def _kept_items(text:str,candidates:list[dict],day:str,now:float)->list[dict]:
+	data=_json(text)
+	entries=data.get("keep")
+	if not isinstance(entries,list):
+		raise ValueError("the filter model returned no keep list")
+	kept={}
+	for entry in entries:
+		if not isinstance(entry,dict):
+			continue
+		index=_index(entry.get("candidate"),len(candidates))
+		if index is None or index in kept:
+			continue
+		item=candidates[index]
+		why=_text(entry.get("why")) or item.get("summary","") or "kept by the reader's rules"
+		kept[index]=_kept_item(item,_text(entry.get("title")),why,day,now)
+	if entries and not kept:
+		raise ValueError("the filter model kept no valid candidate")
+	return [kept[index] for index in sorted(kept)]
 
 def _json(text:str)->dict:
 	body=text.strip()

@@ -54,6 +54,20 @@ def test_a_replace_condition_removes_the_source_older_news():
 		xtest.equal(len(digest_news), 1, "a recheck still leaves one digest item")
 		xtest.equal(digest_news[0]["at"], 3000.0, "the one item is refreshed with the check")
 
+def test_a_quiet_replace_condition_clears_the_source_news():
+	def digest_news(day, state, checked):
+		return event.Condition("digest", f"digest:{day}", "news", "World news", state,
+			"title", checked=checked, replace=True)
+	with tempfile.TemporaryDirectory() as folder:
+		state = _store(folder)
+		state.apply("digest", [digest_news("day-1", event.STATE_INFO, 1000.0)], 1000.0)
+		xtest.equal(len(state.news), 1, "the day has news")
+		state.apply("digest", [digest_news("day-2", event.STATE_OK, 2000.0)], 2000.0)
+		xtest.equal([item for item in state.news if item["source"] == "digest"], [],
+			"a quiet replace condition clears the source's older news")
+		xtest.equal(state.conditions["digest:day-2"].state, event.STATE_OK,
+			"the clearing condition is stored")
+
 def test_a_recovery_updates_the_state_and_adds_news():
 	with tempfile.TemporaryDirectory() as folder:
 		state = _store(folder)
