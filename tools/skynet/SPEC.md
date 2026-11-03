@@ -22,9 +22,9 @@ The two figures are different kinds:
 	100% the current rate exhausts the quota exactly at the reset; at 200% it
 	exhausts it halfway through.
 - `today` is **today's spend as a percentage of the sustainable daily
-	allowance**. It starts at 0% at the first reading of a UTC day and only
-	rises as usage grows, so it is the day's runway used — not a rate. Idle
-	time does not dilute it.
+	allowance**. For Go it starts at 0% at the first reading of a UTC day and
+	only rises as usage grows; Cursor's is counted from its message log. It is
+	the day's runway used — not a rate. Idle time does not dilute it.
 
 The rate/share split is the human's 2026-10-26 ruling: pacing is done by
 stopping for the day or switching to OpenRouter, so the useful number is how
@@ -51,7 +51,7 @@ sample_quota(now, state_path, fetch)
   ├─ openrouter_quota(credentials, fetch)
   └─ update_day_state(state_path, go, now)
        ↓
-quota_line(quota, width) → one line, ≤ width
+quota_line(quota, width) → one line per source, each ≤ width
 ```
 
 The local database remains read-only. The quota code never writes to
@@ -92,7 +92,7 @@ quota source (DRAFT Q7 A).
 Response field used: `free_model_daily_requests`, with `used` and `limit`,
 nested under `data` in the measured response (the top level is accepted too).
 This is the free-model daily counter, not all requests; `usage_daily` is paid
-dollars and is not shown on the first line (DRAFT Q5 A, Q6 A).
+dollars and is not shown in the quota line (DRAFT Q5 A, Q6 A).
 
 The counter appears to reset at UTC midnight. Use it as the provider reports it;
 do not re-derive a day from local request counts (DRAFT Q6 A).
@@ -248,27 +248,32 @@ file is treated as empty state.
 
 ## Display
 
-The first line is exactly one line, at most `width` columns, and never wraps
-or contains a newline. The field block is **right-aligned against `width`**:
-the space after the title absorbs the spare columns, so the block reads as
-separate from the `=== Skynet ===` title and its right edge is the pane's
-right edge. At the minimum width for a form the gap is one space; a wider pane
-widens the gap, not the block. The tables below it are unchanged.
+The quota section is **one line per configured source**. The first source whose
+fields fit shares the `=== Skynet ===` title line, right-aligned; every further
+source gets a line of its own, right-aligned the same way. Every line is at most
+`width` columns and contains no newline. The space after the title absorbs the
+spare columns, so the block reads as separate from the title and its right edge
+is the pane's right edge; at the minimum width the gap is one space, and a wider
+pane widens the gap, not the block. Sources keep their order: Go, the Cursor
+pool, Cursor/other, OpenRouter. The tables below are unchanged.
 
 ### Full form
 
-The title, then the field block right-aligned against `width` (at least one
-space after the title), fields joined by ` · `, in this order:
+Each source's block is its own fields joined by ` · `, in this order:
 
 | Field | `ok` | `unavailable` |
 |---|---|---|
 | Go | `Go $1.87/$60 3%` or `Go+ …` | `Go ?` |
-| Pace | `pace 72%/d`; omitted when the pace is `None` | omitted |
-| Today | `today 94%`; `today ?` when the baseline is missing; omitted when today is `None` | omitted |
+| Cursor | `Cursor $2.27/$80 3%` | `Cursor ?` |
+| Cursor/other | `Cursor/other $0.84/$80 1%` | `Cursor ?` |
+| Pace | `pace 72%/d` after the used/limit field; omitted when the pace is `None` | omitted |
+| Today | `today 94%` after the pace; `today ?` when the baseline is missing; omitted when today is `None` | omitted |
 | OpenRouter | `OR 29/1000` | `OR ?` |
 
-`absent` sources contribute nothing. If both sources are `absent`, the line is
-`=== Skynet ===`, the current behavior.
+`absent` sources contribute no line. If every source is `absent`, the section
+is `=== Skynet ===`, the current behavior. Each source that has them carries
+its own `pace` and `today`: the Go subscription and the two Cursor pools are
+separate meters with separate daily allowances.
 
 Dollar formatting:
 
@@ -279,13 +284,15 @@ Dollar formatting:
 
 ### Abbreviated form (DRAFT Q4 B)
 
-When the full form does not fit, use the abbreviated labels and keep every
-field:
+When a source's full block does not fit its line, use the abbreviated labels
+and keep every field:
 
 | Field | `ok` | `unavailable` |
 |---|---|---|
 | Go | `G $1.87/60 3%` or `G+ …` | `G ?` |
-| Pace | `p 72` | omitted when Go is `?` |
+| Cursor | `C $2.27/80 3%` | `C ?` |
+| Cursor/other | `C/o $0.84/80 1%` | `C ?` |
+| Pace | `p 72` | omitted when the source is `?` |
 | Today | `t 94` | `t ?` |
 | OpenRouter | `OR 29/1000` | `OR ?` |
 
@@ -294,35 +301,38 @@ meaning of the full form; the `%/d` decoration on `pace` is dropped for width.
 
 ### Drop order
 
-Only when the abbreviated form still does not fit are fields dropped, from the
-right:
+Only when a source's abbreviated block still does not fit are **that source's**
+fields dropped, from the right:
 
-1. `OR`
-2. `t`
-3. `p`
-4. shorten Go: `G $1.87/60 3%` → `G $1.87 3%` → `G 3%`
-5. `=== Skynet ===`
+1. `today`
+2. `pace`
+3. shorten the used/limit field: `G $1.87/60 3%` → `G $1.87 3%` → `G 3%`
+4. the source's line
+
+A sibling is unaffected: a line is fitted on its own, so one source dropping
+fields never removes another. The title is the last thing to survive; when no
+source has a field that fits beside it, the section is the title alone.
 
 The acceptance table, with the measured example:
 
-| Width | Line |
-|------:|------|
-| 68+ | `=== Skynet === Go $1.87/$60 3% · pace 72%/d · today 94% · OR 29/1000` |
-| 56–67 | `=== Skynet === G $1.87/60 3% · p 72 · t 94 · OR 29/1000` |
-| 43–55 | `=== Skynet === G $1.87/60 3% · p 72 · t 94` |
-| 36–42 | `=== Skynet === G $1.87/60 3% · p 72` |
-| 29–35 | `=== Skynet === G $1.87/60 3%` |
-| 26–28 | `=== Skynet === G $1.87 3%` |
-| 19–25 | `=== Skynet === G 3%` |
+| Width | Lines |
+|------:|-------|
+| 65+ | `=== Skynet === Go $1.87/$60 3% (5d left) · pace 72%/d · today 94%` then `OR 29/1000` |
+| 52–64 | `=== Skynet === G $1.87/60 3% (5d left) · p 72 · t 94` then `OR 29/1000` |
+| 45–51 | `=== Skynet === G $1.87/60 3% (5d left) · p 72` then `OR 29/1000` |
+| 38–44 | `=== Skynet === G $1.87/60 3% (5d left)` then `OR 29/1000` |
+| 28–37 | `=== Skynet === G $1.87/60 3%` then `OR 29/1000` |
+| 25–27 | `=== Skynet === G $1.87 3%` then `OR 29/1000` |
+| 19–24 | `=== Skynet === G 3%` then `OR 29/1000` |
 | 14–18 | `=== Skynet ===` |
 
-The boundaries are the lengths of those lines; the table shows each line at
-its minimum width, where the gap after the title is one space, and a wider
-pane keeps the block at the right edge. The earlier draft of this table was
-one column low in the first seven rows, which would have asked for a line
-wider than the pane it was given. Widths below 14 are out of scope; the title
-itself is 14 columns. The function must never return more than `width`
-characters.
+The title line in the table sits at its minimum width with a one-space gap
+after the title, and the sibling line is right-aligned on its own. A wider pane
+keeps each line's block against the right edge, so every line's length equals
+`width`. Widths below 14 are out of scope; the title itself is 14 columns. The
+function must never return a line longer than `width`. The table is the Go +
+OpenRouter example; Cursor adds one line per pool, fitted the same way and
+independently.
 
 ## Watch and one-shot
 
@@ -374,7 +384,7 @@ characters.
 	`absent`; a required field missing from an otherwise valid response makes it
 	`unavailable`.
 - **R2.7** 401, 403, network, timeout and JSON errors make Go `unavailable`.
-- **R2.8** Do not parse or display `fiveHour` or `week` on the first line
+- **R2.8** Do not parse or display `fiveHour` or `week` in the quota line
 	(DRAFT Q10 A).
 - **R2.9** Round `access.endsAt` to the nearest UTC midnight for the period
 	length, with a tie to the next midnight; the meter's own reset is
@@ -389,7 +399,7 @@ characters.
 	`free_model_daily_requests` makes it `unavailable`; HTTP/network/JSON errors
 	make it `unavailable`.
 - **R3.4** Do not re-derive a day from the local database (DRAFT Q6 A).
-- **R3.5** Do not display `usage_daily` on the first line (DRAFT Q5 A).
+- **R3.5** Do not display `usage_daily` in the quota line (DRAFT Q5 A).
 
 ### Pace
 
@@ -423,16 +433,21 @@ characters.
 
 ### Display
 
-- **R6.1** For `width >= 14`, the first line is one line, at most `width`
-	characters, with no newline. Widths below 14 are out of scope.
-- **R6.2** Try the full form first, then the abbreviated form, then the drop
-	order; the acceptance table in *Display* is normative.
-- **R6.7** The chosen field block is right-aligned against `width`, with at
-	least one space after the title; a wider pane widens that gap.
-- **R6.3** `absent` sources contribute no field; `unavailable` sources show
-	`?` (or `G ?` / `OR ?`).
-- **R6.4** When Go is `?`, omit `pace` and `today`; `Go ?` alone is the Go
-	contribution.
+- **R6.1** For `width >= 14`, the quota section is one line per configured
+	source; every line is at most `width` characters and contains no newline.
+	Widths below 14 are out of scope.
+- **R6.2** Within each source, try the full form first, then the abbreviated
+	form, then that source's fields in the drop order; the acceptance table in
+	*Display* is normative.
+- **R6.7** The first source's block is right-aligned against `width` with at
+	least one space after the title; every other source's line is right-aligned
+	against `width`. A wider pane widens the gap, not the block.
+- **R6.8** Sources keep the order Go, Cursor, Cursor/other, OpenRouter, and
+	each source that has them carries its own `pace` and `today`.
+- **R6.3** `absent` sources contribute no line; `unavailable` sources show
+	`?` (or `G ?` / `C ?` / `OR ?`).
+- **R6.4** When a source is `?`, omit `pace` and `today`; the question-mark
+	field alone is that source's contribution.
 - **R6.5** The tables and the terminal contract are unchanged; a quota failure
 	never removes a table (DRAFT Q8 A).
 - **R6.6** `render(rows, now, height=None, width=None, quota=None)` keeps the
@@ -499,7 +514,7 @@ rule ids keep their numbers.
 | Q7 | Quota source | A — provider counters only; Cursor's local `cost` column is the exception (`Y23C99K`) |
 | Q8 | API failure | A — `?` for configured-but-unreadable; omit unconfigured |
 | Q9 | Code layout | A — keep the quota code in `skynet.py` |
-| Q10 | 5-hour and week meters | A — do not show them on the first line |
+| Q10 | 5-hour and week meters | A — do not show them in the quota line |
 
 ## Out of scope
 
@@ -507,7 +522,7 @@ rule ids keep their numbers.
 - Free-usage display; the provider counters already exclude free usage (Q5 A).
 - A local-day OpenRouter counter (Q6 A).
 - Quota dollars from the local `cost` column, except Cursor (Q7 A, `Y23C99K`).
-- The 5-hour and week meters on the first line (Q10 A).
+- The 5-hour and week meters in the quota line (Q10 A).
 - A background fetch thread.
 - Per-model quota history; the API has no daily history.
 - Cursor-agent support; that is the separate ticket `4P4VD3A`.

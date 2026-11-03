@@ -507,33 +507,45 @@ def test_a_write_failure_still_returns_the_baseline():
 
 # --- display ---------------------------------------------------------------
 
-def test_the_full_line_carries_every_field():
-	line = skynet.quota_line(_display_quota(), 70)
-	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72 · t 94 · OR 29/1000", 70), "the acceptance table's full line")
+def _edge(block, width):
+	"""A source's own line: the block against the right edge, no title."""
+	return " " * (width - len(block)) + block
 
-def test_the_line_abbreviates_before_dropping():
-	line = skynet.quota_line(_display_quota(), 60)
-	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72 · t 94", 60), "the abbreviated form keeps every field")
+def _lines(quota, width):
+	"""The quota section as its lines."""
+	return skynet.quota_line(quota, width).splitlines()
 
-def test_the_openrouter_field_drops_first():
-	line = skynet.quota_line(_display_quota(), 50)
-	xtest.equal(line, _aligned("G $1.87/60 3% (5d left) · p 72", 50), "OR goes before today")
+def test_the_first_source_takes_the_title_line_and_the_next_its_own():
+	lines = _lines(_display_quota(), 70)
+	xtest.equal(lines[0], _aligned("Go $1.87/$60 3% (5d left) · pace 72%/d · today 94%", 70), "the first source shares the title line")
+	xtest.equal(lines[1], _edge("OR 29/1000", 70), "each further source gets its own line")
 
-def test_the_today_field_drops_next():
-	line = skynet.quota_line(_display_quota(), 40)
-	xtest.equal(line, _aligned("G $1.87/60 3% (5d left)", 40), "today goes before pace")
+def test_the_abbreviated_form_keeps_every_field():
+	lines = _lines(_display_quota(), 60)
+	xtest.equal(lines[0], _aligned("G $1.87/60 3% (5d left) · p 72 · t 94", 60), "the abbreviated form keeps every field")
+	xtest.equal(lines[1], _edge("OR 29/1000", 60), "the sibling does not take part in the title line's fit")
 
-def test_the_pace_field_drops_next():
-	line = skynet.quota_line(_display_quota(), 34)
-	xtest.equal(line, _aligned("G $1.87/60 3%", 34), "pace goes before the Go field is shortened")
+def test_a_sibling_line_does_not_drop_for_the_title_line():
+	# At 50 the title line cannot carry `today`; OpenRouter is still whole.
+	lines = _lines(_display_quota(), 50)
+	xtest.equal(lines[0], _aligned("G $1.87/60 3% (5d left) · p 72", 50), "today drops from the source's own block")
+	xtest.equal(lines[1], _edge("OR 29/1000", 50), "OpenRouter keeps its own line")
 
-def test_the_go_limit_drops_before_the_percentage():
-	line = skynet.quota_line(_display_quota(), 27)
-	xtest.equal(line, _aligned("G $1.87 3%", 27), "the limit goes first")
+def test_today_and_pace_drop_before_the_used_limit_field():
+	lines = _lines(_display_quota(), 40)
+	xtest.equal(lines[0], _aligned("G $1.87/60 3% (5d left)", 40), "today and pace go before the used/limit field")
 
-def test_the_go_field_keeps_only_the_percentage_at_the_narrowest():
-	line = skynet.quota_line(_display_quota(), 22)
-	xtest.equal(line, _aligned("G 3%", 22), "only the percentage remains")
+def test_the_used_limit_field_shortens_before_the_percentage():
+	lines = _lines(_display_quota(), 34)
+	xtest.equal(lines[0], _aligned("G $1.87/60 3%", 34), "the limit goes first")
+
+def test_the_used_limit_field_drops_the_limit_before_the_percentage():
+	lines = _lines(_display_quota(), 27)
+	xtest.equal(lines[0], _aligned("G $1.87 3%", 27), "the limit goes before the percentage")
+
+def test_the_used_limit_field_keeps_only_the_percentage_at_the_narrowest():
+	lines = _lines(_display_quota(), 22)
+	xtest.equal(lines[0], _aligned("G 3%", 22), "only the percentage remains")
 
 def test_the_title_alone_fits_a_very_narrow_pane():
 	line = skynet.quota_line(_display_quota(), 15)
@@ -541,13 +553,14 @@ def test_the_title_alone_fits_a_very_narrow_pane():
 
 def test_an_unavailable_go_shows_a_question_mark_and_no_pace():
 	quota = _display_quota(go={"state": "unavailable"}, overall=None, today=None)
-	line = skynet.quota_line(quota, 80)
-	xtest.equal(line, _aligned("Go ? · OR 29/1000", 80), "a configured but unreadable source is a question mark")
+	lines = _lines(quota, 80)
+	xtest.equal(lines[0], _aligned("Go ?", 80), "a configured but unreadable source is a question mark")
+	xtest.equal(lines[1], _edge("OR 29/1000", 80), "the other source keeps its line")
 
 def test_an_unavailable_openrouter_shows_a_question_mark():
 	quota = _display_quota(openrouter={"state": "unavailable"})
-	line = skynet.quota_line(quota, 80)
-	xtest.equal(line, _aligned("Go $1.87/$60 3% (5d left) · pace 72%/d · today 94% · OR ?", 80), "the counter is unknown, not absent")
+	lines = _lines(quota, 80)
+	xtest.equal(lines[1], _edge("OR ?", 80), "the counter is unknown, not absent")
 
 def test_absent_sources_contribute_nothing():
 	quota = {"go": {"state": "absent"}, "openrouter": {"state": "absent"}, "pace": {"used_percent": None, "overall": None, "today": None}}
@@ -559,34 +572,54 @@ def test_go_plus_is_labelled_go_plus():
 	line = skynet.quota_line(quota, 80)
 	xtest.contains("Go+ $1.87/$60 3%", line, "the plus product is not called Go")
 
-def test_the_quota_block_is_pushed_to_the_right_edge():
-	quota = _display_quota()
-	for width in (70, 80, 120):
-		line = skynet.quota_line(quota, width)
-		xtest.equal(len(line), width, f"the block fills width {width}")
-		xtest.true(line.endswith("OR 29/1000"), "the block ends at the right edge")
+def _live_quota():
+	"""The sample shape the panel gets: every source carries its own pace."""
+	base = _display_quota()
+	return dict(
+		base,
+		go_pace=base["pace"],
+		cursor={
+			"state": "ok", "product": "cursor",
+			"limit": 8_000_000_000, "used": 310_953_780, "days_left": 13,
+			"cursor_used": 227_041_250, "other_used": 83_912_530,
+		},
+		cursor_pool_pace={"used_percent": 2.8, "overall": 5, "today": 85},
+		other_pool_pace={"used_percent": 1.0, "overall": 2, "today": 31},
+	)
 
-def test_a_fallback_block_stays_at_the_right_edge():
-	for width, suffix in ((50, "p 72"), (34, "G $1.87/60 3%"), (22, "G 3%")):
-		line = skynet.quota_line(_display_quota(), width)
-		xtest.equal(len(line), width, f"the fallback fills width {width}")
-		xtest.true(line.endswith(suffix), f"width {width} ends with {suffix}")
+def test_every_configured_source_has_its_own_line():
+	lines = _lines(_live_quota(), 100)
+	xtest.equal(len(lines), 4, "Go, Cursor, Cursor/other, OpenRouter: one line each")
+	xtest.equal(lines[0], _aligned("Go $1.87/$60 3% (5d left) · pace 72%/d · today 94%", 100), "Go keeps its own pace and today")
+	xtest.equal(lines[1], _edge("Cursor $2.27/$80 3% (13d left) · pace 5%/d · today 85%", 100), "the pool carries its own")
+	xtest.equal(lines[2], _edge("Cursor/other $0.84/$80 1% (13d left) · pace 2%/d · today 31%", 100), "so does the other pool")
+	xtest.equal(lines[3], _edge("OR 29/1000", 100), "OpenRouter follows in source order")
+
+def test_every_line_fills_the_width():
+	for width in (40, 70, 100, 120):
+		lines = _lines(_live_quota(), width)
+		for line in lines:
+			xtest.equal(len(line), width, f"width {width}: every line reaches the edge")
+		xtest.true(lines[-1].endswith("OR 29/1000"), "the last source ends the section")
 
 def test_the_quota_line_never_exceeds_the_width():
-	quota = _display_quota()
+	quota = _live_quota()
 	for width in range(14, 121):
-		line = skynet.quota_line(quota, width)
-		xtest.true(len(line) <= width, f"width {width} cannot carry {len(line)} columns")
-		xtest.true("\n" not in line, f"width {width} stayed on one line")
+		lines = _lines(quota, width)
+		for line in lines:
+			xtest.true(len(line) <= width, f"width {width} cannot carry {len(line)} columns")
+		xtest.true(1 <= len(lines) <= 4, f"width {width} stays one line per source")
 		if width >= 19:
-			xtest.equal(len(line), width, f"width {width} keeps the block at its edge")
+			xtest.equal(len(lines), 4, f"width {width} carries every source")
+			for line in lines:
+				xtest.equal(len(line), width, f"width {width} keeps every line at the edge")
 
-def test_render_puts_the_quota_line_first_and_keeps_the_tables():
+def test_render_puts_the_quota_section_first_and_keeps_the_tables():
 	rows = [("model-a", datetime.datetime.now().timestamp(), 100, 100, 1000, 0, 0, 0, None, None, "stop", "session")]
 	out = skynet.render(rows, datetime.datetime.now().timestamp(), height=24, width=120, quota=_display_quota())
 	lines = out.splitlines()
-	xtest.true(lines[0].startswith("=== Skynet ==="), "the quota rides on the first line")
-	xtest.true(lines[0].endswith("OR 29/1000"), "the block ends at the right edge")
+	xtest.true(lines[0].startswith("=== Skynet ==="), "the quota rides on the title line")
+	xtest.true(lines[1].endswith("OR 29/1000"), "the section ends with the last source")
 	xtest.contains("=== Models (Today) ===", out, "the tables are unchanged")
 
 def test_render_without_quota_keeps_the_old_header():
