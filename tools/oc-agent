@@ -14,11 +14,13 @@ AGENT="$1"
 # answer, which callers read as "unknown".
 agents_json=$(opencode api get /api/agent 2>/dev/null)
 
-# The names `oc-agent <name>` accepts. Only primary-capable agents can head a
-# session.
+# The names `oc-agent <name>` accepts. It launches a session, so it lists every
+# agent OpenCode lets the user drive directly: `all` and `primary` alike.
+# `subagent`-only agents cannot head a session, and `hidden` maintenance agents
+# are not user-selectable.
 agent_names() {
 	printf '%s' "$agents_json" \
-		| jq -r '.data[] | select(.mode=="all") | .name' 2>/dev/null \
+		| jq -r '.data[] | select((.mode=="all" or .mode=="primary") and (.hidden != true)) | .name' 2>/dev/null \
 		| sort -u
 }
 
