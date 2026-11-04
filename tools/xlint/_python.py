@@ -233,7 +233,11 @@ def check_imports(lines):
 		if stripped.startswith("#"):
 			continue
 		if not stripped.startswith(("import ", "from ")):
-			break
+			in_block = False
+			prev_module = None
+			prev_plain = False
+			pending_blank = None
+			continue
 		if pending_blank is not None:
 			report.append((pending_blank, "blank line between imports"))
 			pending_blank = None

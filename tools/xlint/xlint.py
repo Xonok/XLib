@@ -23,18 +23,7 @@ if __package__ is None:
 	__package__ = "tools.xlint"
 
 # Sibling modules, imported once.
-from . import _io
-from . import _repo_rules
-from . import _checks
-from . import _markdown
-from . import _python
-from . import _js
-from . import _html
-from . import _personal
-from . import _banned_git
-from . import _c
-from . import _watch
-from . import _cli
+from . import _io,_repo_rules,_checks,_markdown,_python,_js,_html,_personal,_banned_git,_c,_watch,_cli
 
 # Public API: explicit rebinding of every name each sibling exposes.
 _libc = _io._libc
