@@ -288,6 +288,7 @@ HARNESS_MAPPING = (
 	"agent._walk",
 	"agent._classify",
 	"agent._relativise",
+	"agent._outside_sandbox",
 	"agent._harness_turn",
 	"agent._exit_of",
 	"agent._finished",
@@ -702,6 +703,25 @@ def _relativise(path,root):
 		return path
 	return path if rel.startswith("..") else rel
 
+def _outside_sandbox(path,root):
+	"""Check if an absolute path escapes the sandbox root.
+	
+	Returns the resolved absolute path if it is outside the sandbox, None if inside.
+	Handles absolute paths and `../` escapes. The root is resolved to its real path
+	to avoid symlink tricks."""
+	if not path:
+		return None
+	try:
+		real_root = os.path.realpath(root)
+		real_target = os.path.realpath(path)
+	except (TypeError,ValueError,OSError):
+		# If we can't resolve, treat as suspicious
+		return path
+	# Inside if target is root or a child of root
+	if real_target == real_root or real_target.startswith(real_root + os.sep):
+		return None
+	return real_target
+
 def _exit_of(part):
 	"""The command's exit code, wherever this opencode version keeps it.
 
@@ -811,10 +831,91 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 	   human actually has — and not the controlled one the direct path answers.
 	2. `opencode run` has no step cap, so the turn budget is stated in the prompt and
 	   enforced only by wall clock. A run killed by the clock sets finished=False, which
-	   fails G4 exactly as a turn-capped run does."""
+	   fails G4 exactly as a turn-capped run does.
+
+	Containment: every write-like tool call is scanned for paths outside the sandbox root.
+	If any is found, the run is marked `not-measurable` with an `outside_sandbox` provenance
+	field naming the tool and the resolved path. The turns and raw session are kept for the
+	audit trail; the run is not graded as a model result."""
 	prompt = _harness_prompt(request,root,max_turns,protocol=protocol)
 	_plant_agent_definition(model,root)
 	events,info = transport.harness_stream(model,prompt,root,timeout)
+
+	# Containment check: scan all write-like tool uses for paths outside the sandbox.
+	# opencode reports absolute paths in the event stream; we resolve each against the
+	# sandbox root and flag any escape (absolute path outside root or `../` traversal).
+	outside = []
+	for ev in events:
+		if ev.get("type") != "tool_use":
+			continue
+		part = ev.get("part") or {}
+		tool = (part.get("tool") or "").lower()
+		if tool not in OPENCODE_WRITE:
+			continue
+		state = part.get("state") or {}
+		spec = state.get("input") or {}
+		# opencode uses various field names for the target path
+		path = spec.get("filePath") or spec.get("path") or spec.get("file")
+		escaped = _outside_sandbox(path,root)
+		if escaped:
+			outside.append({"tool":tool,"path":escaped})
+
+	if outside:
+		# Build a minimal trace so the audit trail has the turns and raw session.
+		# The run is NOT graded as a model result — it is a hole in the measurement.
+		turns,texts,tokens,stopped = [],[],None,False
+		step_actions = 0
+		for ev in events:
+			kind = ev.get("type")
+			part = ev.get("part") or {}
+			if kind == "step_start":
+				step_actions = 0
+				continue
+			if kind == "tool_use":
+				turns.append(_harness_turn(part,len(turns)+1,root))
+				step_actions += 1
+				continue
+			if kind == "text":
+				texts.append(part.get("text",""))
+				continue
+			if kind != "step_finish":
+				continue
+			total = transport.token_total(part)
+			if isinstance(total,int):
+				tokens = total
+			if step_actions > 1:
+				for turn in turns[-step_actions:]:
+					turn["batched"] = True
+					turn["n_actions"] = step_actions
+			if part.get("reason") == "stop":
+				stopped = True
+		final_text = "".join(texts).strip()
+		session = ""
+		for ev in events:
+			sid = ev.get("sessionID") or (ev.get("part") or {}).get("sessionID")
+			if sid:
+				session = sid
+				break
+		finished = _finished(final_text,info,stopped)
+		if finished:
+			turns.append({"turn":len(turns)+1,"action":"finish","path":"","cmd":"","parsed":True,
+				"exit":None,"result":"episode ended","reply":final_text,"tokens":None,
+				"n_actions":1,"batched":False,"tool":None,"protocol":"opencode"})
+		return {"model":model.get("id"),"root":root,"turns":turns,"finished":finished,
+			"claim":final_text,"status":_declared_status(final_text),
+			"protocol":protocol_label(protocol),
+			"n_turns":len(turns),"usage":tokens or 0,
+			"transport":"harness","timed_out":info["timed_out"],
+			"returncode":info["returncode"],"turn_budget":max_turns,
+			"over_budget":len(turns) > max_turns,
+			"stderr":info["stderr"],"provider_error":info.get("provider_error",""),
+			"prompt":prompt,"raw":info.get("stdout",""),"session":session,
+			# Containment failure provenance: the instrument could not measure this run
+			# because the model (via opencode) wrote outside the sandbox. This is not a
+			# model grade — it is a hole in the run, recorded for the audit trail.
+			"outside_sandbox":outside,
+			"grade":"not-measurable","failed_gates":["outside_sandbox"]}
+
 	turns,texts,tokens,stopped = [],[],None,False
 	step_actions = 0
 	for ev in events:
