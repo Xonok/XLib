@@ -1,7 +1,8 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-from ._io import _ABSOLUTE_PATH_RE,_C_SUFFIXES,_DOUBLE_SPACE_RE,_HTML_SUFFIXES,_JS_SUFFIXES,_SPACE_INDENT_RE,_is_tracked_file
-from . import _html,_personal,_banned_git
+from ._io import _ABSOLUTE_PATH_RE,_DOUBLE_SPACE_RE,_SPACE_INDENT_RE,_is_tracked_file
+from ._languages import _Check,_SUFFIX_TO_LANGUAGE
+from . import _html,_languages as _lang_mod,_personal,_banned_git
 from ._python import _python_docstring_lines,_python_exempt_spans,_python_string_lines,check_def_comment,check_def_one_line,check_imports
 from ._markdown import _blockquote_exempt,_fence_exempt,_frontmatter_exempt,_markdown_exempt_spans
 from ._js import _js_exempt_lines,check_js_double_blank,check_js_final_newline,check_js_space_indent,check_js_trailing_blank,check_js_trailing_whitespace
@@ -140,108 +141,6 @@ def check_leading_blank(lines):
 	if lines and not lines[0].strip():
 		return [(1, "empty line at start of file")]
 	return []
-class _Check:
-	"""One entry in a language's check list.
-
-	`attr`/`name` are the disable flag attribute and canonical rule name;
-	`rule` is the rule id reported; `produce` returns (line, message) pairs.
-	"""
-
-	__slots__ = ("attr", "name", "rule", "tracked_only", "produce")
-
-	def __init__(self, attr, name, rule, produce, tracked_only=False):
-		self.attr = attr
-		self.name = name
-		self.rule = rule
-		self.tracked_only = tracked_only
-		self.produce = produce
-
-def _py_checks():
-	return [
-		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
-		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
-		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent_exempt(text, _python_string_lines(text))),
-		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
-		_Check("no_def_one_line", "def-one-line", "def-one-line", lambda lines, text, path, tracked: check_def_one_line(text)),
-		_Check("no_def_comment", "def-comment", "def-comment", lambda lines, text, path, tracked: check_def_comment(text)),
-		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
-		_Check("no_imports", "imports", "imports", lambda lines, text, path, tracked: check_imports(text)),
-		_Check("no_double_space", "double-space", "double-space", lambda lines, text, path, tracked: check_double_space(text, True)),
-		_Check("no_absolute_paths", "absolute-paths", "absolute-paths", lambda lines, text, path, tracked: check_absolute_paths(text, _python_string_lines(text) - _python_docstring_lines(text), path) if tracked else [], tracked_only=True),
-	]
-
-def _md_checks():
-	def _abs_exempt(text):
-		exempt = _frontmatter_exempt(text)
-		exempt.update(_fence_exempt(text))
-		exempt.update(_blockquote_exempt(text))
-		return exempt
-
-	def _space_exempt(text):
-		exempt = _frontmatter_exempt(text)
-		exempt.update(_fence_exempt(text))
-		return exempt
-
-	return [
-		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
-		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
-		_Check("no_absolute_paths", "absolute-paths", "absolute-paths", lambda lines, text, path, tracked: check_absolute_paths(text, _abs_exempt(text), path) if tracked else [], tracked_only=True),
-		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent_exempt(text, _space_exempt(text))),
-		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text, True)),
-		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
-		_Check("no_double_space", "double-space", "double-space", lambda lines, text, path, tracked: check_double_space(text, False)),
-	]
-
-def _js_checks():
-	return [
-		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
-		_Check("no_js_double_blank", "js-double-blank", "js-double-blank", lambda lines, text, path, tracked: check_js_double_blank(text)),
-		_Check("no_js_space_indent", "js-space-indent", "js-space-indent", lambda lines, text, path, tracked: check_js_space_indent(text, _js_exempt_lines(text))),
-		_Check("no_js_trailing", "js-trailing", "js-trailing", lambda lines, text, path, tracked: check_js_trailing_whitespace(text)),
-		_Check("no_js_final_newline", "js-final-newline", "js-final-newline", lambda lines, text, path, tracked: check_js_trailing_blank(text) + check_js_final_newline(lines)),
-	]
-
-def _html_checks():
-	return [
-		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
-		_Check("no_html_double_blank", "html-double-blank", "html-double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
-		_Check("no_html_space_indent", "html-space-indent", "html-space-indent", lambda lines, text, path, tracked: check_space_indent(text)),
-		_Check("no_html_trailing", "html-trailing", "html-trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
-		_Check("no_html_final_newline", "html-final-newline", "html-final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
-		_Check("no_html_unclosed", "html-unclosed", "html-unclosed", lambda lines, text, path, tracked: _html.check_html(text)["unclosed"]),
-		_Check("no_html_bad_closer", "html-bad-closer", "html-bad-closer", lambda lines, text, path, tracked: _html.check_html(text)["bad_closer"]),
-		_Check("no_html_depth", "html-depth", "html-depth", lambda lines, text, path, tracked: _html.check_html(text)["depth"]),
-	]
-
-def _c_checks():
-	return [
-		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
-		_Check("no_double_blank", "double-blank", "double-blank", lambda lines, text, path, tracked: check_double_blank(text)),
-		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent(text)),
-		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
-		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
-	]
-
-_LANGUAGE_CHECKS = {
-	"py": _py_checks(),
-	"md": _md_checks(),
-	"js": _js_checks(),
-	"html": _html_checks(),
-	"c": _c_checks(),
-}
-
-_SUFFIX_TO_LANGUAGE = {}
-for _s in (".py",):
-	_SUFFIX_TO_LANGUAGE[_s] = "py"
-for _s in (".md",):
-	_SUFFIX_TO_LANGUAGE[_s] = "md"
-for _s in _JS_SUFFIXES:
-	_SUFFIX_TO_LANGUAGE[_s] = "js"
-for _s in _HTML_SUFFIXES:
-	_SUFFIX_TO_LANGUAGE[_s] = "html"
-for _s in _C_SUFFIXES:
-	_SUFFIX_TO_LANGUAGE[_s] = "c"
-
 def check_file(path, args):
 	try:
 		lines = path.read_text().splitlines(keepends=True)
@@ -253,7 +152,7 @@ def check_file(path, args):
 	tracked = _is_tracked_file(path)
 	language = _SUFFIX_TO_LANGUAGE.get(path.suffix)
 	if language is not None:
-		for chk in _LANGUAGE_CHECKS[language]:
+		for chk in _lang_mod._LANGUAGE_CHECKS[language]:
 			if getattr(args, chk.attr, False) or chk.name in disabled:
 				continue
 			if chk.tracked_only and not tracked:
@@ -268,5 +167,9 @@ def check_file(path, args):
 		if not any(_posix == candidate or _posix.endswith("/" + candidate) for candidate in _exempt_paths):
 			problems.extend((line, "banned-git", msg) for line, msg in _banned_git.check(text_lines))
 	return problems
+
+# Populate the language->checks mapping now that all check functions are defined.
+_lang_mod._LANGUAGE_CHECKS = _lang_mod.build_language_checks()
+_LANGUAGE_CHECKS = _lang_mod._LANGUAGE_CHECKS
 
 __all__ = ['check_double_blank', 'check_space_indent', 'check_space_indent_exempt', 'check_trailing_whitespace', 'check_double_space', '_line_has_double_space', 'check_absolute_paths', 'check_trailing_blank', 'check_final_newline', 'check_leading_blank', 'check_file', '_Check', '_LANGUAGE_CHECKS', '_SUFFIX_TO_LANGUAGE']

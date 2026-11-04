@@ -441,17 +441,8 @@ _INOTIFY_ADVICE = [
 	"         persist in /etc/sysctl.d/60-inotify.conf",
 ]
 
-_JS_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx")
-
-_PY_MD_SUFFIXES = (".py", ".md")
-
-_HTML_SUFFIXES = (".html",)
-
-_C_SUFFIXES = (".c", ".h")
-
-_SH_SUFFIXES = (".sh",)
-
-_ALL_SUFFIXES = _PY_MD_SUFFIXES + _JS_SUFFIXES + _HTML_SUFFIXES + _C_SUFFIXES + _SH_SUFFIXES
+from ._languages import (_JS_SUFFIXES,_PY_MD_SUFFIXES,_HTML_SUFFIXES,_C_SUFFIXES,
+	_SH_SUFFIXES,_ALL_SUFFIXES)
 
 _RULE_MODULE_SERIAL = itertools.count()
 

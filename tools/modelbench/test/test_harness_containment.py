@@ -18,9 +18,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import transport
+import xtest,agent,transport
 
 def _harness_stream_mock(events,info=None):
 	"""Mock transport.harness_stream to return our synthetic events."""
@@ -386,8 +384,7 @@ def test_absolute_outside_path_still_caught():
 
 def test_pipeline_run_once_returns_not_measurable():
 	"""Pipeline test: run_once -> analyse -> grade returns not-measurable for outside write."""
-	import episodes_run
-	import trace
+	import episodes_run,trace
 
 	with tempfile.TemporaryDirectory() as sandbox:
 		# Create a minimal episode structure (just need the directory to exist)
