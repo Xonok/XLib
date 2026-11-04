@@ -42,14 +42,14 @@ class _FakeLibc:
 @contextlib.contextmanager
 def _libc(fake):
 	"""Use `fake` as the libc for the duration, and put the real one back."""
-	saved = (xlint._libc, xlint._watch._libc, xlint._io._libc)
-	xlint._libc = fake
+	saved = (xlint._io._libc, xlint._watch._libc, xlint._io._libc)
+	xlint._io._libc = fake
 	xlint._watch._libc = fake
 	xlint._io._libc = fake
 	try:
 		yield fake
 	finally:
-		xlint._libc, xlint._watch._libc, xlint._io._libc = saved
+		xlint._io._libc, xlint._watch._libc, xlint._io._libc = saved
 
 def _repo(folder):
 	"""A checkout holding one directory to watch."""
@@ -60,7 +60,7 @@ def _repo(folder):
 
 def _watcher(root):
 	"""An inotify watcher over `root`, through the libc the test installed."""
-	return xlint._InotifyWatcher(xlint._IgnoreRules([root]))
+	return xlint._watch._InotifyWatcher(xlint._io._IgnoreRules([root]))
 
 def _notices(watcher):
 	"""The notice block the report would print, as one string."""
@@ -131,14 +131,14 @@ def test_a_failed_inotify_init_falls_back_to_polling():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		with _libc(_FakeLibc(-1, -1, errno.EMFILE)):
-			watcher = xlint.make_watcher(xlint._IgnoreRules([root]))
-		xtest.kind(watcher, xlint._PollWatcher, "the poll watcher takes over")
+			watcher = xlint.make_watcher(xlint._io._IgnoreRules([root]))
+		xtest.kind(watcher, xlint._watch._PollWatcher, "the poll watcher takes over")
 
 def test_a_failed_inotify_init_is_named_in_the_notice():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		with _libc(_FakeLibc(-1, -1, errno.EMFILE)):
-			watcher = xlint.make_watcher(xlint._IgnoreRules([root]))
+			watcher = xlint.make_watcher(xlint._io._IgnoreRules([root]))
 		notices = _notices(watcher)
 		xtest.contains("inotify_init failed", notices, "the failing syscall is named")
 		xtest.contains("EMFILE", notices, "the errno name is in the notice")

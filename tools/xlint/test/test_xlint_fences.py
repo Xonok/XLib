@@ -14,7 +14,7 @@ def messages(problems):
 	return sorted(item[-1] for item in problems)
 
 def fenced(lines):
-	return xlint.check_space_indent_exempt(lines, xlint._fence_exempt(lines))
+	return xlint.check_space_indent_exempt(lines, xlint._markdown._fence_exempt(lines))
 
 # --- TestMarkdownFences ---
 
@@ -55,4 +55,4 @@ def test_a_backtick_fence_is_not_closed_by_tildes():
 
 def test_frontmatter_is_still_exempt():
 	lines = ["---", "key:   value", "---", "body"]
-	xtest.equal(xlint.check_space_indent_exempt(lines, xlint._frontmatter_exempt(lines)), [])
+	xtest.equal(xlint.check_space_indent_exempt(lines, xlint._markdown._frontmatter_exempt(lines)), [])

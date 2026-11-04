@@ -65,7 +65,7 @@ def _names_rule(paths = None):
 
 def _problems(root):
 	"""The repo findings for one checkout, through the composite rule set."""
-	rules = xlint._Rules([root])
+	rules = xlint._repo_rules._Rules([root])
 	return rules.repo_problems(rules.files())
 
 def _messages(found):
@@ -76,7 +76,7 @@ def _error(fn):
 	"""The message of the repo-rule error `fn` raises, or a failure if it passes."""
 	try:
 		fn()
-	except xlint._RepoRuleError as error:
+	except xlint._repo_rules._RepoRuleError as error:
 		return str(error)
 	raise AssertionError("expected _RepoRuleError")
 
@@ -209,7 +209,7 @@ def test_each_checkout_uses_its_own_module():
 		second = _checkout(folder, "second")
 		_module(first, _flag_rule("first"))
 		_module(second, _flag_rule("second"))
-		rules = xlint._Rules([first, second])
+		rules = xlint._repo_rules._Rules([first, second])
 		found = rules.repo_problems(rules.files())
 		xtest.equal(sorted((path.parent.name, message) for path, _, _, message in found),
 			[("first", "first"), ("second", "second")])
@@ -219,7 +219,7 @@ def test_a_checkout_without_a_module_adds_no_findings():
 		first = _checkout(folder, "first")
 		second = _checkout(folder, "second")
 		_module(first, _flag_rule("first"))
-		rules = xlint._Rules([first, second])
+		rules = xlint._repo_rules._Rules([first, second])
 		found = rules.repo_problems(rules.files())
 		xtest.true(all(path.parent == first for path, _, _, _ in found),
 			"a finding in the checkout that has no module")
@@ -231,7 +231,7 @@ def test_a_nested_checkout_keeps_its_own_module():
 		nested = _checkout(Path(folder) / "parent", "nested")
 		_module(parent, _flag_rule("parent"))
 		_module(nested, _flag_rule("nested"))
-		rules = xlint._Rules([parent])
+		rules = xlint._repo_rules._Rules([parent])
 		found = rules.repo_problems(rules.files())
 		xtest.equal(sorted((str(path.relative_to(parent)), message) for path, _, _, message in found),
 			[("code.py", "parent"), ("nested/code.py", "nested")])
@@ -450,7 +450,7 @@ def test_watch_dirs_include_the_module_and_config():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _checkout(folder)
 		_module(root, _flag_rule("flagged"))
-		rules = xlint._Rules([root])
+		rules = xlint._repo_rules._Rules([root])
 		xtest.true((root / "tools") in rules.watch_dirs(), "the default module's directory is watched")
 		xtest.true(root in rules.watch_dirs(), "the config's directory is watched")
 
@@ -512,7 +512,7 @@ def test_findings_for_a_deleted_file_are_dropped_without_a_rerun():
 		root = _checkout(folder)
 		(root / "other.py").write_text("x = 2\n", encoding="utf-8")
 		_module(root, _flag_rule("flag", paths = None))
-		rules = xlint._Rules([root])
+		rules = xlint._repo_rules._Rules([root])
 		all_files = rules.files()
 		first = rules.repo_problems(all_files)
 		xtest.equal(len(first), 3)
@@ -536,7 +536,7 @@ def test_a_changed_file_triggers_a_rerun_over_the_full_set():
 			"\tseen = sorted(path.name for path, lines in files if any(marker in line for line in lines))\n"
 			"\treturn [(path, None, \"sees \" + \",\".join(seen)) for path, lines in files if path.name == \"b.py\"]\n"
 		))
-		rules = xlint._Rules([root])
+		rules = xlint._repo_rules._Rules([root])
 		files = rules.files()
 		first = rules.repo_problems(files)
 		xtest.true(any("a.py" in message for _, _, _, message in first))
@@ -557,7 +557,7 @@ def test_an_unchanged_rule_reuses_its_cached_findings():
 			"\t_counter[\"n\"] += 1\n"
 			"\treturn [(path, 1, \"run \" + str(_counter[\"n\"])) for path, lines in files]\n"
 		))
-		rules = xlint._Rules([root])
+		rules = xlint._repo_rules._Rules([root])
 		files = rules.files()
 		first = rules.repo_problems(files)
 		xtest.true(any("run 1" in message for _, _, _, message in first))

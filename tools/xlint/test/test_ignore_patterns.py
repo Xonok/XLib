@@ -24,7 +24,7 @@ def _exclusions(folder, text):
 	"""One `.xlintignore` in a fresh checkout, and the rules loaded from it."""
 	root = Path(folder)
 	(root / ".xlintignore").write_text(text, encoding="utf-8")
-	return xlint._Exclusions([root]), root
+	return xlint._io._Exclusions([root]), root
 
 def test_a_middle_globstar_matches_zero_segments():
 	with tempfile.TemporaryDirectory() as folder:

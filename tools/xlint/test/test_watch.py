@@ -76,7 +76,7 @@ def test_the_rules_are_reloaded_when_the_ignore_file_is_edited():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(_names(rules.files()), [], "the rule already excludes the file")
 		(root / ".xlintignore").write_text("other.py\n", encoding="utf-8")
 		xtest.true(rules.refresh(), "the edit is noticed")
@@ -85,7 +85,7 @@ def test_the_rules_are_reloaded_when_the_ignore_file_is_edited():
 def test_the_rules_are_reloaded_when_the_ignore_file_appears():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(_names(rules.files()), ["code.py"], "the file starts in scope")
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
 		xtest.true(rules.refresh(), "the new file is noticed")
@@ -95,7 +95,7 @@ def test_the_rules_are_reloaded_when_the_ignore_file_vanishes():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(_names(rules.files()), [], "the file starts out of scope")
 		(root / ".xlintignore").unlink()
 		xtest.true(rules.refresh(), "the removal is noticed")
@@ -105,13 +105,13 @@ def test_a_pass_that_finds_no_change_reloads_nothing():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(rules.refresh(), False, "nothing changed, so nothing was reloaded")
 
 def test_a_newly_ignored_file_leaves_the_scope():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(_names(rules.files()), ["code.py"], "the file starts in scope")
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
 		rules.refresh()
@@ -121,7 +121,7 @@ def test_a_newly_unignored_file_enters_the_scope():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		(root / ".xlintignore").write_text("code.py\n", encoding="utf-8")
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.equal(_names(rules.files()), [], "the file starts out of scope")
 		(root / ".xlintignore").write_text("other.py\n", encoding="utf-8")
 		rules.refresh()
@@ -131,7 +131,7 @@ def test_the_watch_set_drops_a_directory_the_new_rules_exclude():
 	with tempfile.TemporaryDirectory() as folder:
 		root = _repo(folder)
 		(root / "sub").mkdir()
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.true(root / "sub" in rules.watch_dirs(), "the directory is watched")
 		(root / ".xlintignore").write_text("sub/\n", encoding="utf-8")
 		rules.refresh()
@@ -142,7 +142,7 @@ def test_the_watch_set_gains_a_directory_the_new_rules_allow():
 		root = _repo(folder)
 		(root / "sub").mkdir()
 		(root / ".xlintignore").write_text("sub/\n", encoding="utf-8")
-		rules = xlint._IgnoreRules([root])
+		rules = xlint._io._IgnoreRules([root])
 		xtest.true(root / "sub" not in rules.watch_dirs(), "the directory is not watched")
 		(root / ".xlintignore").write_text("other.py\n", encoding="utf-8")
 		rules.refresh()
@@ -156,7 +156,7 @@ def test_two_repositories_are_governed_by_their_own_chains():
 		(two / ".xlintignore").write_text("hidden.py\n", encoding="utf-8")
 		(one / "hidden.py").write_text("x = 1 \n", encoding="utf-8")
 		(two / "hidden.py").write_text("x = 1 \n", encoding="utf-8")
-		rules = xlint._IgnoreRules([one, two])
+		rules = xlint._io._IgnoreRules([one, two])
 		found = sorted(path.parent.name + "/" + path.name for path in rules.files())
 		xtest.equal(found, ["one/code.py", "two/code.py"],
 			"each repository keeps its own file and hides its own hidden one")

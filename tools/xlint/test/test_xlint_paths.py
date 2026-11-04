@@ -46,7 +46,7 @@ def test_no_tracked_python_file_carries_a_machine_path():
 	offenders = []
 	for name in names:
 		lines = (root / name).read_text(encoding="utf-8").splitlines()
-		exempt = xlint._python_string_lines(lines) - xlint._python_docstring_lines(lines)
+		exempt = xlint._python._python_string_lines(lines) - xlint._python._python_docstring_lines(lines)
 		if xlint.check_absolute_paths(lines, exempt, name):
 			offenders.append(name)
 	xtest.equal(offenders, [], f"tracked .py files naming a machine path: {offenders}")
