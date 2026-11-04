@@ -16,8 +16,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
+import xtest,agent
 
 def test_a_write_payload_ends_at_the_echoed_request_line():
 	reply = ('ACTION: write\nPATH: cli.py\nCONTENT:\nprint("ok")\n\n'

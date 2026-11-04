@@ -34,11 +34,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import episodes_run
-import ledger
-import transport
+import xtest,agent,episodes_run,ledger,transport
 
 def _modules():
 	"""The two modules the mappings are made of."""

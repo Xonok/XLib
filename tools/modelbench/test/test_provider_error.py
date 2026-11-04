@@ -16,9 +16,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import transport
+import xtest,agent,transport
 
 QUOTA_EVENT = {"type":"error","timestamp":1,"sessionID":"ses_x","error":{
 	"type":"provider.quota","message":"Rate limit exceeded. Please try again later.",

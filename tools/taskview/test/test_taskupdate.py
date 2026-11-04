@@ -579,8 +579,7 @@ class TestShowCommand(unittest.TestCase):
 
 	def run_cli(self, *args, expect_exit=None):
 		"""Run taskupdate.main with argv, capturing stdout. Returns (out, err, code)."""
-		import io
-		import contextlib
+		import io,contextlib
 		argv = ["taskupdate", "--csv", str(self.csv_path)] + list(args)
 		old_argv = sys.argv
 		old_out, old_err = sys.stdout, sys.stderr
@@ -727,7 +726,7 @@ class TestIsolationGuard(unittest.TestCase):
 	# R30, R19
 	def test_write_via_taskupdate_add_goes_to_temp_tree(self):
 		# Run an add without --csv, no $TASKVIEW_CSV → should use default under temp XDG_DATA_HOME
-		from tools.taskview.taskview import resolve_data_dir, resolve_csv
+		from tools.taskview.taskview import resolve_data_dir,resolve_csv
 		data_dir = resolve_data_dir(None, {})
 		default_csv = resolve_csv(data_dir, None)
 		self.assertTrue(str(default_csv).startswith(_TEST_XDG_DATA_HOME))

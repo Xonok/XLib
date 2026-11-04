@@ -33,8 +33,7 @@ if DEV_DIR not in sys.path:
 	sys.path.insert(0,DEV_DIR)
 
 from xhttp import xhttp
-from xhttp._ import helper
-from xhttp._ import err
+from xhttp._ import helper,err
 
 # --- preflight ------------------------------------------------------------
 

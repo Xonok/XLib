@@ -16,7 +16,7 @@ correct fix, and fail on the careless fix. These tests are that rule, executable
 
 The mechanical fixer here derives its work from `moves.json`, which is the same data the
 checker reads. That is deliberate for the same reason the episode's ground truth is derived
-from the tree: a solution typed by hand into the test would be a second ground truth, and
+from the tree: a solution typed by hand into the test would be a second ground truth,and
 the two would drift.
 """
 import json,os,shutil,subprocess,sys,tempfile
@@ -25,8 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import episodes_run
+import xtest,episodes_run
 
 EPISODE = os.path.join(REPO,"tools","modelbench","episodes","stockroom")
 

@@ -12,7 +12,7 @@ if DEV_DIR not in sys.path:
 	sys.path.insert(0, DEV_DIR)
 
 from xhttp import xhttp
-from xhttp.compare.working_websocket import serve_websocket, compute_accept_key
+from xhttp.compare.working_websocket import serve_websocket,compute_accept_key
 
 # Test HTTP request handler
 def handle_request(req):

@@ -32,10 +32,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import episodes_run
-import transport
+import xtest,agent,episodes_run,transport
 
 def test_the_episode_hash_says_what_the_model_was_asked():
 	"""A name does not survive the episode being edited. `invoicer` was the same name

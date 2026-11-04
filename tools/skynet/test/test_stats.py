@@ -14,8 +14,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.insert(0, os.path.join(REPO, "dev", "xtest"))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-import xtest
-import skynet
+import xtest,skynet
 
 _SCHEMA = """CREATE TABLE session_message (
 	id text PRIMARY KEY,

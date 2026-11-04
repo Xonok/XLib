@@ -18,8 +18,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.insert(0, os.path.join(REPO, "dev", "xtest"))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-import xtest
-import skynet
+import xtest,skynet
 
 def test_the_watch_hides_the_cursor_and_uses_the_alternate_screen():
 	out = io.StringIO()

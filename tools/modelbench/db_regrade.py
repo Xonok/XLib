@@ -38,10 +38,7 @@ import argparse,json,os,re,sqlite3,sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
 	sys.path.insert(0,HERE)
-import agent
-import episodes_run
-import trace
-import transport
+import agent,episodes_run,trace,transport
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 EXIT_SUFFIX = re.compile(r"^Exited with code -?\d+$")

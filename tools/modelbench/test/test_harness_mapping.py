@@ -36,10 +36,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import trace
-import transport
+import xtest,agent,trace,transport
 
 def _with_flags(flags):
 	"""Run with a known set of CLI flags, so the tests do not depend on which opencode

@@ -70,7 +70,8 @@ def test_the_vocabulary_decides_where_the_deep_dive_starts():
 			with open(os.path.join(d,name),"w") as fh:
 				fh.write(text)
 		out = os.path.join(d,"m.json")
-		import subprocess,sys as _sys
+		import subprocess
+		import sys as _sys
 		repo = REPO
 		cmd = [_sys.executable,os.path.join(repo,"tools","modelbench","review_explanations.py"),
 			"--answers",d,"--repo",d,"--out",out,"--general-word","overview",

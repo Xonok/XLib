@@ -14,8 +14,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import transport
+import xtest,transport
 
 def _auth_file(data):
 	f = tempfile.NamedTemporaryFile("w",suffix=".json",delete=False)

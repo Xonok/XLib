@@ -21,8 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import episodes_run
+import xtest,episodes_run
 
 EPISODE = os.path.join(REPO,"tools","modelbench","episodes","patch")
 

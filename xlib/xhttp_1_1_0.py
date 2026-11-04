@@ -101,8 +101,7 @@ class _err__WSMessageMustBeString(_err__HTTPError): pass
 ## /_/request.py
 import json as _request__json
 import traceback as _request__traceback
-from urllib.parse import urlparse as _request__urlparse
-from urllib.parse import unquote as _request__unquote
+from urllib.parse import urlparse as _request__urlparse,unquote as _request__unquote
 
 _request___MB = 1024*1024
 #Read operations

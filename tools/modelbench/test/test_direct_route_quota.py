@@ -22,10 +22,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import agent
-import episodes_run
-import transport
+import xtest,agent,episodes_run,transport
 
 # The measured refusal, trimmed only in the help link. The shape is Google's
 # OpenAI-compatible path: the error is wrapped in a one-element LIST.

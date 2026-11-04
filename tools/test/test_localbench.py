@@ -6,7 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "localbench"))
 
-import ledger, run as runmod
+import ledger
+import run as runmod
 
 def write_meta(runs, name, model, family, case, repeat, ok=True, contract=True, final=True):
 	run_dir = Path(runs) / name

@@ -18,7 +18,7 @@ from xhttp import xhttp
 # Current (buggy) implementation
 from xhttp._ import websocket as orig_websocket
 # Known good implementation
-from xhttp.compare.working_websocket import serve_websocket as working_serve_websocket, send as working_send, compute_accept_key
+from xhttp.compare.working_websocket import serve_websocket as working_serve_websocket,send as working_send,compute_accept_key
 
 # =============================================================================
 # Frame building utilities (RFC 6455 compliant)

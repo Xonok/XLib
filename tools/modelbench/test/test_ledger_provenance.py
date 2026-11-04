@@ -18,9 +18,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import episodes_run
-import ledger
+import xtest,episodes_run,ledger
 
 def _db_with(rows):
 	"""A throwaway opencode-shaped database with a `session_v2` table."""

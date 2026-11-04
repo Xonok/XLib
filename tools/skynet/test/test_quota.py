@@ -12,8 +12,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.insert(0, os.path.join(REPO, "dev", "xtest"))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
-import xtest
-import skynet
+import xtest,skynet
 
 UTC = datetime.timezone.utc
 NOW = datetime.datetime(2026, 10, 26, 12, 0, tzinfo=UTC)

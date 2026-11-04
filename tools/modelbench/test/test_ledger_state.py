@@ -20,8 +20,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import ledger
+import xtest,ledger
 
 def _tree(names):
 	"""A temporary tree with a `state/` directory holding the given names."""

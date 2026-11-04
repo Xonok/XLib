@@ -17,9 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "dev" / "xtest"))
 sys.path.insert(0, str(ROOT / "tools"))
-import xtest
-
-import run_tests
+import xtest,run_tests
 
 # Files whose names start with `test_` and that are not tests. The comparison
 # scripts in `dev/xhttp/compare/` are hand-run probes against another

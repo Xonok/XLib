@@ -21,8 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 	os.path.abspath(__file__)))))
 sys.path.insert(0,os.path.join(REPO,"dev","xtest"))
 sys.path.insert(0,os.path.join(REPO,"tools","modelbench"))
-import xtest
-import transport
+import xtest,transport
 
 DAY_BODY = json.dumps([{"error":{"code":429,"message":(
 	"Quota exceeded for metric: generativelanguage.googleapis.com/"

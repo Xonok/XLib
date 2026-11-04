@@ -355,7 +355,8 @@ class ParityTest(unittest.TestCase):
 		files.json are examples of the shape callers must provide.
 		config_valid accepts the 4-key dict (folder, mime, compress, cache).
 		"""
-		import json as _json,os
+		import json as _json
+		import os
 		path = os.path.join(harness.REPO_ROOT,"config","files.json")
 		try:
 			with open(path) as f:
