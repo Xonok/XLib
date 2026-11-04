@@ -170,7 +170,9 @@ def run_once(model,episode,run_root,max_turns=agent.MAX_TURNS,max_tokens=None,pr
 			# Where the run meant to be, and where opencode says the session actually was.
 			# The ledger refuses a contradiction (E21); an absent value is unverified.
 			"root":raw.get("root"),
-			"session_directory":session_directory(raw.get("session"))},
+			"session_directory":session_directory(raw.get("session")),
+			# KF36GD5 — harness containment marker flows through to stored trace
+			"outside_sandbox":raw.get("outside_sandbox")},
 		# The confounds of the harness path travel with the result, so a report cannot
 		# quote a harness grade beside a direct grade without the difference showing.
 		# The provider's own explanation of a failed session, and the process's stderr.

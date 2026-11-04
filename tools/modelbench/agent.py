@@ -836,7 +836,8 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 	Containment: every write-like tool call is scanned for paths outside the sandbox root.
 	If any is found, the run is marked `not-measurable` with an `outside_sandbox` provenance
 	field naming the tool and the resolved path. The turns and raw session are kept for the
-	audit trail; the run is not graded as a model result."""
+	audit trail; the run is not graded as a model result. The containment marker flows
+	through `trace.analyse` -> `trace.grade` so the pipeline grades it correctly."""
 	prompt = _harness_prompt(request,root,max_turns,protocol=protocol)
 	_plant_agent_definition(model,root)
 	events,info = transport.harness_stream(model,prompt,root,timeout)
@@ -860,62 +861,8 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 		if escaped:
 			outside.append({"tool":tool,"path":escaped})
 
-	if outside:
-		# Build a minimal trace so the audit trail has the turns and raw session.
-		# The run is NOT graded as a model result — it is a hole in the measurement.
-		turns,texts,tokens,stopped = [],[],None,False
-		step_actions = 0
-		for ev in events:
-			kind = ev.get("type")
-			part = ev.get("part") or {}
-			if kind == "step_start":
-				step_actions = 0
-				continue
-			if kind == "tool_use":
-				turns.append(_harness_turn(part,len(turns)+1,root))
-				step_actions += 1
-				continue
-			if kind == "text":
-				texts.append(part.get("text",""))
-				continue
-			if kind != "step_finish":
-				continue
-			total = transport.token_total(part)
-			if isinstance(total,int):
-				tokens = total
-			if step_actions > 1:
-				for turn in turns[-step_actions:]:
-					turn["batched"] = True
-					turn["n_actions"] = step_actions
-			if part.get("reason") == "stop":
-				stopped = True
-		final_text = "".join(texts).strip()
-		session = ""
-		for ev in events:
-			sid = ev.get("sessionID") or (ev.get("part") or {}).get("sessionID")
-			if sid:
-				session = sid
-				break
-		finished = _finished(final_text,info,stopped)
-		if finished:
-			turns.append({"turn":len(turns)+1,"action":"finish","path":"","cmd":"","parsed":True,
-				"exit":None,"result":"episode ended","reply":final_text,"tokens":None,
-				"n_actions":1,"batched":False,"tool":None,"protocol":"opencode"})
-		return {"model":model.get("id"),"root":root,"turns":turns,"finished":finished,
-			"claim":final_text,"status":_declared_status(final_text),
-			"protocol":protocol_label(protocol),
-			"n_turns":len(turns),"usage":tokens or 0,
-			"transport":"harness","timed_out":info["timed_out"],
-			"returncode":info["returncode"],"turn_budget":max_turns,
-			"over_budget":len(turns) > max_turns,
-			"stderr":info["stderr"],"provider_error":info.get("provider_error",""),
-			"prompt":prompt,"raw":info.get("stdout",""),"session":session,
-			# Containment failure provenance: the instrument could not measure this run
-			# because the model (via opencode) wrote outside the sandbox. This is not a
-			# model grade — it is a hole in the run, recorded for the audit trail.
-			"outside_sandbox":outside,
-			"grade":"not-measurable","failed_gates":["outside_sandbox"]}
-
+	# Build the trace once. If containment failed, attach the marker and return;
+	# trace.analyse -> trace.grade will honor it and return not-measurable.
 	turns,texts,tokens,stopped = [],[],None,False
 	step_actions = 0
 	for ev in events:
@@ -962,7 +909,7 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 		turns.append({"turn":len(turns)+1,"action":"finish","path":"","cmd":"","parsed":True,
 			"exit":None,"result":"episode ended","reply":final_text,"tokens":None,
 			"n_actions":1,"batched":False,"tool":None,"protocol":"opencode"})
-	return {"model":model.get("id"),"root":root,"turns":turns,"finished":finished,
+	raw = {"model":model.get("id"),"root":root,"turns":turns,"finished":finished,
 		"claim":final_text,"status":_declared_status(final_text),
 		# Which protocol the model was shown. A row that does not say is a row a reader
 		# cannot place, and the two protocols are read differently on purpose.
@@ -979,3 +926,10 @@ def run_episode_harness(model,request,root,max_turns=MAX_TURNS,max_tokens=4096,t
 		# re-derive. The per-turn texts the model wrote are in here too, which is why
 		# every harness turn's own `reply` is empty.
 		"prompt":prompt,"raw":info.get("stdout",""),"session":session}
+	if outside:
+		# Containment failure provenance: the instrument could not measure this run
+		# because the model (via opencode) wrote outside the sandbox. This is not a
+		# model grade — it is a hole in the run, recorded for the audit trail.
+		# The marker flows through trace.analyse -> trace.grade.
+		raw["outside_sandbox"] = outside
+	return raw

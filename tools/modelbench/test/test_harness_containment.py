@@ -57,8 +57,6 @@ def test_write_inside_sandbox_is_unaffected():
 		# Normal completion, no containment failure
 		xtest.not_contains("outside_sandbox", raw,
 			"a write inside the sandbox does not trigger containment failure")
-		xtest.equal(raw.get("grade"),None,
-			"grade is not set by the harness (grade is added by the runner)")
 		xtest.equal(len(raw["turns"]),2,"the write and finish turns are present")
 
 def test_absolute_path_outside_sandbox_yields_not_measurable():
@@ -86,8 +84,6 @@ def test_absolute_path_outside_sandbox_yields_not_measurable():
 			transport.harness_stream = saved
 
 		xtest.true("outside_sandbox" in raw,"containment failure is recorded")
-		xtest.equal(raw["grade"],"not-measurable","grade is not-measurable")
-		xtest.equal(raw["failed_gates"],["outside_sandbox"],"failed_gates names the gate")
 		xtest.equal(len(raw["outside_sandbox"]),1,"exactly one outside write recorded")
 		xtest.equal(raw["outside_sandbox"][0]["tool"],"write","tool name is recorded")
 		xtest.equal(raw["outside_sandbox"][0]["path"],outside,"the absolute path is named")
@@ -120,7 +116,6 @@ def test_dotdot_escape_is_caught():
 			transport.harness_stream = saved
 
 		xtest.true("outside_sandbox" in raw,"dotdot escape triggers containment failure")
-		xtest.equal(raw["grade"],"not-measurable")
 		xtest.equal(raw["outside_sandbox"][0]["tool"],"edit")
 		# The resolved absolute path should be outside the sandbox
 		xtest.true(not raw["outside_sandbox"][0]["path"].startswith(os.path.realpath(sandbox) + os.sep),
@@ -265,7 +260,6 @@ def test_inside_write_after_outside_write_still_fails():
 			transport.harness_stream = saved
 
 		xtest.true("outside_sandbox" in raw)
-		xtest.equal(raw["grade"],"not-measurable")
 		# Both writes should be recorded in outside_sandbox
 		xtest.equal(len(raw["outside_sandbox"]),1,"only the outside write is recorded")
 
@@ -298,7 +292,51 @@ def test_symlink_escape_is_caught():
 
 		xtest.true("outside_sandbox" in raw,
 			"symlink escape is caught via realpath resolution")
-		xtest.equal(raw["grade"],"not-measurable")
+
+def test_pipeline_run_once_returns_not_measurable():
+	"""Pipeline test: run_once -> analyse -> grade returns not-measurable for outside write."""
+	import episodes_run
+	import trace
+
+	with tempfile.TemporaryDirectory() as sandbox:
+		# Create a minimal episode structure (just need the directory to exist)
+		# The mock will intercept harness_stream so we don't need real episode files
+		outside = "/tmp/opencode/verify_invoicer.py"
+
+		events = [
+			{"type":"step_start","part":{}},
+			{"type":"tool_use","part":{
+				"tool":"write",
+				"state":{"input":{"filePath":outside},"status":"completed","output":"wrote"}
+			}},
+			{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":50}}},
+			{"type":"text","part":{"text":"Done.\nSTATUS: done\n"}},
+		]
+		saved_stream = transport.harness_stream
+		transport.harness_stream = lambda m,p,w,t: _harness_stream_mock(events)
+		# Mock check_episode to avoid checker_dead (no check.py in mock sandbox)
+		saved_check = trace.check_episode
+		trace.check_episode = lambda root, checker="check.py": (True, {"cases":[], "checker_dead":False, "checker_fault":False})
+		try:
+			# Mock a minimal episode dict
+			episode = {"name":"test","dir":sandbox,"request":"fix it",
+				"baseline_pass":True,"baseline":{"cases":[]}}
+			model = {"id":"m","provider":"zen","transport":"harness"}
+			with tempfile.TemporaryDirectory() as run_root:
+				result = episodes_run.run_once(model,episode,run_root)
+		finally:
+			transport.harness_stream = saved_stream
+			trace.check_episode = saved_check
+
+		xtest.equal(result["grade"],"not-measurable",
+			"pipeline grades outside-sandbox write as not-measurable")
+		xtest.equal(result["failed_gates"],["outside_sandbox"],
+			"failed_gates names outside_sandbox")
+		xtest.true("outside_sandbox" in result["trace"],
+			"trace carries the containment marker")
+		xtest.equal(len(result["trace"]["outside_sandbox"]),1)
+		xtest.equal(result["trace"]["outside_sandbox"][0]["tool"],"write")
+		xtest.equal(result["trace"]["outside_sandbox"][0]["path"],outside)
 
 if __name__ == "__main__":
 	sys.exit(xtest.run(__file__))
