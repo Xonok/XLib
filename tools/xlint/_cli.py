@@ -1,21 +1,9 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
-try:
-	from ._checks import check_file
-except ImportError:
-	from _checks import check_file
-try:
-	from ._watch import watch, _finding_text, _finding_key, _write_output
-except ImportError:
-	from _watch import watch, _finding_text, _finding_key, _write_output
-try:
-	from ._repo_rules import _Rules, _apply_disabled_to_args, _RepoRuleError
-except ImportError:
-	from _repo_rules import _Rules, _apply_disabled_to_args, _RepoRuleError
+from ._io import NAME
+from ._checks import check_file
+from ._watch import watch,_finding_text,_finding_key,_write_output
+from ._repo_rules import _Rules,_apply_disabled_to_args,_RepoRuleError
 def main():
 	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript, HTML and C files against XLib style rules")
 	parser.add_argument("paths", nargs="*", type=Path, default=[Path(".")])

@@ -1,9 +1,5 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
 def _frontmatter_exempt(lines):
 	if not lines or lines[0] != "---":
 		return set()

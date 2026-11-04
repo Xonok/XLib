@@ -1,29 +1,11 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
-try:
-	from . import _html, _personal, _banned_git
-except ImportError:
-	import _html, _personal, _banned_git
-try:
-	from ._python import *
-except ImportError:
-	from _python import *
-try:
-	from ._markdown import *
-except ImportError:
-	from _markdown import *
-try:
-	from ._js import *
-except ImportError:
-	from _js import *
-try:
-	from ._repo_rules import _disabled_canonical
-except ImportError:
-	from _repo_rules import _disabled_canonical
+from ._io import _ABSOLUTE_PATH_RE,_C_SUFFIXES,_DOUBLE_SPACE_RE,_HTML_SUFFIXES,_JS_SUFFIXES,_SPACE_INDENT_RE,_is_tracked_file
+from . import _html,_personal,_banned_git
+from ._python import _python_docstring_lines,_python_exempt_spans,_python_string_lines,check_def_comment,check_def_one_line,check_imports
+from ._markdown import _blockquote_exempt,_fence_exempt,_frontmatter_exempt,_markdown_exempt_spans
+from ._js import _js_exempt_lines,check_js_double_blank,check_js_final_newline,check_js_space_indent,check_js_trailing_blank,check_js_trailing_whitespace
+from ._repo_rules import _disabled_canonical
 def check_double_blank(lines):
 	report = []
 	for index, (prev, current) in enumerate(zip(lines, lines[1:]), start=2):

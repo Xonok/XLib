@@ -1,9 +1,6 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
+from ._io import _ALIASED_NAME_RE,_DEF_PREFIX_RE
 def _python_exempt_spans(lines):
 	"""Map each line number to a list of (start, end) spans that are exempt from the double-space check.
 
