@@ -72,7 +72,7 @@ is one anybody could have written.
 
 `tools/xlint/_personal.py` scans tracked files for the tokens and reports
 `file:line`. It runs in `xlint.py` — so the **pre-commit hook**, which already
-runs xlint on the staged `.py`, `.md` and `.sh` files, refuses the commit.
+runs xlint on the staged `.py`, `.md`, `.sh`, `.c` and `.h` files, refuses the commit.
 
 - **Only tracked files.** An untracked file is not published, and a draft may
 	carry a value while it is being written.

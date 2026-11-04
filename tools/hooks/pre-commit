@@ -1,5 +1,5 @@
 #!/bin/sh
-# xlint pre-commit hook — runs xlint on staged .py/.md files.
+# xlint pre-commit hook — runs xlint on staged .py/.md/.sh/.c/.h files.
 # Install: tools/hooks/install.sh
 
 set -eu
@@ -11,9 +11,11 @@ if [ -z "$root" ]; then
 	exit 1
 fi
 
-# Collect staged .py, .md and .sh files. The shell scripts carry no style rules,
-# but they are files a personal identifier can be pasted into, and the
-# personal-identifier check is what catches that.
+# Collect staged .py, .md, .sh, .c and .h files. The shell scripts carry no style
+# rules, but they are files a personal identifier can be pasted into, and the
+# personal-identifier check is what catches that. C/C-header files get the shared
+# whitespace checks (leading blank, double blank, space indent, trailing
+# whitespace, final newline).
 #
 # The list is NUL-separated and handed to xlint with `xargs -0`, because a
 # filename may contain a space: a newline-joined list expanded as `$staged`
@@ -44,7 +46,7 @@ fi
 
 # Run xlint from the repo root, so the staged paths resolve.
 cd "$root"
-if ! git diff --cached --name-only --diff-filter=ACM -z -- '*.py' '*.md' '*.sh' \
+if ! git diff --cached --name-only --diff-filter=ACM -z -- '*.py' '*.md' '*.sh' '*.c' '*.h' \
 	| xargs -0 -r python3 "$xlint" --; then
 	echo "xlint-hook: commit blocked by style violations above." >&2
 	echo "xlint-hook: run 'python3 $xlint <files>' to see details." >&2

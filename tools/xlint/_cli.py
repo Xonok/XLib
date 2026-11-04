@@ -17,7 +17,7 @@ try:
 except ImportError:
 	from _repo_rules import _Rules, _apply_disabled_to_args, _RepoRuleError
 def main():
-	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript and HTML files against XLib style rules")
+	parser = argparse.ArgumentParser(description="Check Python, Markdown, JavaScript/TypeScript, HTML and C files against XLib style rules")
 	parser.add_argument("paths", nargs="*", type=Path, default=[Path(".")])
 	parser.add_argument("--watch", action="store_true", help="stay running, redraw the issue list when files change")
 	parser.add_argument("--output", "-o", type=Path, default=None, metavar="FILE", help="write the report to FILE (empty when clean)")
