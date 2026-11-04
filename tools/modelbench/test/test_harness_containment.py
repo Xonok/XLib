@@ -293,6 +293,97 @@ def test_symlink_escape_is_caught():
 		xtest.true("outside_sandbox" in raw,
 			"symlink escape is caught via realpath resolution")
 
+def test_relative_path_inside_sandbox_is_unaffected():
+	"""A relative path inside the sandbox (e.g. 'src/app.py') does not trigger containment."""
+	with tempfile.TemporaryDirectory() as sandbox:
+		# Create a subdir and file inside sandbox
+		subdir = os.path.join(sandbox,"src")
+		os.makedirs(subdir)
+		target = os.path.join(subdir,"app.py")
+		with open(target,"w") as f:
+			f.write("x = 1\n")
+
+		# opencode may report relative path
+		rel_path = "src/app.py"
+
+		events = [
+			{"type":"step_start","part":{}},
+			{"type":"tool_use","part":{
+				"tool":"edit",
+				"state":{"input":{"filePath":rel_path},"status":"completed","output":"wrote"}
+			}},
+			{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":50}}},
+			{"type":"text","part":{"text":"Done.\nSTATUS: done\n"}},
+		]
+		saved = transport.harness_stream
+		transport.harness_stream = lambda m,p,w,t: _harness_stream_mock(events)
+		try:
+			raw = agent.run_episode_harness(
+				{"id":"m","provider":"zen","transport":"harness"},
+				"fix it",sandbox)
+		finally:
+			transport.harness_stream = saved
+
+		xtest.not_contains("outside_sandbox", raw,
+			"relative path inside sandbox does not trigger containment failure")
+
+def test_relative_dotdot_escape_is_caught():
+	"""A relative path with ../ that escapes the sandbox is caught."""
+	with tempfile.TemporaryDirectory() as sandbox:
+		# Relative path that escapes via ../
+		escape = "subdir/../../outside.txt"
+
+		events = [
+			{"type":"step_start","part":{}},
+			{"type":"tool_use","part":{
+				"tool":"write",
+				"state":{"input":{"filePath":escape},"status":"completed","output":"wrote"}
+			}},
+			{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":50}}},
+			{"type":"text","part":{"text":"Done.\nSTATUS: done\n"}},
+		]
+		saved = transport.harness_stream
+		transport.harness_stream = lambda m,p,w,t: _harness_stream_mock(events)
+		try:
+			raw = agent.run_episode_harness(
+				{"id":"m","provider":"zen","transport":"harness"},
+				"fix it",sandbox)
+		finally:
+			transport.harness_stream = saved
+
+		xtest.true("outside_sandbox" in raw,
+			"relative dotdot escape triggers containment failure")
+		# The resolved path should be outside the sandbox
+		xtest.true(not raw["outside_sandbox"][0]["path"].startswith(os.path.realpath(sandbox) + os.sep),
+			"resolved path is outside the sandbox root")
+
+def test_absolute_outside_path_still_caught():
+	"""An absolute path outside the sandbox is still caught (regression test)."""
+	with tempfile.TemporaryDirectory() as sandbox:
+		outside = "/tmp/opencode/verify_invoicer.py"
+
+		events = [
+			{"type":"step_start","part":{}},
+			{"type":"tool_use","part":{
+				"tool":"write",
+				"state":{"input":{"filePath":outside},"status":"completed","output":"wrote"}
+			}},
+			{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":50}}},
+			{"type":"text","part":{"text":"Done.\nSTATUS: done\n"}},
+		]
+		saved = transport.harness_stream
+		transport.harness_stream = lambda m,p,w,t: _harness_stream_mock(events)
+		try:
+			raw = agent.run_episode_harness(
+				{"id":"m","provider":"zen","transport":"harness"},
+				"fix it",sandbox)
+		finally:
+			transport.harness_stream = saved
+
+		xtest.true("outside_sandbox" in raw,
+			"absolute outside path still triggers containment failure")
+		xtest.equal(raw["outside_sandbox"][0]["path"],outside)
+
 def test_pipeline_run_once_returns_not_measurable():
 	"""Pipeline test: run_once -> analyse -> grade returns not-measurable for outside write."""
 	import episodes_run

@@ -704,16 +704,18 @@ def _relativise(path,root):
 	return path if rel.startswith("..") else rel
 
 def _outside_sandbox(path,root):
-	"""Check if an absolute path escapes the sandbox root.
-	
+	"""Check if a path escapes the sandbox root.
+
 	Returns the resolved absolute path if it is outside the sandbox, None if inside.
-	Handles absolute paths and `../` escapes. The root is resolved to its real path
-	to avoid symlink tricks."""
+	Handles absolute paths, relative paths (joined to root), `../` escapes, and
+	symlink tricks. The root is resolved to its real path for comparison."""
 	if not path:
 		return None
 	try:
 		real_root = os.path.realpath(root)
-		real_target = os.path.realpath(path)
+		# If path is relative, join to root first so realpath resolves against the sandbox
+		target = path if os.path.isabs(path) else os.path.join(root, path)
+		real_target = os.path.realpath(target)
 	except (TypeError,ValueError,OSError):
 		# If we can't resolve, treat as suspicious
 		return path
