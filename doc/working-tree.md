@@ -24,6 +24,12 @@ This rule is about **branch movement**, not about avoiding changes. Editing file
 
 **Not a feature branch.** The state files are written by the secretary, at merge time, in the Agents workspace. A Done ticket does not carry them — the rule and its reason are in `doc/state-files-history.md`.
 
+`HISTORY.md` is append-only and is appended with `tools/history_append.py`, which
+takes an exclusive lock so concurrent appends serialize instead of interleaving.
+Because of that, `HISTORY.md` is **entirely excluded from the dirty-file check**
+(`check-clean` ignores it): it is always being written and locking handles the
+contention. `STATUS.md` keeps its existing exemption.
+
 ## `git checkout` is banned
 
 **Never run `git checkout`.** Use `git switch` to change branch and `git restore` to change a file. This is a blanket ban until further notice, not a preference to weigh case by case.

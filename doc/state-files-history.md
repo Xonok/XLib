@@ -4,6 +4,10 @@
 
 Finished items are appended to `HISTORY.md` and the status file's open list simply loses them. History is append-only: entries are never rewritten or removed without the human's sign-off, and a correction is a new entry naming the one it supersedes. The Agents workspace holds the full policy and the entry format; see its `plans/history-files.md`.
 
+Appends go through `tools/history_append.py`, which serializes concurrent writes
+with an exclusive lock; `HISTORY.md` is therefore excluded from the dirty-file
+check entirely.
+
 ## Where they live
 
 **Not in this repository.** `Xonok/XLib` is public, so this repository's state files are tracked in the private Agents workspace at `personal/<person>/XLib/{STATUS,HISTORY}.md` — the per-repo subfolder there keeps the one-history-per-person-per-repo split. The root `STATUS.md` symlink and the in-repo `personal/` folder are gone (human's ruling, 2026-10-28; epi `KK8RRNQ`). The dirty-file exemption for them lives with the files, in the Agents workspace's own working-tree rule.

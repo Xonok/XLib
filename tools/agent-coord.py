@@ -263,6 +263,41 @@ def key_is_live(key):
 		return True
 	return proc_starttime(pid) == ticks
 
+def processes_referencing(agent_id):
+	"""Live processes whose environment names this agent id.
+
+	An agent id is `tag/role-N` (e.g. `XLib/secretary-1`). It is exported as
+	`OPENCODE_AGENT_ID` by `oc-agent` and inherited by every child process,
+	including orphaned workers that outlive their window. A number that such a
+	process still references must not be handed to a new window, or two
+	windows end up sharing one identity (and one notes file) -- the collision
+	this guards against. `/proc/<pid>/environ` is fixed at exec time, so a
+	variable exported later by a shell is seen through the children it execs,
+	which is exactly where the orphans are.
+
+	Returns an empty list when `/proc` cannot be read, so allocation falls back
+	to the previous (recycling) behaviour rather than failing.
+	"""
+	target = ("OPENCODE_AGENT_ID=" + agent_id).encode("utf-8")
+	found = []
+	try:
+		entries = os.listdir("/proc")
+	except OSError:
+		return found
+	for entry in entries:
+		if not entry.isdigit():
+			continue
+		pid = int(entry)
+		try:
+			with open("/proc/%d/environ" % pid, "rb") as f:
+				data = f.read()
+		except (OSError, IOError):
+			continue
+		# environ is a sequence of NUL-terminated `KEY=VALUE` entries.
+		if target in data.split(b"\x00"):
+			found.append(pid)
+	return found
+
 def is_service(argv):
 	"""True for the opencode background service.
 
@@ -491,26 +526,33 @@ def qualify(agent):
 	return "%s/%s" % (ws_tag(), agent)
 
 def allocate_instance(role, tag, ids):
-	"""Return next available instance number for (tag, role), recycling dead processes."""
+	"""Return next available instance number for (tag, role), recycling dead processes.
+
+	A number is recycled only when every process that owned it is gone AND no
+	live process still references the agent id it names. An orphaned worker
+	(child process that outlived its window) keeps the environment variable of
+	the window it came from, so recycling a number it still references would
+	hand two windows the same identity -- and the same notes file.
+	"""
 	prefix = tag + "/" + role + "-"
-	taken = set()
-	for v in ids.values():
+	# Map each number to the keys that own it.
+	owners = {}
+	for k, v in ids.items():
 		if v.startswith(prefix):
 			try:
 				n = int(v.rsplit("-", 1)[1])
-				taken.add(n)
+				owners.setdefault(n, []).append(k)
 			except (ValueError, IndexError):
 				pass
-	# Also check for dead processes among taken numbers
-	for n_val in list(taken):
-		session_key_for_num = None
-		for k, val in ids.items():
-			if val == tag + "/" + role + "-" + str(n_val):
-				session_key_for_num = k
-				break
-		if session_key_for_num and session_key_for_num.startswith("pid-"):
-			if not key_is_live(session_key_for_num):
-				taken.discard(n_val)
+	taken = set(owners)
+	for n, ks in owners.items():
+		agent_id = prefix + str(n)
+		# Recycle only if every owner is a dead pid and nothing still references it.
+		all_dead = len(ks) > 0 and all(
+			k.startswith("pid-") and not key_is_live(k) for k in ks
+		)
+		if all_dead and not processes_referencing(agent_id):
+			taken.discard(n)
 	for n in range(1, MAX_INSTANCES + 1):
 		if n not in taken:
 			return n
@@ -627,6 +669,10 @@ def retag_if_moved(ids, key, agent_id):
 	old_tag, suffix = agent_id.split("/", 1)
 	if old_tag == tag:
 		return agent_id
+	# Do not re-tag an identity that a live process (e.g. an orphaned worker)
+	# still references: moving it would misroute that process's notes and claims.
+	if processes_referencing(agent_id):
+		return agent_id
 	new_id = "%s/%s" % (tag, suffix)
 	ids[key] = new_id
 	save(IDS, ids)
@@ -696,6 +742,10 @@ def recycle_dead_slots():
 	dead_keys = []
 	for key in ids:
 		if key.startswith("pid-") and not key_is_live(key):
+			agent_id = ids[key]
+			# Keep the slot (and its claims/cursor) while an orphan still references it.
+			if processes_referencing(agent_id):
+				continue
 			dead_keys.append(key)
 	for key in dead_keys:
 		agent_id = ids[key]
@@ -774,9 +824,15 @@ def cmd_free(args):
 	key = pid_key(args.pid)
 	with locked():
 		ids = load(IDS, {})
-		agent_id = ids.pop(key, None)
+		agent_id = ids.get(key)
 		if agent_id is None:
 			return
+		# If an orphaned process still references this identity, keep the slot
+		# (and its claims/cursor) so a new window cannot reuse the number while
+		# the orphan is alive. The reaper frees it once the references are gone.
+		if processes_referencing(agent_id):
+			return
+		ids.pop(key, None)
 		save(IDS, ids)
 		claims = load(CLAIMS, {})
 		if agent_id in claims:
@@ -1201,6 +1257,10 @@ def cmd_check_clean(args):
 		for p in paths:
 			want |= repo_forms(repo, p)
 		for d in dirty:
+			# HISTORY.md is append-only and serialized by history_append.py,
+			# so it is entirely excluded from the dirty-file prohibition.
+			if os.path.basename(d) == "HISTORY.md":
+				continue
 			if any(under(w, d) for w in want):
 				# One checkout names its files relative to itself; several would
 				# name them the same way and mean different files, so the path
