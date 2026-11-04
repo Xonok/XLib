@@ -288,6 +288,8 @@ def processes_referencing(agent_id):
 		if not entry.isdigit():
 			continue
 		pid = int(entry)
+		if pid == os.getpid():
+			continue
 		try:
 			with open("/proc/%d/environ" % pid, "rb") as f:
 				data = f.read()
