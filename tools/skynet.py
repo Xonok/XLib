@@ -11,7 +11,7 @@ goes to the section that has more to show.
 
 Terminal contract: TERMINAL.md.
 """
-import argparse,contextlib,ctypes,datetime,json,math,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
+import argparse,calendar,contextlib,ctypes,datetime,json,math,os,select,signal,shutil,sqlite3,struct,sys,termios,time,urllib.error,urllib.request
 from pathlib import Path
 
 NAME = "Skynet"
@@ -21,6 +21,17 @@ USER_AGENT = "skynet/1.0"
 HTTP_TIMEOUT = 3
 QUOTA_REFRESH_SECONDS = 60
 MICROCENTS_PER_DOLLAR = 100_000_000
+# Cursor's two monthly pools, in dollars, measured 2026-11-04 on the
+# enterprise account: Cursor models $210, third-party models $40, total $250.
+# The quota state overrides either with `cursor_limit` / `other_limit`.
+CURSOR_POOL_LIMIT = 210
+CURSOR_OTHER_LIMIT = 40
+# Cursor's Token Rate on Teams and Enterprise: $0.25 per million tokens added
+# to the model's API price on third-party requests, input, cached and output
+# tokens alike. Cursor models do not pay it.
+CURSOR_TOKEN_RATE = 0.25 / 1_000_000
+# Model ids Cursor bills against the Cursor-models pool. `default` is Auto.
+CURSOR_MODEL_MARKERS = ("grok", "composer", "vega")
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 SHOW_EXTRA = False
 _CLEAR_SCREEN = "\033[2J\033[H"
@@ -374,32 +385,29 @@ def _cursor_config(config=None, state_path=None, **kwargs):
 	merged = {}
 	if isinstance(config, dict):
 		merged.update(config)
-	for key in ("limit", "period_end", "period_start", "period_days",
-				"period_length", "period_length_days", "end", "start",
-				"endsAt", "startsAt"):
+	for key in ("cursor_limit", "other_limit", "period_end", "period_start",
+				"period_days", "period_months", "period_length",
+				"period_length_days", "end", "start", "endsAt", "startsAt"):
 		if key in kwargs and kwargs[key] is not None:
 			merged[key] = kwargs[key]
 	if state_path is not None:
 		stored = _load_day_state(state_path, "cursor")
-		for field in ("limit", "period_end", "period_days", "period_length",
-			"period_length_days", "period_start"):
+		for field in ("cursor_limit", "other_limit", "period_end", "period_days",
+			"period_months", "period_length", "period_length_days", "period_start"):
 			if field in stored and field not in merged:
 				merged[field] = stored[field]
 	return merged
 
 def _cursor_period(config, now):
-	"""The current period's start and end, rolled forward as needed."""
-	limit = _to_microcents(config.get("limit"))
-	if limit is None:
-		return None
-	period_days = config.get("period_days", config.get("period_length_days",
-		config.get("period_length", 30)))
-	try:
-		period_days = int(period_days)
-	except (TypeError, ValueError):
-		period_days = 30
-	if period_days <= 0:
-		period_days = 30
+	"""The current period's start and end, rolled forward as needed.
+
+	`period_months` rolls by calendar month, so a cycle anchored on the 15th
+	stays on the 15th through 28-, 30- and 31-day months; `period_days` is the
+	fixed-length alternative. The two limits are per pool and do not choose
+	the period.
+	"""
+	days = _cursor_days(config)
+	months = _cursor_months(config)
 	end = _parse_time_any(config.get("period_end", config.get("end",
 		config.get("endsAt"))))
 	start = _parse_time_any(config.get("period_start", config.get("start",
@@ -418,16 +426,48 @@ def _cursor_period(config, now):
 			else:
 				end = datetime.datetime(year, month + 1, 16, tzinfo=datetime.timezone.utc)
 	if start is None:
-		start = end - datetime.timedelta(days=period_days)
+		start = _shift_period(end, -1, days, months)
 	# Roll forward while the period has ended.
 	while now >= end:
-		start = start + datetime.timedelta(days=period_days)
-		end = end + datetime.timedelta(days=period_days)
+		start = _shift_period(start, 1, days, months)
+		end = _shift_period(end, 1, days, months)
 	# Roll backward if we overshot (now before the period).
 	while now < start:
-		start = start - datetime.timedelta(days=period_days)
-		end = end - datetime.timedelta(days=period_days)
-	return start, end, limit, period_days
+		start = _shift_period(start, -1, days, months)
+		end = _shift_period(end, -1, days, months)
+	return start, end
+
+def _cursor_days(config):
+	"""The fixed period length in days; 30 unless configured otherwise."""
+	value = config.get("period_days", config.get("period_length_days",
+		config.get("period_length", 30)))
+	try:
+		days = int(value)
+	except (TypeError, ValueError):
+		days = 30
+	return days if days > 0 else 30
+
+def _cursor_months(config):
+	"""The calendar-month period length, or 0 for a fixed number of days."""
+	try:
+		months = int(config.get("period_months") or 0)
+	except (TypeError, ValueError):
+		months = 0
+	return months if months > 0 else 0
+
+def _shift_period(value, count, days, months):
+	"""Move a period boundary by whole periods, months or days."""
+	if months:
+		return _add_months(value, count * months)
+	return value + datetime.timedelta(days=count * days)
+
+def _add_months(value, months):
+	"""The same wall-clock day, `months` later, clamped to the month's end."""
+	index = value.month - 1 + months
+	year = value.year + index // 12
+	month = index % 12 + 1
+	day = min(value.day, calendar.monthrange(year, month)[1])
+	return value.replace(year=year, month=month, day=day)
 
 def _cursor_used(db_path, start, end):
 	"""The sum of catalog cost on cursor assistant messages in the period."""
@@ -469,52 +509,27 @@ def _cursor_used(db_path, start, end):
 	return total
 
 def _cursor_pool_usage(db_path, start, end):
-	"""Split cursor usage into the Cursor pool (grok/composer) and the rest."""
-	path = db_path or DB_PATH
+	"""Split cursor usage into the Cursor pool and the rest, in Cursor dollars."""
+	collected = _cursor_collect(db_path)
+	if collected is None:
+		return 0.0, 0.0
 	start_ts = start.timestamp()
 	end_ts = end.timestamp()
 	cursor_pool = 0.0
 	other_pool = 0.0
-	try:
-		conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-		try:
-			rows = conn.execute(
-				"SELECT data, time_created FROM session_message WHERE type = 'assistant'"
-			).fetchall()
-		finally:
-			conn.close()
-	except sqlite3.Error:
-		return cursor_pool, other_pool
-	for data, time_created in rows:
-		try:
-			message = json.loads(data)
-		except (TypeError, ValueError):
+	for created, model_id, cost, tokens in collected:
+		if not (start_ts <= created < end_ts):
 			continue
-		model = message.get("model")
-		if not isinstance(model, dict) or model.get("providerID") != "cursor":
-			continue
-		try:
-			created = float(time_created) / 1000.0
-		except (TypeError, ValueError):
-			continue
-		if created < start_ts or created >= end_ts:
-			continue
-		cost = message.get("cost")
-		if cost is None:
-			continue
-		try:
-			value = float(cost)
-		except (TypeError, ValueError):
-			continue
-		model_id = str(model.get("id") or "").lower()
-		if "grok" in model_id or "composer" in model_id:
-			cursor_pool += value
+		cursor_model = _is_cursor_model(model_id)
+		charge = cost if cursor_model else _cursor_charge(cost, tokens)
+		if cursor_model:
+			cursor_pool += charge
 		else:
-			other_pool += value
+			other_pool += charge
 	return cursor_pool, other_pool
 
 def _cursor_collect(db_path):
-	"""All cursor assistant messages as (created_ts, model_id, cost)."""
+	"""All cursor assistant messages as (created_ts, model_id, cost, tokens)."""
 	path = db_path or DB_PATH
 	collected = []
 	try:
@@ -522,14 +537,20 @@ def _cursor_collect(db_path):
 		try:
 			rows = conn.execute(
 				"SELECT json_extract(data, '$.model.id'), time_created, "
-				"json_extract(data, '$.cost') FROM session_message "
+				"json_extract(data, '$.cost'), "
+				"COALESCE(json_extract(data, '$.tokens.input'), 0), "
+				"COALESCE(json_extract(data, '$.tokens.output'), 0), "
+				"COALESCE(json_extract(data, '$.tokens.reasoning'), 0), "
+				"COALESCE(json_extract(data, '$.tokens.cache.read'), 0), "
+				"COALESCE(json_extract(data, '$.tokens.cache.write'), 0) "
+				"FROM session_message "
 				"WHERE type = 'assistant' AND json_extract(data, '$.model.providerID') = 'cursor'"
 			).fetchall()
 		finally:
 			conn.close()
 	except sqlite3.Error:
 		return None
-	for model_id, time_created, cost in rows:
+	for model_id, time_created, cost, input_tokens, output_tokens, reasoning, cache_read, cache_write in rows:
 		try:
 			created = float(time_created) / 1000.0
 		except (TypeError, ValueError):
@@ -538,10 +559,40 @@ def _cursor_collect(db_path):
 			value = float(cost) if cost is not None else 0.0
 		except (TypeError, ValueError):
 			value = 0.0
-		collected.append((created, str(model_id or ""), value))
+		tokens = _token_counts(input_tokens, output_tokens, reasoning, cache_read, cache_write)
+		collected.append((created, str(model_id or ""), value, tokens))
 	return collected
 
-def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, period_start=None, period_end=None, limit=None, period_days=None, **kwargs):
+def _token_counts(input_tokens, output_tokens, reasoning, cache_read, cache_write):
+	"""The token counts Cursor's Token Rate is charged on: input, output, cached.
+
+	Reasoning is output the provider generated and is billed as output; the
+	stats table's own total has the same split, so `tokens.output` does not
+	already include it.
+	"""
+	counts = []
+	for value in (input_tokens, output_tokens, reasoning, cache_read, cache_write):
+		try:
+			counts.append(max(0, int(value or 0)))
+		except (TypeError, ValueError):
+			counts.append(0)
+	input_count, output_count, reasoning_count, cache_read_count, cache_write_count = counts
+	return (input_count, output_count + reasoning_count, cache_read_count, cache_write_count)
+
+def _is_cursor_model(model_id):
+	"""Whether Cursor bills the model against the Cursor-models pool."""
+	lowered = str(model_id or "").lower()
+	if lowered == "default":
+		return True
+	return any(marker in lowered for marker in CURSOR_MODEL_MARKERS)
+
+def _cursor_charge(cost, tokens):
+	"""Cursor's charge for a third-party message: list cost plus the Token Rate."""
+	if not tokens:
+		return cost
+	return cost + CURSOR_TOKEN_RATE * sum(tokens)
+
+def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, period_start=None, period_end=None, cursor_limit=None, other_limit=None, limit=None, period_days=None, period_months=None, **kwargs):
 	"""The Cursor meter, summed from the local database, or why it is missing."""
 	# Infer positional arguments.
 	for value in args:
@@ -549,7 +600,8 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 			if now is None:
 				now = value
 		elif isinstance(value, dict):
-			if config is None and ("limit" in value or "period_end" in value
+			if config is None and ("cursor_limit" in value or "other_limit" in value
+					or "limit" in value or "period_end" in value
 					or "period_start" in value or "end" in value or "start" in value):
 				config = value
 			elif db_path is None and "db_path" in value:
@@ -565,9 +617,16 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 			continue
 	if now is None:
 		now = datetime.datetime.now().astimezone()
+	if cursor_limit is not None:
+		config = dict(config or {})
+		config["cursor_limit"] = cursor_limit
+	if other_limit is not None:
+		config = dict(config or {})
+		config["other_limit"] = other_limit
 	if limit is not None:
 		config = dict(config or {})
-		config["limit"] = limit
+		config.setdefault("cursor_limit", limit)
+		config.setdefault("other_limit", limit)
 	if period_end is not None:
 		config = dict(config or {})
 		config["period_end"] = period_end
@@ -578,21 +637,27 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		config = dict(config or {})
 		config["period_days"] = period_days
 	merged = _cursor_config(config=config, state_path=state_path, **kwargs)
-	if merged.get("limit") is None:
-		# A Cursor account is in use on this machine; default to the
-		# $40 business subscription the human named rather than staying
-		# absent. An empty database keeps Cursor unconfigured.
-		collected = _cursor_collect(db_path)
-		if collected:
-			merged["limit"] = 80
-	period = _cursor_period(merged, now)
-	if period is None:
-		return {"state": "absent"}
-	start, end, limit_micro, days = period
-	raw_limit = merged.get("limit")
 	collected = _cursor_collect(db_path)
 	if collected is None:
-		return {"state": "unavailable"}
+		# A log that cannot be read is unknown when Cursor is configured; with
+		# no configuration at all there is nothing to show either way.
+		return {"state": "unavailable" if merged else "absent"}
+	if not collected and not merged:
+		# No Cursor messages and no configuration: Cursor is not in use here.
+		return {"state": "absent"}
+	raw_pool_limit = merged.get("cursor_limit", CURSOR_POOL_LIMIT)
+	raw_other_limit = merged.get("other_limit", CURSOR_OTHER_LIMIT)
+	pool_limit = _to_microcents(raw_pool_limit)
+	other_limit = _to_microcents(raw_other_limit)
+	if pool_limit is None:
+		raw_pool_limit = CURSOR_POOL_LIMIT
+		pool_limit = _to_microcents(raw_pool_limit)
+	if other_limit is None:
+		raw_other_limit = CURSOR_OTHER_LIMIT
+		other_limit = _to_microcents(raw_other_limit)
+	start, end = _cursor_period(merged, now)
+	months = _cursor_months(merged)
+	days = int(round((end - start).total_seconds() / 86400))
 	start_ts = start.timestamp()
 	end_ts = end.timestamp()
 	# The UTC day the quota line calls "today". The message timestamps give
@@ -606,22 +671,23 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 	cursor_pool_day_dollars = 0.0
 	other_pool_dollars = 0.0
 	other_pool_day_dollars = 0.0
-	for created, model_id, cost in collected:
+	for created, model_id, cost, tokens in collected:
 		if not (start_ts <= created < end_ts):
 			continue
+		cursor_model = _is_cursor_model(model_id)
+		charge = cost if cursor_model else _cursor_charge(cost, tokens)
 		today = created >= today_start_ts
-		used_dollars += cost
+		used_dollars += charge
 		if today:
-			day_dollars += cost
-		lowered = model_id.lower()
-		if "grok" in lowered or "composer" in lowered:
-			cursor_pool_dollars += cost
+			day_dollars += charge
+		if cursor_model:
+			cursor_pool_dollars += charge
 			if today:
-				cursor_pool_day_dollars += cost
+				cursor_pool_day_dollars += charge
 		else:
-			other_pool_dollars += cost
+			other_pool_dollars += charge
 			if today:
-				other_pool_day_dollars += cost
+				other_pool_day_dollars += charge
 	used_micro = _dollars_to_microcents(used_dollars)
 	day_micro = _dollars_to_microcents(day_dollars)
 	cursor_pool_micro = _dollars_to_microcents(cursor_pool_dollars)
@@ -634,7 +700,7 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		"start": start,
 		"end": end,
 		"period_start": start.isoformat(),
-		"limit": limit_micro,
+		"limit": pool_limit + other_limit,
 		"used": used_micro,
 		"days_left": _days_left(end, now),
 		"cursor_used": cursor_pool_micro,
@@ -648,7 +714,7 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		"start": start,
 		"end": end,
 		"period_start": start.isoformat(),
-		"limit": limit_micro,
+		"limit": pool_limit,
 		"used": cursor_pool_micro,
 		"days_left": _days_left(end, now),
 	}
@@ -658,7 +724,7 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		"start": start,
 		"end": end,
 		"period_start": start.isoformat(),
-		"limit": limit_micro,
+		"limit": other_limit,
 		"used": other_pool_micro,
 		"days_left": _days_left(end, now),
 	}
@@ -668,9 +734,15 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		# Persist the configuration alongside the day state.
 		try:
 			stored = _load_day_state(state_path, "cursor")
-			stored["limit"] = raw_limit
+			stored.pop("limit", None)
+			stored["cursor_limit"] = raw_pool_limit
+			stored["other_limit"] = raw_other_limit
 			stored["period_end"] = end.isoformat()
 			stored["period_days"] = days
+			if months:
+				stored["period_months"] = months
+			else:
+				stored.pop("period_months", None)
 			stored["period_start"] = start.isoformat()
 			stored["cursor_used"] = cursor_pool_micro
 			stored["other_used"] = other_pool_micro
@@ -683,7 +755,9 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 		"start": start,
 		"end": end,
 		"period_start": start.isoformat(),
-		"limit": limit_micro,
+		"limit": pool_limit + other_limit,
+		"cursor_limit": pool_limit,
+		"other_limit": other_limit,
 		"used": used_micro,
 		"days_left": _days_left(end, now),
 		"day_start_used": baseline,
@@ -805,7 +879,8 @@ def update_day_state(state_path, go, now, key="go", day_used=None):
 		"last_seen": int(now.timestamp()),
 		"period_start": go["period_start"],
 	}
-	for field in ("limit", "period_end", "period_days", "period_length", "product"):
+	for field in ("cursor_limit", "other_limit", "period_end", "period_days",
+			"period_months", "period_length", "product"):
 		if field in stored and field not in state:
 			state[field] = stored[field]
 	if state_path is not None:
@@ -853,10 +928,10 @@ def sample_quota(now=None, state_path=None, fetch=None, db_path=None, cursor_con
 	if cursor.get("state") == "ok":
 		cursor_pool_source = dict(cursor)
 		cursor_pool_source["used"] = cursor.get("cursor_used", cursor.get("used", 0))
-		cursor_pool_source["limit"] = cursor.get("limit")
+		cursor_pool_source["limit"] = cursor.get("cursor_limit")
 		other_pool_source = dict(cursor)
 		other_pool_source["used"] = cursor.get("other_used", 0)
-		other_pool_source["limit"] = cursor.get("limit")
+		other_pool_source["limit"] = cursor.get("other_limit")
 	cursor_pool_pace = compute_pace(cursor_pool_source, cursor.get("cursor_day_start_used"), now) if cursor_pool_source is not None else None
 	other_pool_pace = compute_pace(other_pool_source, cursor.get("other_day_start_used"), now) if other_pool_source is not None else None
 	return {
@@ -1103,18 +1178,18 @@ def quota_line(quota, width):
 		abbr = _source_fields(go, go_pace, True, True, "go")
 		variants = _go_variants(quota, go, go_pace, True)
 		sources.append(("go", full, abbr, variants))
-	if cursor.get("state") != "absent":
+	if cursor.get("state") == "ok":
 		cursor_pool_source = {
 			"state": "ok",
 			"product": "cursor",
-			"limit": cursor.get("limit"),
+			"limit": cursor.get("cursor_limit"),
 			"used": cursor.get("cursor_used", 0),
 			"days_left": cursor.get("days_left"),
 		}
 		other_pool_source = {
 			"state": "ok",
 			"product": "cursor",
-			"limit": cursor.get("limit"),
+			"limit": cursor.get("other_limit"),
 			"used": cursor.get("other_used", 0),
 			"days_left": cursor.get("days_left"),
 		}
@@ -1133,6 +1208,8 @@ def quota_line(quota, width):
 		abbr = _source_fields(other_pool_source, other_pool_pace, True, True, "cursor_other")
 		variants = _cursor_variants(quota, other_pool_source, other_pool_pace, True, "cursor_other")
 		sources.append(("cursor_other", full, abbr, variants))
+	elif cursor.get("state") == "unavailable":
+		sources.append(("cursor", ["Cursor ?"], ["C ?"], []))
 	if openrouter.get("state") != "absent":
 		full = _or_fields(openrouter, False)
 		abbr = _or_fields(openrouter, True)

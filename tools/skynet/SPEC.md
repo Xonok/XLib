@@ -101,14 +101,23 @@ do not re-derive a day from local request counts (DRAFT Q6 A).
 
 The local message log, read-only: `session_message` rows of type `assistant`
 whose `model.providerID` is `cursor`, with `time_created` in the current
-period. `used` is the sum of their `cost`. There is no provider meter: the
-limit and the period end are configuration in `quota.json`, rolled forward by
-the period length when `now` passes the end (the default is `$80`, ending on
-the 16th). Q7's provider-counter rule is reversed for Cursor only.
+period. There is no provider meter: the two limits and the period end are
+configuration in `quota.json`. The period rolls by calendar month
+(`period_months`, so a cycle anchored on the 16th stays on the 16th through
+28-, 30- and 31-day months) or by a fixed `period_days`; the default ends on
+the 16th. Q7's provider-counter rule is reversed for Cursor only.
 
-The spend is split into the Cursor pool (a model id containing `grok` or
-`composer`) and everything else (`cursor/other`), each with its own pace and
-today.
+Cursor bills in two pools with separate allowances, and the log's `cost` is
+the model's list price. The **Cursor-models** pool (`grok`, `composer`, `vega`
+or the model id `default`) is the cost as it stands: the local catalog already
+uses Cursor's own rates and the Token Rate does not apply to it. The
+**third-party** pool adds Cursor's Token Rate on Teams and Enterprise —
+`$0.25` per million tokens on input, output (reasoning included), cache-read
+and cache-write tokens — so `cost` alone is not its meter.
+
+The limits are `cursor_limit` (default `$210`) and `other_limit` (default
+`$40`); measured on the enterprise account 2026-11-04, where they sum to
+`$250`. A legacy single `limit` is superseded and ignored.
 
 The day share is exact rather than sampled: the message timestamps give the
 current UTC day's spend, so a late first read, a restart or an old state file
@@ -264,8 +273,8 @@ Each source's block is its own fields joined by ` · `, in this order:
 | Field | `ok` | `unavailable` |
 |---|---|---|
 | Go | `Go $1.87/$60 3%` or `Go+ …` | `Go ?` |
-| Cursor | `Cursor $2.27/$80 3%` | `Cursor ?` |
-| Cursor/other | `Cursor/other $0.84/$80 1%` | `Cursor ?` |
+| Cursor | `Cursor $2.27/$210 1%` | `Cursor ?` |
+| Cursor/other | `Cursor/other $0.84/$40 2%` | `Cursor ?` |
 | Pace | `pace 72%/d` after the used/limit field; omitted when the pace is `None` | omitted |
 | Today | `today 94%` after the pace; `today ?` when the baseline is missing; omitted when today is `None` | omitted |
 | OpenRouter | `OR 29/1000` | `OR ?` |
@@ -290,8 +299,8 @@ and keep every field:
 | Field | `ok` | `unavailable` |
 |---|---|---|
 | Go | `G $1.87/60 3%` or `G+ …` | `G ?` |
-| Cursor | `C $2.27/80 3%` | `C ?` |
-| Cursor/other | `C/o $0.84/80 1%` | `C ?` |
+| Cursor | `C $2.27/210 1%` | `C ?` |
+| Cursor/other | `C/o $0.84/40 2%` | `C ?` |
 | Pace | `p 72` | omitted when the source is `?` |
 | Today | `t 94` | `t ?` |
 | OpenRouter | `OR 29/1000` | `OR ?` |
@@ -471,11 +480,15 @@ rule ids keep their numbers.
 - **R9.1** Read `session_message` rows of type `assistant` whose
 	`model.providerID` is `cursor`, read-only, with `time_created` in the
 	current period.
-- **R9.2** `used` is the sum of their `cost`; the limit and period end come
-	from `quota.json`, rolled forward by the period length at the end. An
-	empty log with no configuration is `absent`.
-- **R9.3** Split the spend into the pool (`grok`, `composer`) and
-	`cursor/other`, each with its own `used`, pace and today.
+- **R9.2** The period charge is the sum of `cost` for Cursor models and
+	`cost` plus the `$0.25/M` Token Rate on input, output (with reasoning),
+	cache-read and cache-write tokens for third-party models. The per-pool
+	limits (`cursor_limit`, `other_limit`) and the period end come from
+	`quota.json`, rolled by `period_months` or `period_days`. An empty log
+	with no configuration is `absent`.
+- **R9.3** Split the spend into the pool (`grok`, `composer`, `vega`,
+	`default`) and `cursor/other`, each with its own limit, used, pace and
+	today.
 - **R9.4** Derive today from the messages on the current UTC day, not from a
 	baseline taken at the first read; a late first read, a restart or a stale
 	baseline cannot change it.
@@ -538,6 +551,13 @@ rule ids keep their numbers.
 	from that read rather than covering the whole calendar day.
 - Cursor's day share covers the messages the local log still holds; a message
 	deleted from the log takes its cost out of both the period and the day.
+- The Cursor pools are account-wide and the log is opencode-only: usage from
+	the Cursor app or CLI is missing, so the local figure is a floor rather
+	than the pool. The `$210`/`$40` caps are the account's as measured on
+	2026-11-04; a plan change needs `cursor_limit`/`other_limit` updated.
+- Cursor's Token Rate is charged on `$0.25/M` for the tokens the message
+	records; a model whose Cursor price differs from the local catalog needs a
+	per-model correction, not a constant multiplier.
 - The Go meter may lag; the day share moves only when the meter does, so it can
 	jump in a batch rather than smoothly.
 - The Go meter is not Zen list price; quota dollars are the meter's unit.
