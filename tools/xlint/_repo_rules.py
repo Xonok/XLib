@@ -1,9 +1,6 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
+from ._io import _BUILTIN_DISABLES,_IgnoreRules,_RULE_MODULE_SERIAL,_compile_pattern,find_checkout_root,stamp
 class _RepoRuleError(Exception):
 	"""A repo rule that could not be loaded or run.
 

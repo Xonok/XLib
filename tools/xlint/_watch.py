@@ -1,17 +1,8 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
-try:
-	from ._checks import check_file
-except ImportError:
-	from _checks import check_file
-try:
-	from ._repo_rules import *
-except ImportError:
-	from _repo_rules import *
+from ._io import NAME,_ALL_SUFFIXES,_CLEAR_SCREEN,_ENTER_WATCH,_EVENT_HEADER,_INOTIFY_ADVICE,_IN_CREATE,_IN_DELETE,_IN_DELETE_SELF,_IN_IGNORED,_IN_ISDIR,_IN_MOVED_FROM,_IN_MOVED_TO,_IN_MOVE_SELF,_LEAVE_WATCH,_POLL_SECONDS,_WATCH_MASK,_inotify_failure,_libc,is_ignored,lint_files,stamp
+from ._checks import check_file
+from ._repo_rules import _RepoRuleError,_apply_disabled_to_args
 class _InotifyWatcher:
 	"""The inotify backend: a watch on every directory the rules allow.
 

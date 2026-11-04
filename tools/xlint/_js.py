@@ -1,9 +1,6 @@
 import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
 from pathlib import Path
-try:
-	from ._io import *
-except ImportError:
-	from _io import *
+from ._io import _SPACE_INDENT_RE
 def check_js_trailing_whitespace(lines):
 	"""Trailing whitespace check for JS/TS — same as Python, no Markdown exception."""
 	report = []
