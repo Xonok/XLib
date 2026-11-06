@@ -1,14 +1,9 @@
 # Model registry — short name → exact provider ID + transport.
 #
-# Measured 2026-09-27, not assumed. Gating on both gateways is undocumented and
-# inconsistent, so it is recorded per model here and re-verified by
-# `python3 bench/transport.py --probe`, never trusted.
-#
-# gating values, all observed 2026-09-27:
-#   open       answers a direct request right now
-#   harness    refuses direct requests: "only available on agentic harnesses" (OpenRouter)
-#              or "OpenCode's free tier can only be used from within OpenCode" (Zen)
-#   upstream   429 from the upstream provider — shared pool exhausted, may recover
+# Measured, not assumed. Gating on both gateways is undocumented and inconsistent, so
+# there is no `gating` column to rot: `python3 transport.py --probe` reports what answers
+# right now, and `--limits` reports each pool's allowance. A negative probe is a hint,
+# not evidence of unavailability; only a real episode is.
 #
 # transport = "http"    direct OpenAI-compatible HTTP. ~0 overhead, sub-second.
 # transport = "harness" only reachable through `opencode run`. ~13,140 prompt tokens and
@@ -18,6 +13,11 @@
 # rpm / tpm     the provider's measured per-minute quota for this model, when known. The
 #              transport paces to it. The limit is per model per project, not account-wide,
 #              and a per-process pacer cannot coordinate two processes running one model.
+# aggregate     a group whose requests share one cross-process minute window. NIM
+#              enforces per-model limits AND monitors aggregate usage, and exceeding it
+#              can block the account for 24 hours, so NIM entries share the `nim` group.
+# aggregate_rpm the group's shared limit, deliberately below the provider's per-model
+#              figure: the margin is the mechanism.
 # reasoning     true when the model thinks before it answers. The episode runner then gives
 #              it the larger per-call budget (12288 rather than 4096): a truncated thinking
 #              model returns empty content and grades as a model that cannot follow
@@ -27,7 +27,6 @@
 id = "space-bunny-free"
 provider = "zen"
 transport = "http"
-gating = "open"
 endpoint = "https://opencode.ai/zen/v1"
 auth = "none"
 note = "Only console free model that answers unauthenticated HTTP; the other 7 return 403. Cloudflare sits in front and rejects urllib's default User-Agent with error 1010, so any client must send its own UA or every call fails while curl-based probes pass."
@@ -36,14 +35,12 @@ note = "Only console free model that answers unauthenticated HTTP; the other 7 r
 id = "big-pickle"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 note = "Proposed judge. Reachable only through opencode run, so every judgement costs ~13k tokens of preamble. The argument for a cheaper judge is this cost, not model quality."
 
 ["inkling"]
 id = "thinkingmachines/inkling:free"
 provider = "openrouter"
 transport = "harness"
-gating = "harness"
 endpoint = "https://openrouter.ai/api/v1"
 note = "OpenRouter routes this through a step literally named 'Gate Free Endpoints by Agentic Harness' and 403s direct calls. The model at the centre of the tier-list dispute is one of the expensive ones to test."
 
@@ -51,7 +48,6 @@ note = "OpenRouter routes this through a step literally named 'Gate Free Endpoin
 id = "thinkingmachines/inkling-small:free"
 provider = "openrouter"
 transport = "harness"
-gating = "harness"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Same harness gate as inkling."
 
@@ -59,7 +55,6 @@ note = "Same harness gate as inkling."
 id = "poolside/laguna-s-2.1:free"
 provider = "openrouter"
 transport = "http"
-gating = "upstream"
 endpoint = "https://openrouter.ai/api/v1"
 note = "429 from upstream at probe time. Also documented as flaky through the opencode harness (5/5 empty runs)."
 
@@ -67,7 +62,6 @@ note = "429 from upstream at probe time. Also documented as flaky through the op
 id = "poolside/laguna-xs-2.1:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Answers directly, despite being documented as returning null choices even via curl."
 
@@ -75,7 +69,6 @@ note = "Answers directly, despite being documented as returning null choices eve
 id = "gemma-4-31b-it"
 provider = "google"
 transport = "http"
-gating = "open"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
 reasoning = true
 note = "Repinned 2026-10-26 to Google's own route, where the corpus's records and the workers are. Its binding quota metric is not measured, so no rpm/tpm is claimed here; a 429 waits the delay the provider names instead. It answered a direct probe on 2026-10-26 after one transient HTTP 500 ('Internal error encountered'), so a 500 is retried rather than read as unavailable. It thinks in a visible '<thought>' block, so its budget comes from reasoning = true."
@@ -84,7 +77,6 @@ note = "Repinned 2026-10-26 to Google's own route, where the corpus's records an
 id = "gemma-4-26b-a4b-it"
 provider = "google"
 transport = "http"
-gating = "open"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
 tpm = 16000
 reasoning = true
@@ -94,7 +86,6 @@ note = "Repinned 2026-10-26 to Google's own route, where the corpus's records an
 id = "glm-4.7-flash"
 provider = "zai"
 transport = "http"
-gating = "open"
 endpoint = "https://api.z.ai/api/paas/v4"
 rpm = 5
 reasoning = true
@@ -104,7 +95,6 @@ note = "The first Z.ai subject: free, coding-focused, 200k context, tool-capable
 id = "gemini-3.8-flash"
 provider = "google"
 transport = "http"
-gating = "open"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
 note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names. Probed 2026-10-31: the 503 had cleared and it answered \"OK\" in 74.2 s, so it is slow to first token but reachable. Its free tier's day cap was measured on 2026-11-01: 20 requests per project per model (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue 20, retry 31,120 s), so a wave must budget at most 20 calls a day and a cache arm of three repeats does not fit."
 
@@ -112,14 +102,12 @@ note = "The Google free roster's newest Flash and the queued retry. Both existin
 id = "cohere/north-mini-code:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["lfm-2.5-2.6b"]
 id = "liquid/lfm-2.5-2.6b:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Negative control. Deliberately weak; the suite must score it clearly below the models under consideration or the suite has no discriminative power (plan F13). Needs max_tokens >= 4096 — it reasons before it answers and returns empty content when truncated."
 
@@ -127,14 +115,12 @@ note = "Negative control. Deliberately weak; the suite must score it clearly bel
 id = "nvidia/nemotron-3-super-120b-a12b:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["nemotron-ultra"]
 id = "nvidia/nemotron-3-ultra-550b-a55b:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Distinct from the console opencode/nemotron-ultra-free, which is harness-gated."
 
@@ -142,35 +128,30 @@ note = "Distinct from the console opencode/nemotron-ultra-free, which is harness
 id = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 provider = "openrouter"
 transport = "http"
-gating = "upstream"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["dots-3-note"]
 id = "dots-studio/dots-3-note-preview:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["qwen3.8-27b"]
 id = "qwen/qwen3.8-27b:free"
 provider = "openrouter"
 transport = "http"
-gating = "upstream"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["ling-sante"]
 id = "inclusionai/ling-3.0-flash-sante:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 
 ["nemotron-content-safety"]
 id = "nvidia/nemotron-3.5-content-safety:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "Specialised moderation model, not general purpose. Registered for completeness, not as a benchmark subject."
 
@@ -178,7 +159,6 @@ note = "Specialised moderation model, not general purpose. Registered for comple
 id = "recursive/flint-v1.0:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 reasoning = true
 note = "New free model, created 2026-10-21. The console's flint-40b-free is taskview #191; this is the model's free OpenRouter route, and a route is not a model, so it is a registry key of its own."
@@ -187,7 +167,6 @@ note = "New free model, created 2026-10-21. The console's flint-40b-free is task
 id = "nvidia/nemotron-3.5-lightning:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "The OpenRouter route of the model measured on the console as `nemotron-3.5-lightning`. Separate key and separate corpus rows: a route is not a model."
 
@@ -195,7 +174,6 @@ note = "The OpenRouter route of the model measured on the console as `nemotron-3
 id = "nvidia/nemotron-3.5-super-vl:free"
 provider = "openrouter"
 transport = "http"
-gating = "open"
 endpoint = "https://openrouter.ai/api/v1"
 note = "The OpenRouter route of the console's `nemotron-3.5-super-vl-free`. At probe on 2026-10-26 this route answered HTTP 502; that is recorded as a hole, not as a grade."
 
@@ -205,29 +183,86 @@ note = "The OpenRouter route of the console's `nemotron-3.5-super-vl-free`. At p
 id = "ling-3.0-flash-fin-free"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 
 ["mimo-v2.6-flash"]
 id = "mimo-v2.6-flash-free"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 
 ["mimo-v2.5"]
 id = "mimo-v2.5-free"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 
 ["nemotron-3.5-lightning"]
 id = "nemotron-3.5-lightning-free"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 
 ["longcat"]
 id = "longcat-2.5-preview-free"
 provider = "zen"
 transport = "harness"
-gating = "harness"
 
+
+# --- NVIDIA NIM: free to prototype, one base endpoint, aggregate-aware pacing ---
+#
+# The catalogue's /v1/models list is the authority for what this account can reach; an id
+# being listed is not proof the account is enabled. Probed 2026-11-06: `kimi-k2.6` and
+# `nemotron-nano-3-30b-a3b` answer 404 "Function not found for account", and
+# `minimax-m3.1-flash` timed out at 90s, so none of the three is registered yet.
+# NIM's stated limit is ~40 requests a minute per model AND it monitors aggregate usage;
+# the shared `nim` group is capped at 35 so two waves cannot add up to a 24-hour block.
+
+["nemotron-3-ultra-nim"]
+id = "nvidia/nemotron-3-ultra-550b-a55b"
+provider = "nim"
+transport = "http"
+endpoint = "https://integrate.api.nvidia.com/v1"
+rpm = 40
+aggregate = "nim"
+aggregate_rpm = 35
+reasoning = true
+note = "Third route for the corpus's sharpest cross-route comparison: OpenRouter 3 autonomy of 4, console 0 autonomy of 12. Probed 2026-11-06 in 1.3s."
+
+["gemma-4-31b-nim"]
+id = "google/gemma-4-31b-it"
+provider = "nim"
+transport = "http"
+endpoint = "https://integrate.api.nvidia.com/v1"
+rpm = 40
+aggregate = "nim"
+aggregate_rpm = 35
+reasoning = true
+note = "The model Google's own route has never graded: 9 records, all HTTP 500. NIM answers (82.5s on the 2026-11-06 probe), so this is the first route that can measure it."
+
+["laguna-xs-nim"]
+id = "poolside/laguna-xs-2.1"
+provider = "nim"
+transport = "http"
+endpoint = "https://integrate.api.nvidia.com/v1"
+rpm = 40
+aggregate = "nim"
+aggregate_rpm = 35
+note = "OpenRouter's route is three HTTP 429 records. NIM answers in 0.4s (2026-11-06)."
+
+["nemotron-nano-omni-nim"]
+id = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+provider = "nim"
+transport = "http"
+endpoint = "https://integrate.api.nvidia.com/v1"
+rpm = 40
+aggregate = "nim"
+aggregate_rpm = 35
+reasoning = true
+note = "OpenRouter's route is three holes (one not-measurable, two upstream ResourceExhausted). NIM answers in 2.2s (2026-11-06)."
+
+["nemotron-3.5-bolt-e4b-nim"]
+id = "nvidia/nemotron-3.5-bolt-e4b"
+provider = "nim"
+transport = "http"
+endpoint = "https://integrate.api.nvidia.com/v1"
+rpm = 40
+aggregate = "nim"
+aggregate_rpm = 35
+note = "New small model, unmeasured anywhere; answered in 0.3s on the 2026-11-06 probe."

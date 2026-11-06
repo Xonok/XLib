@@ -73,7 +73,7 @@ above and belongs to no rung of anything.
 
 | Transport | Models | How the trace is produced |
 |---|---|---|
-| `http` | OpenRouter `:free`, `space-bunny-free`, Z.ai direct, Google's OpenAI-compatible route | the model's own replies, parsed as the four-action protocol |
+| `http` | OpenRouter `:free`, `space-bunny-free`, Z.ai direct, Google's OpenAI-compatible route, NVIDIA NIM | the model's own replies, parsed as the four-action protocol |
 | `harness` | `big-pickle`, `inkling` — everything Zen or OpenRouter gates | one `opencode run` session, its **event stream** mapped onto the same four actions |
 
 A harness-gated model cannot be driven a turn at a time — the only route to it *is* a whole
@@ -91,6 +91,26 @@ when a harness grade is quoted beside a direct one:
 2. `opencode run` has **no step cap**, so the turn budget is stated in the prompt and
 	enforced only by the wall clock. A clock-killed run sets `finished=False`, so it fails G4
 	exactly as a turn-capped run does.
+
+## Rate limits are per model, and sometimes per account
+
+A registry entry carries the provider's measured `rpm`/`tpm` when known; `_pace` waits
+before sending, because a refusal that is not paced turns a two-second wait into a lost
+cell. Some providers meter one model at a time; **NIM meters per model and also watches
+aggregate usage**, and exceeding it can block the account for 24 hours. So NIM entries
+carry `aggregate = "nim"` and a shared `aggregate_rpm` below the provider's per-model
+figure. The aggregate window lives in a file under `MODELBENCH_PACE_DIR` (default
+`/tmp/opencode/modelbench-pace`) behind `flock`, so two wave processes cannot each pass
+their own model's check and add up to a block; the slot is reserved **before** the request,
+not after a refusal.
+
+`transport.py --probe` reports what answered and, when it did not, the shape of the
+refusal (`quota`, `capacity`, `geo`, `auth`, `harness-only`, `timeout`, `error`), with the
+provider's own words in the detail. `--json` is the machine-readable form.
+`transport.py --limits` reports the pools that expose a counter — OpenRouter's free-model
+day and the Go plan's month — and, for the rest, the configured limit with "not exposed".
+**There is no `gating` column to rot**: a probe is an observation at a time, not a
+property of a model, and only a real episode is evidence of availability.
 
 ## Why not `opencode run`
 
@@ -174,8 +194,8 @@ HTTP is the default; the harness path exists only for models that are reachable 
 | Path | What it is |
 |---|---|
 | `METHOD.md` | the measurement discipline: freeze rules, storage rules, what counts as a hole in a run |
-| `models.toml` | short name → provider ID, transport, the measured per-minute quota (`rpm`/`tpm`), and the `reasoning` flag. **The `gating` column is unreliable — `--probe` false-negatives harness-transport models, so it reports a model dead on a day a real episode graded it `autonomy` 6/6. A negative probe is not evidence of unavailability; only a real episode is. Treat it as a hint.** |
-| `transport.py` | both call paths; `--probe` re-verifies gating, `harness_stream()` exposes the event stream |
+| `models.toml` | short name → provider ID, transport, the measured per-minute quota (`rpm`/`tpm`), an optional cross-process `aggregate` group and its `aggregate_rpm`, and the `reasoning` flag. **There is no `gating` column**: a probe is an observation at a time, not a property of a model, so `transport.py --probe` reports it and the registry does not claim it. |
+| `transport.py` | both call paths; `--probe` observes liveness and refusal shape, `--limits` reports pool allowances, `harness_stream()` exposes the event stream |
 | `agent.py` | the four-tool loop, both action protocols, and the harness-transport episode runner |
 | `episodes_run.py` | sandbox setup, repeats, trace output |
 | `trace.py` | gates G0–G6, grade, declared status, stated facts, anchoring proxies |

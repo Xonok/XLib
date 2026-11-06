@@ -18,12 +18,19 @@ measured 2026-10-22. The limit is carried by the registry entry and enforced by
 a lost cell.
 """
 
-import json,os,re,subprocess,time,urllib.error,urllib.request
+import fcntl,json,os,re,subprocess,time,urllib.error,urllib.request
 
 AUTH_PATH = os.path.expanduser("~/.local/share/opencode/auth.json")
 # Z.ai's credential landed in opencode's `credential` table rather than auth.json,
 # so the key reader has to know both stores. Read exactly one row, lazily.
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+# The aggregate gate's state lives on disk because the limit it enforces is the account's,
+# not the process's: two waves running different models of one provider can each be inside
+# their own model's cap and still exceed the provider's aggregate. `flock` makes the
+# reserve atomic across processes. The directory is read from the environment at call
+# time, never folded into a fingerprint: it is where the bookkeeping lives, not what is
+# measured.
+PACE_WINDOW = 60
 HARNESS_TIMEOUT = 900
 # Direct HTTP gets its own, much shorter timeout. It inherited HARNESS_TIMEOUT because there
 # was only one default, which is fine for a whole opencode session and absurd for a single
@@ -170,6 +177,35 @@ def _zai_key():
 			"connect it with `opencode auth login`")
 	return key
 
+def _nvidia_key():
+	"""NVIDIA NIM's API key, from opencode's `credential` table.
+
+	Same shape as `_zai_key`: `/connect` writes NIM's key into the database rather than
+	`auth.json`, so a reader that only knew the file would report a connected provider as
+	missing. Read auth.json first anyway, so a later `/connect` that lands it in either
+	place works. Read lazily and never log it: a benchmark run writes every prompt to disk.
+	"""
+	try:
+		with open(AUTH_PATH) as f:
+			key = (json.load(f).get("nvidia") or {}).get("key")
+	except (OSError,ValueError):
+		key = None
+	if key:
+		return key
+	import sqlite3
+	try:
+		with sqlite3.connect(DB_PATH) as db:
+			row = db.execute("select value from credential where integration_id='nvidia' "
+				"order by coalesce(active,0) desc, time_updated desc").fetchone()
+		key = json.loads(row[0]).get("key") if row else None
+	except (OSError,sqlite3.Error,ValueError,AttributeError) as e:
+		raise TransportError(f"no NIM API key in {AUTH_PATH} or {DB_PATH} "
+			f"({type(e).__name__}); connect it with `opencode auth login`") from e
+	if not key:
+		raise TransportError(f"no NIM API key in {AUTH_PATH} or {DB_PATH}; "
+			"connect it with `opencode auth login`")
+	return key
+
 def _post(url,payload,headers,timeout):
 	body = json.dumps(payload).encode()
 	# Cloudflare sits in front of the Zen gateway and rejects urllib's default
@@ -201,6 +237,11 @@ def _auth_headers(model):
 		# Also OpenAI-compatible, also a bearer key; the key lives in opencode's
 		# credential table rather than auth.json (see _zai_key).
 		return {"Authorization":f"Bearer {_zai_key()}"}
+	if provider == "nim":
+		# NIM is OpenAI-compatible on one base endpoint and takes the model id in the
+		# body; the key lives in the same credential table (see _nvidia_key). Its limit
+		# is enforced per model AND monitored in aggregate, which `_pace` handles.
+		return {"Authorization":f"Bearer {_nvidia_key()}"}
 	if provider == "zen":
 		# space-bunny is reachable unauthenticated by design; every other console model
 		# is harness-only and never reaches the direct path.
@@ -318,17 +359,74 @@ def _input_tokens(messages):
 	"""
 	return max(1,sum(len(m.get("content") or "") for m in (messages or []))//3)
 
+def _aggregate_state(group):
+	"""The state file and lock file for one provider group, under the pace directory."""
+	root = os.environ.get("MODELBENCH_PACE_DIR","/tmp/opencode/modelbench-pace")
+	base = os.path.join(root,re.sub(r"[^A-Za-z0-9_.-]","_",group))
+	return base + ".json", base + ".lock"
+
+def _aggregate_write(path,entries):
+	"""Replace the state file atomically, so a reader never sees half a window."""
+	tmp = f"{path}.{os.getpid()}.tmp"
+	with open(tmp,"w") as f:
+		json.dump(entries,f)
+	os.replace(tmp,path)
+
+def _aggregate_reserve(group,rpm,tokens,now=None):
+	"""Reserve one request slot in a provider's shared minute window, across processes.
+
+	Returns `0.0` when a slot was reserved, otherwise the seconds to wait before asking
+	again. The state is a list of `[timestamp, tokens]`, and `flock` makes the
+	check-and-append atomic: NIM enforces a per-model limit but also watches aggregate
+	usage, so two waves on different NIM models can each pass their own cap and still
+	trip the account. Reserving **before** the call is the point — retrying after a
+	refusal is exactly the burst pattern that gets an account blocked for 24 hours.
+
+	A group's `aggregate_rpm` is deliberately conservative against the provider's
+	per-model figure; the margin is the mechanism, not a tuning detail.
+	"""
+	if not group or not rpm:
+		return 0.0
+	path,lock_path = _aggregate_state(group)
+	os.makedirs(os.path.dirname(path),exist_ok=True)
+	now = time.time() if now is None else now
+	with open(lock_path,"a") as lock:
+		fcntl.flock(lock,fcntl.LOCK_EX)
+		try:
+			try:
+				with open(path) as f:
+					entries = json.load(f)
+			except (OSError,ValueError):
+				entries = []
+			entries = [e for e in entries
+				if isinstance(e,list) and len(e) == 2 and now - e[0] < PACE_WINDOW]
+			if len(entries) >= int(rpm):
+				wait = PACE_WINDOW - (now - entries[0][0]) + 0.05
+				_aggregate_write(path,entries)
+				return max(0.0,wait)
+			entries.append([now,tokens])
+			_aggregate_write(path,entries)
+			return 0.0
+		finally:
+			fcntl.flock(lock,fcntl.LOCK_UN)
+
 def _pace(model,tokens):
-	"""Wait until one more request fits inside the model's measured minute quota.
+	"""Wait until one more request fits inside the model's minute quota.
 
 	The limit belongs to the model, not to the wave script: it is per model per project,
 	and it differs by model — flash-lite 15 requests a minute, gemma-4-26b 16,000 input
 	tokens a minute (both measured 2026-10-22). A per-process pacer cannot coordinate
-	two processes running the same model, so a wave must not do that.
+	two processes running the same model, so a wave must not do that; the aggregate gate
+	below is the cross-process half, for the provider whose limit is not per model.
+
+	A registry entry may name `aggregate` and `aggregate_rpm`; all models sharing that
+	group share one window (NIM). The slot is reserved before the request is sent.
 	"""
 	rpm = model.get("rpm")
 	tpm = model.get("tpm")
-	if not rpm and not tpm:
+	group = model.get("aggregate")
+	group_rpm = model.get("aggregate_rpm")
+	if not rpm and not tpm and not (group and group_rpm):
 		return
 	if tpm and tokens > int(tpm):
 		# One call is larger than the whole minute's allowance. No wait makes it fit;
@@ -336,17 +434,24 @@ def _pace(model,tokens):
 		tpm = None
 	key = model["id"]
 	now = time.time()
-	window = [e for e in _pace_state.get(key,[]) if now - e[0] < 60]
-	while window:
+	window = [e for e in _pace_state.get(key,[]) if now - e[0] < PACE_WINDOW]
+	while True:
 		request_full = rpm and len(window) >= int(rpm)
 		token_full = tpm and sum(e[1] for e in window) + tokens > int(tpm)
 		if not (request_full or token_full):
 			break
-		wait = 60 - (now - window[0][0])
+		wait = PACE_WINDOW - (now - window[0][0])
 		if wait > 0:
 			time.sleep(wait + 0.05)
 		now = time.time()
-		window = [e for e in window if now - e[0] < 60]
+		window = [e for e in window if now - e[0] < PACE_WINDOW]
+	if group and group_rpm:
+		while True:
+			wait = _aggregate_reserve(group,int(group_rpm),tokens,now=now)
+			if wait <= 0:
+				break
+			time.sleep(wait)
+			now = time.time()
 	window.append((now,tokens))
 	_pace_state[key] = window
 
@@ -619,29 +724,165 @@ def validate_registry(registry):
 			problems.append(f"{name}: transport {model.get('transport')!r} not in {VALID_TRANSPORTS}")
 		if model.get("transport") == "http" and not model.get("endpoint"):
 			problems.append(f"{name}: http transport with no endpoint")
-		for field in ("rpm","tpm"):
+		for field in ("rpm","tpm","aggregate_rpm"):
 			value = model.get(field)
 			if value is not None and (not isinstance(value,int) or value <= 0):
 				problems.append(f"{name}: {field} must be a positive integer, not {value!r}")
+		if model.get("aggregate") is not None:
+			if not isinstance(model["aggregate"],str) or not model["aggregate"]:
+				problems.append(f"{name}: aggregate must be a non-empty group name")
+			elif not model.get("aggregate_rpm"):
+				problems.append(f"{name}: names aggregate {model['aggregate']!r} but no aggregate_rpm")
+		elif model.get("aggregate_rpm"):
+			problems.append(f"{name}: has aggregate_rpm but no aggregate group")
 		if "reasoning" in model and not isinstance(model["reasoning"],bool):
 			problems.append(f"{name}: reasoning must be true or false, not {model.get('reasoning')!r}")
 		if model.get("agent") and not model.get("agent_file"):
 			problems.append(f"{name}: names the agent {model['agent']!r} but no agent_file to plant it from")
 	return problems
 
+def probe_state(error):
+	"""One word for what a failed probe actually observed.
+
+	The old three-way label could not tell a quota from a dead model, and it called every
+	unknown failure "upstream/other" — which is how a harness model was reported dead on
+	a day a real episode graded it `autonomy` 6/6. These names are observations, not
+	verdicts, and the detail line beside them carries the provider's own words.
+	"""
+	if isinstance(error,Deferred):
+		return "quota"
+	text = str(error).lower()
+	if "not available in your country" in text or "not available in your region" in text:
+		return "geo"
+	if "agentic harness" in text or "within opencode" in text:
+		return "harness-only"
+	if "temporarily overloaded" in text or "high demand" in text or "capacity" in text \
+			or " 503" in text:
+		return "capacity"
+	if "401" in text or "403" in text or "unauthorized" in text or "api key" in text:
+		return "auth"
+	if "timed out" in text or "timeout" in text:
+		return "timeout"
+	if "rate limit" in text or " 429" in text or "quota" in text:
+		return "quota"
+	return "error"
+
+def _probe_one(model):
+	"""One liveness call, with the budget a reasoning model actually needs.
+
+	The probe used to give every model 4096 tokens and a 90-second timeout, so a thinking
+	model that spent its budget reasoning came back as an empty response and a harness
+	session that took longer than a minute and a half came back as dead. A probe is a
+	claim about right now; it must not manufacture a negative.
+	"""
+	budget = 12288 if model.get("reasoning") else 64
+	timeout = HARNESS_TIMEOUT if model.get("transport") == "harness" else 120
+	try:
+		out = call_model(model,"Reply with exactly: OK",max_tokens=budget,retries=1,
+			timeout=timeout)
+		return {"state":"open","detail":f"{out.get('raw_tokens')} tokens","quota":{}}
+	except Exception as e:
+		return {"state":probe_state(e),"detail":str(e)[:200],
+			"quota":getattr(e,"quota",{}) or {}}
+
 def probe(registry):
-	"""Re-verify which models actually answer right now. Free tiers get gated, renamed
-	and retired without notice, so a registry entry is a claim, not a fact."""
+	"""Re-verify which models answer right now, and why the others did not.
+
+	Free tiers get gated, renamed and retired without notice, so a registry entry is a
+	claim, not a fact. The result is data, not a printed verdict: the wave runner and the
+	`gating` column both used to read a stale claim, and the fix is to keep the
+	observation and drop the claim.
+	"""
 	rows = []
 	for name,model in sorted(registry.items()):
-		try:
-			out = call_model(model,"Reply with exactly: OK",max_tokens=4096,retries=1,timeout=90)
-			rows.append((name,"open",out["transport"],out["raw_tokens"]))
-		except Exception as e:
-			msg = str(e)
-			tag = "harness-gated" if ("agentic harness" in msg or "within OpenCode" in msg) else "upstream/other"
-			rows.append((name,tag,model.get("transport",""),msg[:70]))
+		out = _probe_one(model)
+		rows.append({"name":name,"state":out["state"],
+			"transport":model.get("transport",""),"rpm":model.get("rpm"),
+			"tpm":model.get("tpm"),"aggregate_rpm":model.get("aggregate_rpm"),
+			"detail":out["detail"],"quota":out["quota"]})
 	return rows
+
+def _get_json(url,headers=None,timeout=20):
+	"""One authenticated JSON read, with the UA Cloudflare requires."""
+	request = urllib.request.Request(url,headers={"Accept":"application/json",
+		"User-Agent":"opencode-model-bench/1.0",**(headers or {})})
+	with urllib.request.urlopen(request,timeout=timeout) as response:
+		return json.loads(response.read().decode("utf-8","replace"))
+
+def openrouter_limits():
+	"""OpenRouter's shared free-model daily counter, the one pool that exposes one."""
+	try:
+		data = _get_json("https://openrouter.ai/api/v1/key",
+			{"Authorization":f"Bearer {_openrouter_key()}"})
+		payload = data.get("data") if isinstance(data,dict) and "data" in data else data
+		daily = payload["free_model_daily_requests"]
+		return {"pool":"openrouter","state":"ok","used":int(daily["used"]),
+			"limit":int(daily["limit"])}
+	except Exception:
+		return {"pool":"openrouter","state":"unavailable"}
+
+def go_limits():
+	"""The OpenCode Go plan's month meter, read from the credential `/connect` wrote."""
+	import sqlite3
+	try:
+		with sqlite3.connect(f"file:{DB_PATH}?mode=ro",uri=True) as db:
+			row = db.execute("select value from credential where integration_id='opencode' "
+				"and active=1 order by time_updated desc").fetchone()
+		value = json.loads(row[0])
+		server = value["metadata"]["server"].rstrip("/")
+		data = _get_json(f"{server}/api/go/status",
+			{"Authorization":f"Bearer {value['access']}"})
+		month = data["access"]["meters"]["month"]
+		return {"pool":"opencode-go","state":"ok",
+			"used":int(month["usedMicroCents"])/100_000_000,
+			"limit":int(month["limitMicroCents"])/100_000_000}
+	except Exception:
+		return {"pool":"opencode-go","state":"unavailable"}
+
+def limits(registry):
+	"""What each pool exposes about its allowance, and what the registry declares.
+
+	Only OpenRouter and the Go plan expose a counter; Google, Z.ai and NIM do not, so the
+	honest answer for them is the configured per-model limit plus "not exposed". That is
+	still worth printing: it is the difference between a wave that knows its budget and
+	one that discovers it by spending the day's allowance on refusals.
+	"""
+	rows = [openrouter_limits(),go_limits()]
+	providers = {}
+	for model in registry.values():
+		provider = model.get("provider")
+		if provider in ("openrouter","opencode-go"):
+			continue
+		entry = providers.setdefault(provider,{"pool":provider,"state":"not exposed",
+			"rpm":set(),"tpm":set(),"aggregate_rpm":set()})
+		if model.get("rpm"):
+			entry["rpm"].add(model["rpm"])
+		if model.get("tpm"):
+			entry["tpm"].add(model["tpm"])
+		if model.get("aggregate_rpm"):
+			entry["aggregate_rpm"].add(model["aggregate_rpm"])
+	for entry in providers.values():
+		for field in ("rpm","tpm","aggregate_rpm"):
+			entry[field] = sorted(entry[field])
+		rows.append(entry)
+	return rows
+
+def _print_limits(rows):
+	for row in rows:
+		if row["state"] == "ok":
+			if row["pool"] == "opencode-go":
+				print(f"  {row['pool']:14s} ${row['used']:.2f} / ${row['limit']:.2f} this month")
+			else:
+				print(f"  {row['pool']:14s} {row['used']} / {row['limit']} requests today")
+			continue
+		parts = []
+		if row.get("rpm"):
+			parts.append("rpm " + ",".join(str(v) for v in row["rpm"]))
+		if row.get("tpm"):
+			parts.append("tpm " + ",".join(str(v) for v in row["tpm"]))
+		if row.get("aggregate_rpm"):
+			parts.append("aggregate " + ",".join(str(v) for v in row["aggregate_rpm"]))
+		print(f"  {row['pool']:14s} {row['state']}" + (": " + ", ".join(parts) if parts else ""))
 
 if __name__ == "__main__":
 	import sys,tomllib
@@ -649,12 +890,29 @@ if __name__ == "__main__":
 	# registry filename, so the documented way to re-verify gating died on a FileNotFound
 	# instead of probing. A tool you cannot run does not get re-verified, and then the
 	# registry's gating column rots silently.
+	flags = {a for a in sys.argv[1:] if a.startswith("-")}
 	args = [a for a in sys.argv[1:] if not a.startswith("-")]
 	registry_path = args[0] if args else os.path.join(os.path.dirname(os.path.abspath(__file__)),"models.toml")
 	reg = tomllib.load(open(registry_path,"rb"))
 	bad = validate_registry(reg)
 	if bad:
 		print("registry invalid:"); [print("  "+b) for b in bad]; sys.exit(1)
+	if "--limits" in flags:
+		print(f"{len(reg)} models, registry valid ({registry_path})\n")
+		_print_limits(limits(reg))
+		sys.exit(0)
+	rows = probe(reg)
+	if "--json" in flags:
+		print(json.dumps(rows,indent=1))
+		sys.exit(0)
 	print(f"{len(reg)} models, registry valid ({registry_path})\n")
-	for name,status,transport,detail in probe(reg):
-		print(f"  {name:24s} {status:14s} via {transport or '-':8s} {detail}")
+	for row in rows:
+		limit = []
+		if row["rpm"]:
+			limit.append(f"rpm {row['rpm']}")
+		if row["tpm"]:
+			limit.append(f"tpm {row['tpm']}")
+		if row["aggregate_rpm"]:
+			limit.append(f"agg {row['aggregate_rpm']}")
+		print(f"  {row['name']:24s} {row['state']:13s} via {row['transport'] or '-':8s} "
+			f"{('[' + ', '.join(limit) + ']') if limit else '':18s} {row['detail']}")
