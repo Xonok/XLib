@@ -97,7 +97,11 @@ def main():
 	ap.add_argument("--option", action="append", default=[])
 	args = ap.parse_args()
 
-	out_dir = Path(args.out)
+	# Absolute, because the checker runs with `cwd=<sandbox>` and is handed
+	# `LB_STDOUT`/`LB_META` as strings: a relative --out would make those paths resolve
+	# inside the sandbox, the checker would not find its own input, and every row would
+	# record `checker not run` as if the model had failed (TQ2CZ9T).
+	out_dir = Path(args.out).resolve()
 	out_dir.mkdir(parents=True, exist_ok=True)
 	tasks_dir = Path(args.tasks) if args.tasks else TASKS_DEFAULT
 	xprompt = resolve_xprompt(args.xprompt)
