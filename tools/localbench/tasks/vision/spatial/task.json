@@ -1,0 +1,1 @@
+{"family":"vision","case":"spatial","kind":"stdout","prompt":"The image contains a red circle and a blue square. What color is the shape on the left? Reply with only the color name, lowercase.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"images":["img.png"],"note":null}
