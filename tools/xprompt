@@ -15,6 +15,10 @@ Flags (may repeat; order affects the assembled prompt):
   --prompt TEXT        prompt text (can be placed anywhere, incl. before tools)
   --prompt-file PATH   read the prompt from a UTF-8 file (same order as --prompt)
   --file PATH [PATH..] include one or more files (variadic, until next flag)
+  --suffix TEXT        fill-in-the-middle suffix (switches to /api/generate FIM mode)
+  --suffix-file PATH   read the FIM suffix from a UTF-8 file
+  --image PATH [PATH..] attach one or more images to the user message (base64,
+                       for vision-capable models; variadic, until next flag)
   --read               enable the 'read' tool (read a file's contents)
   --grep               enable the 'grep' tool (search text in files)
   --ls                 enable the 'ls' tool (list a directory, incl. hidden)
@@ -43,6 +47,7 @@ the original 'xprompt <model> ... "prompt"' form keeps working.
 Exit codes: 0 success, 1 runtime error (Ollama/model/tool failure, including a
 run that produced no final answer), 2 usage error.
 """
+import base64
 import http.client
 import json
 import shlex
@@ -709,6 +714,71 @@ def ollama_chat(model, messages, tools=None, load_timeout=DEFAULT_MODEL_TIMEOUT_
 	msg_out = {"role": "assistant", "content": "".join(content_parts), "tool_calls": tool_calls, "timings": timings}
 	return msg_out
 
+def ollama_generate(model, prompt, suffix=None, load_timeout=DEFAULT_MODEL_TIMEOUT_LOAD, idle_timeout=DEFAULT_MODEL_TIMEOUT_IDLE, host=None, options=None):
+	"""Single completion via /api/generate, optionally fill-in-the-middle (suffix)."""
+	payload = {"model": model, "prompt": prompt, "stream": True}
+	if suffix is not None:
+		payload["suffix"] = suffix
+	opts = dict(options) if options else {}
+	if "num_predict" not in opts:
+		opts["num_predict"] = 256
+	payload["options"] = opts
+	data = json.dumps(payload).encode()
+	h, p = normalize_host(host)
+	try:
+		conn = http.client.HTTPConnection(h, p, timeout=load_timeout)
+		conn.request("POST", "/api/generate", body=data, headers={"Content-Type": "application/json"})
+		resp = conn.getresponse()
+	except Exception as e:
+		raise RuntimeError(f"cannot reach Ollama: {e}")
+	if resp.status != 200:
+		try:
+			err = resp.read().decode(errors="replace")
+		except Exception:
+			err = ""
+		conn.close()
+		raise RuntimeError(f"Ollama HTTP {resp.status}: {err}")
+	try:
+		conn.sock.settimeout(idle_timeout)
+	except Exception:
+		pass
+	content_parts = []
+	timings = None
+	try:
+		for raw in resp:
+			line = raw.strip()
+			if not line:
+				continue
+			try:
+				chunk = json.loads(line)
+			except json.JSONDecodeError:
+				continue
+			if isinstance(chunk, dict) and "error" in chunk:
+				conn.close()
+				raise RuntimeError(f"Ollama: {chunk['error']}")
+			if isinstance(chunk, dict):
+				if chunk.get("response"):
+					content_parts.append(chunk["response"])
+				if chunk.get("done"):
+					timings = {
+						"load_duration_ns": chunk.get("load_duration"),
+						"prompt_eval_count": chunk.get("prompt_eval_count"),
+						"prompt_eval_duration_ns": chunk.get("prompt_eval_duration"),
+						"eval_count": chunk.get("eval_count"),
+						"eval_duration_ns": chunk.get("eval_duration"),
+						"total_duration_ns": chunk.get("total_duration"),
+					}
+					break
+	except socket.timeout:
+		conn.close()
+		raise RuntimeError(f"Ollama idle timeout ({idle_timeout}s with no data)")
+	except Exception as e:
+		conn.close()
+		raise RuntimeError(f"Ollama stream error: {e}")
+	conn.close()
+	return "".join(content_parts), timings
+
+
 
 def build_tool_schemas(enabled):
 	out = []
@@ -765,6 +835,7 @@ def parse_args(argv):
 		"verbose": False,
 		"system": [],
 		"json": False,
+		"suffix": None,
 		"options": {},
 		"host": None,
 		"think": None,
@@ -792,6 +863,16 @@ def parse_args(argv):
 				if not files:
 					fail("--file requires at least one path")
 				segments.append(("file", files))
+				continue
+			if name in ("image", "images"):
+				i += 1
+				images = []
+				while i < n and not argv[i].startswith("--"):
+					images.append(argv[i])
+					i += 1
+				if not images:
+					fail("--image requires at least one path")
+				segments.append(("image", images))
 				continue
 			if name in ("system",):
 				if i + 1 >= n:
@@ -847,6 +928,18 @@ def parse_args(argv):
 					fail(f"--{name} requires key=value")
 				key, val = raw.split("=", 1)
 				config["options"][key] = coerce_option_value(val)
+				i += 2
+				continue
+			if name in ("suffix", "suffix-file"):
+				if i + 1 >= n:
+					fail(f"--{name} requires a value")
+				val = argv[i + 1]
+				if name == "suffix-file":
+					try:
+						val = read_prompt_file(val)
+					except Exception as e:
+						fail(f"cannot read suffix file: {e}")
+				config["suffix"] = val
 				i += 2
 				continue
 			if name in ("host",):
@@ -913,6 +1006,7 @@ def main(argv):
 	# assemble
 	enabled_tools = set()
 	text_blocks = []
+	image_paths = []
 	for kind, data in segments:
 		if kind == "prompt":
 			text_blocks.append(data)
@@ -922,6 +1016,8 @@ def main(argv):
 			for pth in data:
 				content = read_file_text(pth)
 				text_blocks.append(f"--- {pth} ---\n{content}")
+		elif kind == "image":
+			image_paths.extend(data)
 		elif kind == "tool":
 			enabled_tools.add(data)
 			info = TOOLS[data]
@@ -931,17 +1027,62 @@ def main(argv):
 	ENABLED_TOOLS = set(enabled_tools)
 
 	user_content = "\n\n".join(b for b in text_blocks if b.strip())
-	if not user_content.strip():
+	if not user_content.strip() and not image_paths:
 		fail("no prompt provided (use --prompt, --prompt-file or a trailing prompt)")
 
 	system_content = "\n\n".join(config["system"])
 
+	# encode images as base64 for Ollama chat API
+	encoded_images = []
+	for ip in image_paths:
+		try:
+			with open(ip, "rb") as f:
+				encoded_images.append(base64.b64encode(f.read()).decode("ascii"))
+		except OSError as e:
+			fail(f"cannot read image {ip}: {e}")
+
 	messages = []
 	if system_content.strip():
 		messages.append({"role": "system", "content": system_content})
-	messages.append({"role": "user", "content": user_content})
+	user_msg = {"role": "user", "content": user_content}
+	if encoded_images:
+		user_msg["images"] = encoded_images
+	messages.append(user_msg)
 
 	tools_list = build_tool_schemas(enabled_tools)
+
+	# FIM mode: single generate call with optional suffix; no tools, no turns.
+	if config.get("suffix") is not None:
+		wall_start = time.time()
+		try:
+			content, timings = ollama_generate(model, user_content, config["suffix"], config["load_timeout"], config["idle_timeout"], host=config.get("host"), options=config.get("options"))
+			error = None
+		except RuntimeError as e:
+			content = ""
+			timings = None
+			error = str(e)
+		wall = time.time() - wall_start
+		if config.get("json"):
+			obj = {
+				"model": model,
+				"think": config.get("think"),
+				"content": content,
+				"turns": 1,
+				"wall_time_s": wall,
+				"tool_calls": [],
+				"timings": timings,
+				"error": error,
+				"fim": True,
+			}
+			print(json.dumps(obj))
+		else:
+			if error:
+				sys.stderr.write(f"error: {error}\n")
+				sys.exit(1)
+			sys.stdout.write(content)
+			if not content.endswith("\n"):
+				sys.stdout.write("\n")
+		sys.exit(0 if error is None else 1)
 	vlog(config, f"model={model} turns={config['max_turns']} tools={sorted(enabled_tools)}")
 
 	json_mode = config["json"]
