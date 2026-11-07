@@ -96,7 +96,8 @@ id = "gemini-3.8-flash"
 provider = "google"
 transport = "http"
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai"
-note = "The Google free roster's newest Flash and the queued retry. Both existing records (2026-10-20) are HTTP 429 quota holes rather than model results, and the 2026-10-22 probe met a 503 'high demand' capacity wall, also a hole. Its free-tier RPD and RPM are unmeasured here, so none is claimed: the probe's own refusals are the measurement, and the pace follows whatever quota the 429 names. Probed 2026-10-31: the 503 had cleared and it answered \"OK\" in 74.2 s, so it is slow to first token but reachable. Its free tier's day cap was measured on 2026-11-01: 20 requests per project per model (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue 20, retry 31,120 s), so a wave must budget at most 20 calls a day and a cache arm of three repeats does not fit."
+reasoning = true
+note = "The Google free roster's newest Flash and the queued retry. **reasoning = true is measured, not assumed:** probed 2026-11-07 at the non-reasoning 64-token budget it spends 41.6 s and returns empty content with finish_reason 'length' - E23 exactly - and at 12,288 tokens it still had not finished inside the probe's 120 s, so a 180 s episode call is a guess rather than a known budget. Its free tier's day cap was measured on 2026-11-01: 20 requests per project per model (GenerateRequestsPerDayPerProjectPerModel-FreeTier, quotaValue 20, retry 31,120 s), so no multi-turn episode fits in a day and it stays unmeasured until the cap or its latency changes. Its two existing records (2026-10-20) are HTTP 429 quota holes rather than model results; the 2026-10-22 probe met a 503 capacity wall, also a hole; the 2026-10-31 probe got 'OK' in 74.2 s."
 
 ["north-mini-code"]
 id = "cohere/north-mini-code:free"
