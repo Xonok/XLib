@@ -1,0 +1,1 @@
+{"family":"vision","case":"count","kind":"stdout","prompt":"How many red circles are in the image? Reply with only the number.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"images":["img.png"],"note":null}

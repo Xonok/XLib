@@ -1,0 +1,1 @@
+{"family":"vision","case":"chart","kind":"stdout","prompt":"The image shows a bar chart of sales by product. Which product (A, B, or C) has the highest sales? Reply with only the product letter.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"images":["img.png"],"note":null}

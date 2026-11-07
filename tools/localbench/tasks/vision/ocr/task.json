@@ -1,0 +1,1 @@
+{"family":"vision","case":"ocr","kind":"stdout","prompt":"Read the text written in the image. Reply with only the text, no explanation.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"images":["img.png"],"note":null}

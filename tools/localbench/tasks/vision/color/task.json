@@ -1,0 +1,1 @@
+{"family":"vision","case":"color","kind":"stdout","prompt":"What color is the shape in the image? Reply with only the color name, lowercase.","tools":[],"max_turns":1,"timeout_s":120,"options":{},"verify_command":null,"images":["img.png"],"note":null}
