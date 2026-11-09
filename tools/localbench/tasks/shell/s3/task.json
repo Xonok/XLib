@@ -1,0 +1,1 @@
+{"family": "shell", "case": "s3", "kind": "state", "prompt": "Count the total number of lines across all .txt files under data/ (including subdirectories). Write that number as a plain integer to total.txt.", "tools": ["bash"], "max_turns": 6, "timeout_s": 180, "options": {}, "verify_command": null, "note": null}
