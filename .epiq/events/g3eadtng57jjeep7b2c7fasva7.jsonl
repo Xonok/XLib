@@ -1830,3 +1830,4 @@
 {"v":1,"id":["01M6ZJDCHN5VP0WXRJZ9M3AT5D","01M6ZJD2J846EJ6TB2A258R0E6"],"close.issue":{"id":"01M6ZJD2J6PJ96Z306YHZPTBA2","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffff7c66cfadc041cc9828"}}
 {"v":1,"id":["01M6ZJDS8SQ0CTE3JCX5G0EVWN","01M6ZJDCHN5VP0WXRJZ9M3AT5D"],"add.issue":{"id":"01M6ZJDS8S0493N16R5V4957WB","parent":"01M3BVED413TBXCFAEK193PBS7","name":"localbench: selftest.py rmtree scope fix","rank":"feffffffffffffffffffffff"}}
 {"v":1,"id":["01M6ZJDS8TM2KRGGGFSE168B56","01M6ZJDS8SQ0CTE3JCX5G0EVWN"],"edit.description":{"id":"01M6ZJDS8S0493N16R5V4957WB","md":"Fix shutil.rmtree indentation in selftest.py: was at wrong scope (once per family instead of per scenario), leaving temp dirs. Now cleans up per scenario. selftest still 108/108 green."}}
+{"v":1,"id":["01M6ZJE10RR2HR03A8MF9EFB6A","01M6ZJDS8TM2KRGGGFSE168B56"],"close.issue":{"id":"01M6ZJDS8S0493N16R5V4957WB","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffbe3367d6e020e64c13"}}
