@@ -1,0 +1,1 @@
+{"family": "fim", "case": "f3", "kind": "stdout", "prompt": "def double(items):\n    ", "tools": [], "max_turns": 1, "timeout_s": 120, "options": {}, "verify_command": null, "suffix": "\n", "note": null}

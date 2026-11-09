@@ -1,0 +1,1 @@
+{"family": "fim", "case": "f2", "kind": "stdout", "prompt": "def get(d, key, default=None):\n    ", "tools": [], "max_turns": 1, "timeout_s": 120, "options": {}, "verify_command": null, "suffix": "\n", "note": null}

@@ -182,6 +182,16 @@ def main():
 			start_wall = time.time()
 			prompt_args = ["--prompt-file", str(prompt_path)] if prompt_path is not None else ["--prompt", prompt_text]
 			cmd = [xprompt, args.model, "--json"] + prompt_args + ["--max-turns", str(max_turns), "--timeout", str(timeout_s)]
+			# vision inputs: resolve relative to the case dir
+			for img in (task.get("images") or []):
+				img_path = (case_dir / img).resolve() if not os.path.isabs(img) else Path(img)
+				cmd += ["--image", str(img_path)]
+			# FIM suffix
+			if task.get("suffix_file"):
+				sf = (case_dir / task["suffix_file"]).resolve()
+				cmd += ["--suffix-file", str(sf)]
+			elif task.get("suffix") is not None:
+				cmd += ["--suffix", str(task["suffix"])]
 			for t in task_tools:
 				if t in TOOL_FLAGS:
 					cmd.append(TOOL_FLAGS[t])
