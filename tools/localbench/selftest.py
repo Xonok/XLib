@@ -66,7 +66,7 @@ def main():
 						print(r.stderr.strip())
 				else:
 					print(f"ok   {family_dir.name}/{case_dir.name} [{scenario}]")
-	shutil.rmtree(td, ignore_errors=True)
+				shutil.rmtree(td, ignore_errors=True)
 	print(f"\nselftest: {total - len(failures)}/{total} passed")
 	if failures:
 		print(f"{len(failures)} failure(s)")
