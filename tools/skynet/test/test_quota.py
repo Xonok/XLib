@@ -427,6 +427,22 @@ def test_a_month_end_clamps_to_the_shortest_month():
 	xtest.equal(skynet._add_months(datetime.datetime(2026, 1, 31, tzinfo=UTC), 1),
 		datetime.datetime(2026, 2, 28, tzinfo=UTC), "the 31st clamps to February's last day")
 
+def test_cursor_today_carries_pre_reset_spend_across_a_period_reset():
+	# A reset in the middle of the UTC day must not drop the day's earlier
+	# spend: the pre-reset messages are carried into `today`.
+	config = {"cursor_limit": 210, "other_limit": 40, "period_months": 1,
+		"period_end": "2026-10-16T12:00:00+00:00"}
+	with tempfile.TemporaryDirectory() as folder:
+		db = _messages(folder, [
+			(_utc(2026, 10, 16, 8), "grok-4.6", 5.0),
+			(_utc(2026, 10, 16, 13), "grok-4.6", 2.0),
+		])
+		quota = skynet.cursor_quota(now=_utc(2026, 10, 16, 14), db_path=db, config=config)
+		pace = skynet.compute_pace(quota, quota["day_start_used"], _utc(2026, 10, 16, 14))
+	xtest.equal(quota["used"], 200_000_000, "only the new period counts toward used")
+	xtest.true(quota["day_start_used"] < 0, "the pre-reset day spend is carried as a negative baseline")
+	xtest.equal(round(pace["today"]), 87, "today keeps both sides of the reset")
+
 # --- pace ------------------------------------------------------------------
 
 def test_the_sustainable_rate_is_one_hundred_percent():

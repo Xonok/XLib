@@ -665,35 +665,52 @@ def cursor_quota(*args, now=None, db_path=None, config=None, state_path=None, pe
 	# needed and cannot lose usage that happened before that read.
 	today_start_ts = max(start_ts, now.astimezone(datetime.timezone.utc).replace(
 		hour=0, minute=0, second=0, microsecond=0).timestamp())
+	utc_midnight_ts = now.astimezone(datetime.timezone.utc).replace(
+		hour=0, minute=0, second=0, microsecond=0).timestamp()
+	# The previous period's bounds, used to carry today's pre-reset spend
+	# across a period boundary the way Go carries its meter.
+	prev_start_ts = _shift_period(start, -1, days, months).timestamp()
 	used_dollars = 0.0
 	day_dollars = 0.0
+	pre_day_dollars = 0.0
 	cursor_pool_dollars = 0.0
 	cursor_pool_day_dollars = 0.0
+	cursor_pool_pre_day_dollars = 0.0
 	other_pool_dollars = 0.0
 	other_pool_day_dollars = 0.0
+	other_pool_pre_day_dollars = 0.0
 	for created, model_id, cost, tokens in collected:
-		if not (start_ts <= created < end_ts):
-			continue
-		cursor_model = _is_cursor_model(model_id)
-		charge = cost if cursor_model else _cursor_charge(cost, tokens)
-		today = created >= today_start_ts
-		used_dollars += charge
-		if today:
-			day_dollars += charge
-		if cursor_model:
-			cursor_pool_dollars += charge
+		if start_ts <= created < end_ts:
+			cursor_model = _is_cursor_model(model_id)
+			charge = cost if cursor_model else _cursor_charge(cost, tokens)
+			today = created >= today_start_ts
+			used_dollars += charge
 			if today:
-				cursor_pool_day_dollars += charge
-		else:
-			other_pool_dollars += charge
-			if today:
-				other_pool_day_dollars += charge
+				day_dollars += charge
+			if cursor_model:
+				cursor_pool_dollars += charge
+				if today:
+					cursor_pool_day_dollars += charge
+			else:
+				other_pool_dollars += charge
+				if today:
+					other_pool_day_dollars += charge
+		# Today's spend that fell in the previous period: carried across the
+		# reset so `today` stays continuous instead of dropping to zero.
+		if prev_start_ts <= created < start_ts and created >= utc_midnight_ts:
+			cursor_model = _is_cursor_model(model_id)
+			charge = cost if cursor_model else _cursor_charge(cost, tokens)
+			pre_day_dollars += charge
+			if cursor_model:
+				cursor_pool_pre_day_dollars += charge
+			else:
+				other_pool_pre_day_dollars += charge
 	used_micro = _dollars_to_microcents(used_dollars)
-	day_micro = _dollars_to_microcents(day_dollars)
+	day_micro = _dollars_to_microcents(day_dollars + pre_day_dollars)
 	cursor_pool_micro = _dollars_to_microcents(cursor_pool_dollars)
-	cursor_pool_day_micro = _dollars_to_microcents(cursor_pool_day_dollars)
+	cursor_pool_day_micro = _dollars_to_microcents(cursor_pool_day_dollars + cursor_pool_pre_day_dollars)
 	other_pool_micro = _dollars_to_microcents(other_pool_dollars)
-	other_pool_day_micro = _dollars_to_microcents(other_pool_day_dollars)
+	other_pool_day_micro = _dollars_to_microcents(other_pool_day_dollars + other_pool_pre_day_dollars)
 	source = {
 		"state": "ok",
 		"product": "cursor",
@@ -859,7 +876,7 @@ def update_day_state(state_path, go, now, key="go", day_used=None):
 	last_used = _number(stored.get("last_used"))
 	baseline = _number(stored.get("day_start_used")) if stored.get("day") == today else None
 	if day_used is not None:
-		baseline = max(0, go["used"] - max(0, int(day_used)))
+		baseline = go["used"] - max(0, int(day_used))
 	elif stored.get("period_start") != go["period_start"]:
 		# The provider reset the monthly meter. Keep the day continuous by
 		# carrying the pre-reset spend into the new baseline, so today's share

@@ -491,9 +491,12 @@ rule ids keep their numbers.
 	today.
 - **R9.4** Derive today from the messages on the current UTC day, not from a
 	baseline taken at the first read; a late first read, a restart or a stale
-	baseline cannot change it.
-- **R9.5** Persist the derived baseline (`used - day_used`, at least zero) so
-	the state file agrees with the meter.
+	baseline cannot change it. Messages that fall in the previous period but on
+	the current UTC day are carried across the reset, so `today` stays
+	continuous instead of dropping to zero.
+- **R9.5** Persist the derived baseline (`used - day_used`, which may be
+	negative when a reset carried pre-reset spend into the day) so the state
+	file agrees with the meter.
 - **R9.6** When Cursor is `ok` it is the source of pace and today; Go is a
 	sibling used/limit field.
 
