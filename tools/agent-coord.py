@@ -1,4 +1,4 @@
-import argparse,fcntl,glob,hashlib,json,os,subprocess,sys,time
+import argparse,fcntl,glob,hashlib,json,os,re,subprocess,sys,time
 from contextlib import contextmanager
 
 MAX_INSTANCES = 8
@@ -263,43 +263,6 @@ def key_is_live(key):
 		return True
 	return proc_starttime(pid) == ticks
 
-def processes_referencing(agent_id):
-	"""Live processes whose environment names this agent id.
-
-	An agent id is `tag/role-N` (e.g. `XLib/secretary-1`). It is exported as
-	`OPENCODE_AGENT_ID` by `oc-agent` and inherited by every child process,
-	including orphaned workers that outlive their window. A number that such a
-	process still references must not be handed to a new window, or two
-	windows end up sharing one identity (and one notes file) -- the collision
-	this guards against. `/proc/<pid>/environ` is fixed at exec time, so a
-	variable exported later by a shell is seen through the children it execs,
-	which is exactly where the orphans are.
-
-	Returns an empty list when `/proc` cannot be read, so allocation falls back
-	to the previous (recycling) behaviour rather than failing.
-	"""
-	target = ("OPENCODE_AGENT_ID=" + agent_id).encode("utf-8")
-	found = []
-	try:
-		entries = os.listdir("/proc")
-	except OSError:
-		return found
-	for entry in entries:
-		if not entry.isdigit():
-			continue
-		pid = int(entry)
-		if pid == os.getpid():
-			continue
-		try:
-			with open("/proc/%d/environ" % pid, "rb") as f:
-				data = f.read()
-		except (OSError, IOError):
-			continue
-		# environ is a sequence of NUL-terminated `KEY=VALUE` entries.
-		if target in data.split(b"\x00"):
-			found.append(pid)
-	return found
-
 def is_service(argv):
 	"""True for the opencode background service.
 
@@ -527,34 +490,29 @@ def qualify(agent):
 		return agent
 	return "%s/%s" % (ws_tag(), agent)
 
-def allocate_instance(role, tag, ids):
-	"""Return next available instance number for (tag, role), recycling dead processes.
+def allocate_instance(role, ids):
+	"""Return the next free instance number for `role` on this machine.
 
-	A number is recycled only when every process that owned it is gone AND no
-	live process still references the agent id it names. An orphaned worker
-	(child process that outlived its window) keeps the environment variable of
-	the window it came from, so recycling a number it still references would
-	hand two windows the same identity -- and the same notes file.
+	The number is one sequence per role, not per workspace: `XLib/overseer-1`
+	and `Agents/overseer-2` are the two sides of one counter, so the number a
+	window gets does not depend on the folder it was launched from. The
+	workspace tag stays in the id as a routing label for notes and claims.
+
+	A number is free when no live process owns it. A worker that inherited the
+	id of a window that has since closed does not keep the number: the number
+	belongs to the window, and the window is gone.
 	"""
-	prefix = tag + "/" + role + "-"
+	# Match the trailing `-N` exactly. A role may contain hyphens
+	# (`worker-north-mini-code`), so a plain prefix test would read the last
+	# segment of the role as the number.
+	pattern = re.compile(r"^[^/]*/%s-(\d+)$" % re.escape(role))
 	# Map each number to the keys that own it.
 	owners = {}
-	for k, v in ids.items():
-		if v.startswith(prefix):
-			try:
-				n = int(v.rsplit("-", 1)[1])
-				owners.setdefault(n, []).append(k)
-			except (ValueError, IndexError):
-				pass
-	taken = set(owners)
-	for n, ks in owners.items():
-		agent_id = prefix + str(n)
-		# Recycle only if every owner is a dead pid and nothing still references it.
-		all_dead = len(ks) > 0 and all(
-			k.startswith("pid-") and not key_is_live(k) for k in ks
-		)
-		if all_dead and not processes_referencing(agent_id):
-			taken.discard(n)
+	for key, value in ids.items():
+		match = pattern.match(value)
+		if match:
+			owners.setdefault(int(match.group(1)), []).append(key)
+	taken = {n for n, keys in owners.items() if any(key_is_live(k) for k in keys)}
 	for n in range(1, MAX_INSTANCES + 1):
 		if n not in taken:
 			return n
@@ -671,10 +629,8 @@ def retag_if_moved(ids, key, agent_id):
 	old_tag, suffix = agent_id.split("/", 1)
 	if old_tag == tag:
 		return agent_id
-	# Do not re-tag an identity that a live process (e.g. an orphaned worker)
-	# still references: moving it would misroute that process's notes and claims.
-	if processes_referencing(agent_id):
-		return agent_id
+	# A live worker does not block the move: the number belongs to the window,
+	# and a window that took over a recycled pid is the identity that is here.
 	new_id = "%s/%s" % (tag, suffix)
 	ids[key] = new_id
 	save(IDS, ids)
@@ -715,9 +671,9 @@ def my_id():
 			return qualify(retag_if_moved(ids, key, ids[key]))
 		tag = ws_tag()
 		role = agent_role()
-		n = allocate_instance(role, tag, ids)
+		n = allocate_instance(role, ids)
 		if n is None:
-			sys_stderr("no free instance for role %s in %s (limit %s); set OPENCODE_AGENT_ID to pick one" % (role, tag, MAX_INSTANCES))
+			sys_stderr("no free instance for role %s (limit %s); set OPENCODE_AGENT_ID to pick one" % (role, MAX_INSTANCES))
 			raise SystemExit(1)
 		agent_id = "%s/%s-%d" % (tag, role, n)
 		ids[key] = agent_id
@@ -736,7 +692,9 @@ def recycle_dead_slots():
 
 	A pid key records the process's start time, so a pid that the kernel has
 	since handed to an unrelated process does not keep the instance number,
-	the claims and the rule cursor of the session that died.
+	the claims and the rule cursor of the session that died. A worker that
+	still carries the id does not keep it either: the number follows the
+	launcher, and the launcher is gone.
 	"""
 	ids = load(IDS, {})
 	claims = load(CLAIMS, {})
@@ -744,10 +702,6 @@ def recycle_dead_slots():
 	dead_keys = []
 	for key in ids:
 		if key.startswith("pid-") and not key_is_live(key):
-			agent_id = ids[key]
-			# Keep the slot (and its claims/cursor) while an orphan still references it.
-			if processes_referencing(agent_id):
-				continue
 			dead_keys.append(key)
 	for key in dead_keys:
 		agent_id = ids[key]
@@ -808,9 +762,9 @@ def cmd_allocate(args):
 			return
 		role = args.role or agent_role()
 		tag = os.path.basename(launch_workspace())
-		n = allocate_instance(role, tag, ids)
+		n = allocate_instance(role, ids)
 		if n is None:
-			sys_stderr("no free instance for role %s in %s (limit %s)" % (role, tag, MAX_INSTANCES))
+			sys_stderr("no free instance for role %s (limit %s)" % (role, MAX_INSTANCES))
 			raise SystemExit(1)
 		agent_id = "%s/%s-%d" % (tag, role, n)
 		ids[key] = agent_id
@@ -829,11 +783,8 @@ def cmd_free(args):
 		agent_id = ids.get(key)
 		if agent_id is None:
 			return
-		# If an orphaned process still references this identity, keep the slot
-		# (and its claims/cursor) so a new window cannot reuse the number while
-		# the orphan is alive. The reaper frees it once the references are gone.
-		if processes_referencing(agent_id):
-			return
+		# A worker still carrying the id does not hold the number: this launcher
+		# is the owner, and it is exiting.
 		ids.pop(key, None)
 		save(IDS, ids)
 		claims = load(CLAIMS, {})

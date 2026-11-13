@@ -1,5 +1,11 @@
 # agent-coord: Role-Based Notes
 
+> **Superseded 2026-11-13 (epiq `SZS016D`).** Instance numbers are one sequence
+> per role for the machine, not one per `(workspace, role)`; the workspace tag
+> stays in the id only as a routing label for notes and claims. A number is
+> freed as soon as its launcher is gone, even while a worker that inherited the
+> id is still running. The rest of this document is the original design record.
+
 ## Goal
 
 Add role-based notes shared between agents of the same role within a workspace, alongside existing instance-based notes. Agents promote important discoveries from instance → role notes manually.
