@@ -25,6 +25,7 @@ Rules are split across files. Read the relevant one before work on that topic:
 | File | What it covers |
 |------|---------------|
 | `doc/development.md` | The process: plan → spec → tests → implementation → review, and who owns each stage |
+| `doc/testing-architecture.md` | How a test is built: driver, observation, judge, cases; **red is a checked-in case, not a run** |
 | `doc/library-structure.md` | Reference: library layout, release naming, import resolution, bundler name prefixing |
 | `doc/tool-schema-cache.md` | Reference: the per-turn tool-schema cache in `tools/tool_schema_cache.py` — unwired, so it is a proposal rather than behaviour |
 | `doc/style/architecture.md` | A/B/C/D placement, leaf modules, fork control, handed-in IO |

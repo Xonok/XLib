@@ -157,11 +157,16 @@ absent — if it reappears unlabelled, leave it alone.
 Built by the reviewer (pass 1) from the spec. Tests are **load-bearing**: the
 implementation is written on them.
 
+**The shape of a test is in `doc/testing-architecture.md`** — driver, observation,
+judge, cases. That file is the rule for what a test is made of. This section
+covers where tests come from, who writes them and how they run.
+
 - Edges and error cases explicit.
 - Deterministic — no timing-dependent behavior, no flaky tests.
 - Independent — no test depends on another's state.
 - Test the contract, not the implementation.
-- One assertion per test.
+- One judgement per case, compared exactly — a case that accepts any failure
+	tests nothing.
 - Descriptive names (scenario + expected outcome).
 - **Never invent**: where the spec cannot support a test, that is a spec flaw —
 	reported to the human to fix, never papered over with an assumption.
