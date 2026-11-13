@@ -150,24 +150,25 @@ def main():
 
 	entry = build_entry(tag, body, args.pointer)
 
-	# Serialize appends across processes with an exclusive lock.
-	lock_path = path + ".lock"
-	with open(lock_path, "w") as lockf:
-		fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+	# Serialize appends across processes with an exclusive lock on the history
+	# file itself. Locking the file being appended to (rather than a separate
+	# lock file) means no lock file is created and left behind on disk, and
+	# avoids the inode races that deleting a separate lock file would introduce.
+	with open(path, "a+") as f:
+		fcntl.flock(f.fileno(), fcntl.LOCK_EX)
 		try:
-			with open(path, "a+") as f:
-				f.seek(0, os.SEEK_END)
-				# ensure the file ends with a newline before appending
-				if f.tell() > 0:
-					f.seek(f.tell() - 1)
-					last = f.read(1)
-					if last != "\n":
-						f.write("\n")
-				f.write(entry)
-				f.flush()
-				os.fsync(f.fileno())
+			f.seek(0, os.SEEK_END)
+			# ensure the file ends with a newline before appending
+			if f.tell() > 0:
+				f.seek(f.tell() - 1)
+				last = f.read(1)
+				if last != "\n":
+					f.write("\n")
+			f.write(entry)
+			f.flush()
+			os.fsync(f.fileno())
 		finally:
-			fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
+			fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 	sys.stdout.write(entry)
 
