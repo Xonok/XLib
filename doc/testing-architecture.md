@@ -57,8 +57,12 @@ is too thin. Widen it.
 
 **Every case states its expected verdict, and red cases are checked in.** The
 expectation lives with the case; the same judge runs against passing and failing
-observations unchanged. A red proof is a case, not a run: a transcript of a run
-that has since been discarded is not evidence that anything fails.
+observations unchanged. A case whose requirement is a rejection — a malformed
+datagram refused, an invalid input refused — is an ordinary case with an empty
+expected verdict: its judge reports a violation when the rejection does *not*
+happen. Red cases are the other kind, and they exist to show the judge can fail.
+A red proof is a case, not a run: a transcript of a run that has since been
+discarded is not evidence that anything fails.
 
 **Red is per case, never per suite.** A red run over a whole suite says nothing
 about an individual test — a vacuous test passes while the others fail around it.
