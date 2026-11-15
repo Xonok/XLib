@@ -8,7 +8,8 @@ The display fits the room it is given: the caps on the two tables come from the
 terminal's own height, the columns and model names come from its width, a table
 that had to leave rows out says how many, and the room a section does not need
 goes to the section that has more to show. In watch mode a counter under the
-header says how long the visible data has stood still.
+header, and a `Chg` column in each table, say how long the visible data has
+stood still.
 
 Terminal contract: TERMINAL.md.
 """
@@ -1172,16 +1173,22 @@ def _fit_source(title, full, abbr, variants, width):
 			return [variant], False
 	return [], False
 
-def quota_line(quota, width):
+def quota_line(quota, width, changed_ago=None):
 	"""The cost-tracking section: one line per source, starting on the Skynet title.
 
 	The first source that fits shares the `=== Skynet ===` title line, right-
 	aligned as before; the remaining sources follow on their own lines. `None`
-	gives the bare title.
+	gives the bare title. `changed_ago` puts the age counter at the left of the
+	line under the title, and that line's source is fitted to the room the
+	counter leaves, so the two never meet.
 	"""
 	title = f"=== {NAME} ==="
+	counter = _counter_line(changed_ago, width)
 	if quota is None:
-		return title if len(title) <= width else title[:width]
+		lines = [title if len(title) <= width else title[:width]]
+		if counter is not None:
+			lines.append(counter)
+		return "\n".join(lines)
 	go = (quota or {}).get("go") or {"state": "absent"}
 	cursor = (quota or {}).get("cursor") or {"state": "absent"}
 	openrouter = (quota or {}).get("openrouter") or {"state": "absent"}
@@ -1239,23 +1246,31 @@ def quota_line(quota, width):
 
 	lines = []
 	title_used = False
+	counter_pending = counter is not None
 	for _kind, full, abbr, variants in sources:
 		use_title = not title_used
-		fields, used_title = _fit_source(title if use_title else None, full, abbr, variants, width)
+		line_width = width - len(counter) - 1 if counter_pending and not use_title else width
+		fields, used_title = _fit_source(title if use_title else None, full, abbr, variants, line_width)
 		if used_title and fields:
 			lines.append(_quota_text(title, fields, width))
 			title_used = True
 		elif fields:
 			block = " · ".join(fields)
-			if len(block) > width:
-				block = block[:width]
-			lines.append(" " * (width - len(block)) + block)
+			if len(block) > line_width:
+				block = block[:line_width]
+			line = " " * (width - len(block)) + block
+			if counter_pending:
+				line = counter + line[len(counter):]
+				counter_pending = False
+			lines.append(line)
 		# If nothing fits, skip the line.
 	if not title_used:
 		if lines:
 			lines.insert(0, title if len(title) <= width else title[:width])
 		else:
 			lines.append(title if len(title) <= width else title[:width])
+	if counter_pending:
+		lines.append(counter)
 	return "\n".join(lines)
 
 # Aliases for the cost-tracking section, under the names a caller might use.
@@ -1472,6 +1487,12 @@ def elapsed_text(seconds):
 	days, hours = divmod(hours, 24)
 	return f"{days}d{hours:02d}h"
 
+def _counter_line(changed_ago, width):
+	"""The line under the header: how long the visible data has stood still."""
+	if changed_ago is None:
+		return None
+	return f"data {elapsed_text(changed_ago)} ago"[:width]
+
 def human_tokens(n):
 	if n is None:
 		return "?"
@@ -1560,16 +1581,21 @@ def overflow_note(more):
 
 _COLUMNS = (("Msgs",5),("In",7),("Out",7),("Tot",7),("Ref",12))
 _EXTRA_COLUMNS = (("Len",4),("Tool",4),("Stop",4),("Unk",4))
+_CHANGE_COLUMN = ("Chg",6)
 _MIN_MODEL_WIDTH = 8
 
-def fit_columns(width, show_extra=False, show_tokens=True):
+def fit_columns(width, show_extra=False, show_tokens=True, show_change=False):
 	"""The columns and model width that fit `width`, dropping the least first.
 
-	Tot repeats what In and Out already say, so it goes before either of
-	them; then the token columns, then Ref, then Msgs. The model column keeps
-	at least `_MIN_MODEL_WIDTH` until there is nothing left to drop.
+	The change column goes first: an age is a convenience, and a pane too
+	narrow for everything keeps the counts it was already showing. Then the
+	extra columns, then Tot (which repeats In and Out), the token columns,
+	Ref and Msgs. The model column keeps at least `_MIN_MODEL_WIDTH` until
+	there is nothing left to drop.
 	"""
 	columns = list(_COLUMNS if show_tokens else (("Msgs",5),("Ref",12)))
+	if show_change:
+		columns.append(_CHANGE_COLUMN)
 	if show_extra:
 		columns += list(_EXTRA_COLUMNS)
 	def fixed():
@@ -1578,6 +1604,9 @@ def fit_columns(width, show_extra=False, show_tokens=True):
 		nonlocal columns
 		columns = [column for column in columns if column[0] not in names]
 	while columns and width - fixed() < _MIN_MODEL_WIDTH:
+		if any(name == "Chg" for name,_ in columns):
+			drop({"Chg"})
+			continue
 		extras = {name for name,_ in _EXTRA_COLUMNS}
 		if any(name in extras for name,_ in columns):
 			drop(extras)
@@ -1621,13 +1650,15 @@ def cell(stats, name, width, now):
 		return f"{stats['finish_stop']:>{width}}"
 	return f"{stats['finish_unknown']:>{width}}"
 
-def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None, title=None, columns=None):
+def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, max_models=None, title=None, columns=None, changed_ages=None):
 	models = used_models(by_model)
 	shown = models if max_models is None else models[:max_models]
 	more = len(models) - len(shown)
 	label = title if title else "Model"
 	if columns is None:
 		columns = list(_COLUMNS if show_tokens else (("Msgs",5),("Ref",12)))
+		if changed_ages is not None:
+			columns.append(_CHANGE_COLUMN)
 		if show_extra:
 			columns += list(_EXTRA_COLUMNS)
 	if col_w is None:
@@ -1647,7 +1678,10 @@ def render_table(by_model, now, show_tokens=True, col_w=None, show_extra=False, 
 	for model in shown:
 		line = f"{fit_cell(model,col_w):<{col_w}}"
 		for name,width in columns:
-			line += "  " + cell(by_model[model], name, width, now)
+			if name == "Chg":
+				line += "  " + f"{fit_cell(elapsed_text((changed_ages or {}).get(model, 0)), width):>{width}}"
+			else:
+				line += "  " + cell(by_model[model], name, width, now)
 		lines.append(line)
 	if more:
 		lines.append(overflow_note(more))
@@ -1751,13 +1785,38 @@ def visible_key(today_stats, window_stats, quota):
 	"""
 	return (_stats_key(today_stats), _stats_key(window_stats), _quota_key(quota))
 
-def _counter_line(changed_ago, width):
-	"""The line under the header: how long the visible data has stood still."""
-	if changed_ago is None:
-		return None
-	return f"data {elapsed_text(changed_ago)} ago"[:width]
+def model_keys(today_stats, window_stats):
+	"""Each visible model's numbers in both tables; its age follows either row.
 
-def render_view(today_stats, window_stats, now, height=None, width=None, quota=None, changed_ago=None):
+	The window holds today's rows, so a model in Today is in both tables and
+	a model used earlier today alone is not possible; the `None` is there so
+	the two positions are read in a fixed order.
+	"""
+	return {
+		name: (_stat_numbers(today_stats[name]) if name in today_stats else None,
+			_stat_numbers(window_stats[name]))
+		for name in used_models(window_stats)
+	}
+
+def update_model_ages(times, keys, now):
+	"""Each visible model's seconds since its numbers moved, mutating `times`.
+
+	`times` keeps the numbers last seen for a model and the moment they first
+	appeared; a model that has left the tables is forgotten. A model new to
+	the display starts at zero, like a change.
+	"""
+	for name in list(times):
+		if name not in keys:
+			del times[name]
+	ages = {}
+	for name, key in keys.items():
+		seen = times.get(name)
+		if seen is None or seen[0] != key:
+			times[name] = (key, now)
+		ages[name] = now - times[name][1]
+	return ages
+
+def render_view(today_stats, window_stats, now, height=None, width=None, quota=None, changed_ago=None, model_ages=None):
 	"""The whole display from sums already computed: header, Today, Window.
 
 	`height` is the number of lines the display may use, and `width` the
@@ -1766,6 +1825,8 @@ def render_view(today_stats, window_stats, now, height=None, width=None, quota=N
 	`quota` is a `sample_quota` result; without one the header is the title.
 	`changed_ago` puts the age counter under the header; `None` leaves it out,
 	which is what one-shot does — it has no previous frame to compare against.
+	`model_ages` adds each row's own age in a `Chg` column; `None` leaves the
+	column out for the same reason.
 	"""
 	if height is None or width is None:
 		size = terminal_size()
@@ -1775,10 +1836,9 @@ def render_view(today_stats, window_stats, now, height=None, width=None, quota=N
 			width = size.columns
 	today_count = len(used_models(today_stats))
 	window_count = len(used_models(window_stats))
-	quota_text = quota_line(quota, width)
-	counter = _counter_line(changed_ago, width)
-	header = quota_text if counter is None else quota_text + "\n" + counter
-	overhead = 5 + len(quota_text.splitlines()) + (1 if counter is not None else 0)
+	quota_text = quota_line(quota, width, changed_ago)
+	header = quota_text
+	overhead = 5 + len(quota_text.splitlines())
 	if height < overhead:
 		# The sections need their lines before they can say anything at
 		# all, and a pane shorter than that gets the counts instead: a
@@ -1788,7 +1848,7 @@ def render_view(today_stats, window_stats, now, height=None, width=None, quota=N
 		return f"{NAME}: {plural(today_count, 'model')} today, {plural(window_count, 'model')} in window"
 	if not window_stats:
 		return f"{header}\n\nno agents active in window"
-	columns, col_w = fit_columns(width, SHOW_EXTRA)
+	columns, col_w = fit_columns(width, SHOW_EXTRA, show_change=model_ages is not None)
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
 	# A title that no longer fits gives way to the short name; the column
@@ -1800,18 +1860,18 @@ def render_view(today_stats, window_stats, now, height=None, width=None, quota=N
 	today_allowance, window_allowance = section_allowances(height, today_count, window_count, overhead)
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
-	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns)
-	window_text = render_table(window_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
+	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns, changed_ages=model_ages)
+	window_text = render_table(window_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns, changed_ages=model_ages)
 	return (
 		f"{header}\n"
 		f"{today_text}"
 		f"\n\n{window_text}"
 	)
 
-def render(rows, now, height=None, width=None, quota=None, by_model=None, changed_ago=None):
+def render(rows, now, height=None, width=None, quota=None, by_model=None, changed_ago=None, model_ages=None):
 	"""The whole display from the rows: `stats_view`, then `render_view`."""
 	today_stats, window_stats = stats_view(rows, now, by_model)
-	return render_view(today_stats, window_stats, now, height, width, quota, changed_ago)
+	return render_view(today_stats, window_stats, now, height, width, quota, changed_ago, model_ages)
 
 def db_stamp():
 	values = []
@@ -1822,11 +1882,11 @@ def db_stamp():
 			values.append(0)
 	return tuple(values)
 
-def build_report(window_hours, now, height=None, width=None, quota=None, cache=None, changed_ago=None):
+def build_report(window_hours, now, height=None, width=None, quota=None, cache=None, changed_ago=None, model_ages=None):
 	"""The whole display; `cache` keeps the watch from re-reading the window each frame."""
 	if cache is None:
-		return render(load_stats(window_hours * 3600), now, height, width, quota, changed_ago=changed_ago)
-	return render(cache.load(window_hours * 3600), now, height, width, quota, cache.stats(), changed_ago)
+		return render(load_stats(window_hours * 3600), now, height, width, quota, changed_ago=changed_ago, model_ages=model_ages)
+	return render(cache.load(window_hours * 3600), now, height, width, quota, cache.stats(), changed_ago, model_ages)
 
 def draw(text):
 	print(_CLEAR_SCREEN, end="")
@@ -1873,11 +1933,13 @@ def watch(window_hours):
 		quota = sample_quota()
 		quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
 		cache = StatsCache()
+		model_times = {}
 		now = time.time()
 		today_stats, window_stats = stats_view(cache.load(window_hours * 3600), now, cache.stats())
 		key = visible_key(today_stats, window_stats, quota)
 		changed_at = time.monotonic()
-		draw(render_view(today_stats, window_stats, now, None, None, quota, 0.0))
+		ages = update_model_ages(model_times, model_keys(today_stats, window_stats), time.monotonic())
+		draw(render_view(today_stats, window_stats, now, None, None, quota, 0.0, ages))
 		# The terminal's size is part of what is watched: a pane that was resized
 		# has to redraw, or the old layout stays and runs off the edge. The age
 		# counter also ticks while nothing else changes, and the pace changes with
@@ -1919,8 +1981,9 @@ def watch(window_hours):
 					# shows the change shows it at zero.
 					key = fresh_key
 					changed_at = time.monotonic()
+				ages = update_model_ages(model_times, model_keys(today_stats, window_stats), time.monotonic())
 				draw(render_view(today_stats, window_stats, now, None, None, quota,
-					time.monotonic() - changed_at))
+					time.monotonic() - changed_at, ages))
 				last_draw = time.monotonic()
 				dirty = False
 		finally:

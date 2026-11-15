@@ -27,9 +27,9 @@ numbers still add up.
 	that leaves rows out says `… +N more`; below six lines the display falls
 	back to the one-line counts. A full frame never scrolls its header away.
 - **Fits the width.** Model names are truncated and columns are dropped as the
-	pane narrows — `Tot` first, then `In`, `Out`, `Ref`, `Msgs` — and the title
-	becomes `Today` / `Window` when the full one no longer fits. Every line is
-	at most the pane width.
+	pane narrows — `Chg` first, then the extra columns, then `Tot`, `In`, `Out`,
+	`Ref`, `Msgs` — and the title becomes `Today` / `Window` when the full one
+	no longer fits. Every line is at most the pane width.
 
 - **The quota section is one line per source, right-aligned.** The first
 	source shares the `=== Skynet ===` title line; each further configured
@@ -48,14 +48,18 @@ numbers still add up.
 	synchronous with a three-second timeout and a failure never removes a
 	table.
 
-- **The age counter sits under the header.** `data 3m12s ago` is the time
-	since the visible data last changed: new usage in either table, or a quota
-	number that moved. It restarts at `0s` on the frame that shows the change.
-	What the clock alone moves — a refusal's age beside its count, the pace —
-	is not a change, so an idle panel's counter keeps counting instead of
-	resetting every minute. One-shot runs print no counter: they have no
-	previous frame to compare against. The line is cut to the pane width like
-	every other.
+- **The age counter sits under the header, and each row has its own.** The
+	line under the title carries `data 3m12s ago` at the left, with that
+	line's quota source keeping the right edge; a pane whose only source fits
+	on the title line gets a line of its own for the counter. The `Chg`
+	column at the right of each table row is that model's own age. Both are
+	the time since the visible data last changed: new usage in either table,
+	or a quota number that moved. They restart at `0s` on the frame that shows
+	the change. What the clock alone moves — a refusal's age beside its count,
+	the pace — is not a change, so an idle panel keeps counting instead of
+	resetting every minute. One-shot runs print neither: they have no previous
+	frame to compare against. Both are cut to the pane width like every other
+	line, and `Chg` is dropped first when the pane narrows.
 
 - **No typed input reaches the screen.** Watch mode disables terminal echo so
 	text typed while the watch runs does not appear; control signals such as

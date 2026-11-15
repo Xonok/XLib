@@ -259,7 +259,10 @@ file is treated as empty state.
 
 The quota section is **one line per configured source**. The first source whose
 fields fit shares the `=== Skynet ===` title line, right-aligned; every further
-source gets a line of its own, right-aligned the same way. Every line is at most
+source gets a line of its own, right-aligned the same way. The line under the
+title may also carry the watch's age counter at its left (TERMINAL.md); the
+source on that line is fitted to the room the counter leaves and keeps the right
+edge. Every line is at most
 `width` columns and contains no newline. The space after the title absorbs the
 spare columns, so the block reads as separate from the title and its right edge
 is the pane's right edge; at the minimum width the gap is one space, and a wider
