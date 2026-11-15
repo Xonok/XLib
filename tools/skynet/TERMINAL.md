@@ -15,9 +15,11 @@ numbers still add up.
 	shared-memory files that SQLite opens and closes for a read cannot wake the
 	tool into redrawing itself. Polling is the fallback for a kernel that has no
 	inotify, not a parallel refresh path.
-- **A burst of writes is one frame.** Frames are floored to one a second, and
-	the wakeups in between coalesce into the next one; a resize and a due quota
-	refresh are drawn at once. A redraw re-reads only the messages created in
+- **A burst of writes is one frame, and the counter still ticks.** Frames are
+	floored to one a second, and the wakeups in between coalesce into the next
+	one; a resize and a due quota refresh are drawn at once. With nothing to
+	show the loop still draws once a second, because the age counter under the
+	header counts in seconds. A redraw re-reads only the messages created in
 	the last fifteen minutes and the ones that have not finished, and
 	reconciles against the whole window when the row count changes or every ten
 	minutes — so the cost does not grow with the 28-day window on every write.
@@ -46,6 +48,15 @@ numbers still add up.
 	synchronous with a three-second timeout and a failure never removes a
 	table.
 
+- **The age counter sits under the header.** `data 3m12s ago` is the time
+	since the visible data last changed: new usage in either table, or a quota
+	number that moved. It restarts at `0s` on the frame that shows the change.
+	What the clock alone moves — a refusal's age beside its count, the pace —
+	is not a change, so an idle panel's counter keeps counting instead of
+	resetting every minute. One-shot runs print no counter: they have no
+	previous frame to compare against. The line is cut to the pane width like
+	every other.
+
 - **No typed input reaches the screen.** Watch mode disables terminal echo so
 	text typed while the watch runs does not appear; control signals such as
 	Ctrl-C still work. One-shot runs leave the terminal alone.
@@ -53,4 +64,5 @@ numbers still add up.
 Enforced by `test/test_render.py` (height and width sweeps),
 `test/test_terminal.py` (cursor, alternate screen, inotify),
 `test/test_stats.py` (the watch's incremental read),
-`test/test_render_table.py` and `test/test_quota.py` (the quota line).
+`test/test_render_table.py`, `test/test_quota.py` (the quota line) and
+`test/test_counter.py` (the age counter).

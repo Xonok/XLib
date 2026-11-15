@@ -7,7 +7,8 @@ and prints per-model stats including messages, tokens, refusals, and finish reas
 The display fits the room it is given: the caps on the two tables come from the
 terminal's own height, the columns and model names come from its width, a table
 that had to leave rows out says how many, and the room a section does not need
-goes to the section that has more to show.
+goes to the section that has more to show. In watch mode a counter under the
+header says how long the visible data has stood still.
 
 Terminal contract: TERMINAL.md.
 """
@@ -42,6 +43,10 @@ _POLL_SECONDS = 1.0
 # writes redraws once, not once per write. A resize and the quota refresh are
 # not held back by it.
 _REDRAW_FLOOR_SECONDS = 1.0
+# The age counter under the header counts in seconds, so an idle panel redraws
+# once a second to move it. The floor above is the same rate, so a burst still
+# coalesces into one frame.
+_COUNTER_TICK_SECONDS = 1.0
 _FALLBACK_SIZE = (80, 24)
 _EVENT_HEADER = struct.Struct("=iIII")
 _IN_MODIFY = 0x00000002
@@ -1453,6 +1458,20 @@ def human_age(seconds):
 	days = hours // 24
 	return f"{days}d{hours % 24}h"
 
+def elapsed_text(seconds):
+	"""A short age that keeps counting: `12s`, `3m12s`, `2h05m`, `3d04h`."""
+	seconds = max(0, int(seconds))
+	if seconds < 60:
+		return f"{seconds}s"
+	minutes, seconds = divmod(seconds, 60)
+	if minutes < 60:
+		return f"{minutes}m{seconds:02d}s"
+	hours, minutes = divmod(minutes, 60)
+	if hours < 24:
+		return f"{hours}h{minutes:02d}m"
+	days, hours = divmod(hours, 24)
+	return f"{days}d{hours:02d}h"
+
 def human_tokens(n):
 	if n is None:
 		return "?"
@@ -1687,15 +1706,66 @@ def plural(count, noun):
 	"""`count` and its noun, agreeing in number."""
 	return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
-def render(rows, now, height=None, width=None, quota=None, by_model=None):
-	"""The whole display: the header, then the Today table and the Window table.
+def stats_view(rows, now, by_model=None):
+	"""The sums the two tables show: today's rows and the whole window's.
+
+	`by_model` is the window's sums when the caller already has them (the
+	watch keeps them current); without one they are aggregated from `rows`.
+	"""
+	window_stats = by_model if by_model is not None else aggregate(rows, now)
+	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	today_cutoff = local_midnight.timestamp()
+	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
+		for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
+	return aggregate(today_rows, now), window_stats
+
+def _stat_numbers(stats):
+	"""The numbers a model's row shows, in display order; the ages are left out."""
+	return (stats["msgs"], stats["input"], stats["output"], stats["total"], stats["refusals"],
+		stats["finish_stop"], stats["finish_tool_calls"], stats["finish_length"],
+		stats["finish_unknown"])
+
+def _stats_key(by_model):
+	"""What one table shows, model by model, in the order the rows are drawn."""
+	return tuple((model,) + _stat_numbers(by_model[model]) for model in used_models(by_model))
+
+def _quota_key(quota):
+	"""The numbers the quota lines show; the time-derived pace is not among them."""
+	quota = quota or {}
+	go = quota.get("go") or {}
+	cursor = quota.get("cursor") or {}
+	openrouter = quota.get("openrouter") or {}
+	return (
+		go.get("state"), go.get("product"), go.get("used"), go.get("limit"), go.get("days_left"),
+		cursor.get("state"), cursor.get("cursor_used"), cursor.get("other_used"),
+		cursor.get("cursor_limit"), cursor.get("other_limit"), cursor.get("days_left"),
+		openrouter.get("state"), openrouter.get("used"), openrouter.get("limit"),
+	)
+
+def visible_key(today_stats, window_stats, quota):
+	"""A fingerprint of what the display shows, for the age counter.
+
+	Two frames with the same key show the same data. What the clock moves on
+	its own — a refusal's age, the pace — is not in the key, so an idle
+	panel's counter measures idleness rather than the passage of time.
+	"""
+	return (_stats_key(today_stats), _stats_key(window_stats), _quota_key(quota))
+
+def _counter_line(changed_ago, width):
+	"""The line under the header: how long the visible data has stood still."""
+	if changed_ago is None:
+		return None
+	return f"data {elapsed_text(changed_ago)} ago"[:width]
+
+def render_view(today_stats, window_stats, now, height=None, width=None, quota=None, changed_ago=None):
+	"""The whole display from sums already computed: header, Today, Window.
 
 	`height` is the number of lines the display may use, and `width` the
 	columns it may use; the caps on the rows come from the first, the columns
-	and the model names from the second, so the render fits the pane it has.
-	`quota` is a `sample_quota` result; without one the header is unchanged.
-	`by_model` is the window's sums when the caller already has them (the watch
-	keeps them current); without one they are aggregated from `rows`.
+	and the model names from the second, so the display fits the pane it has.
+	`quota` is a `sample_quota` result; without one the header is the title.
+	`changed_ago` puts the age counter under the header; `None` leaves it out,
+	which is what one-shot does — it has no previous frame to compare against.
 	"""
 	if height is None or width is None:
 		size = terminal_size()
@@ -1703,16 +1773,12 @@ def render(rows, now, height=None, width=None, quota=None, by_model=None):
 			height = size.lines
 		if width is None:
 			width = size.columns
-	all_stats = by_model if by_model is not None else aggregate(rows, now)
-	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	today_cutoff = local_midnight.timestamp()
-	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
-		for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
-	today_stats = aggregate(today_rows, now)
 	today_count = len(used_models(today_stats))
-	window_count = len(used_models(all_stats))
+	window_count = len(used_models(window_stats))
 	quota_text = quota_line(quota, width)
-	overhead = 5 + len(quota_text.splitlines())
+	counter = _counter_line(changed_ago, width)
+	header = quota_text if counter is None else quota_text + "\n" + counter
+	overhead = 5 + len(quota_text.splitlines()) + (1 if counter is not None else 0)
 	if height < overhead:
 		# The sections need their lines before they can say anything at
 		# all, and a pane shorter than that gets the counts instead: a
@@ -1720,8 +1786,8 @@ def render(rows, now, height=None, width=None, quota=None, by_model=None):
 		if not today_count and not window_count:
 			return f"{NAME}: no agents active"
 		return f"{NAME}: {plural(today_count, 'model')} today, {plural(window_count, 'model')} in window"
-	if not all_stats:
-		return f"{quota_text}\n\nno agents active in window"
+	if not window_stats:
+		return f"{header}\n\nno agents active in window"
 	columns, col_w = fit_columns(width, SHOW_EXTRA)
 	today_title = "=== Models (Today) ==="
 	window_title = "=== Models (Window) ==="
@@ -1735,12 +1801,17 @@ def render(rows, now, height=None, width=None, quota=None, by_model=None):
 	today_cap = row_cap(today_count, today_allowance)
 	window_cap = row_cap(window_count, window_allowance)
 	today_text = render_table(today_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=today_cap, title=today_title, columns=columns)
-	window_text = render_table(all_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
+	window_text = render_table(window_stats, now, show_tokens=True, col_w=col_w, show_extra=SHOW_EXTRA, max_models=window_cap, title=window_title, columns=columns)
 	return (
-		f"{quota_text}\n"
+		f"{header}\n"
 		f"{today_text}"
 		f"\n\n{window_text}"
 	)
+
+def render(rows, now, height=None, width=None, quota=None, by_model=None, changed_ago=None):
+	"""The whole display from the rows: `stats_view`, then `render_view`."""
+	today_stats, window_stats = stats_view(rows, now, by_model)
+	return render_view(today_stats, window_stats, now, height, width, quota, changed_ago)
 
 def db_stamp():
 	values = []
@@ -1751,11 +1822,11 @@ def db_stamp():
 			values.append(0)
 	return tuple(values)
 
-def build_report(window_hours, now, height=None, width=None, quota=None, cache=None):
+def build_report(window_hours, now, height=None, width=None, quota=None, cache=None, changed_ago=None):
 	"""The whole display; `cache` keeps the watch from re-reading the window each frame."""
 	if cache is None:
-		return render(load_stats(window_hours * 3600), now, height, width, quota)
-	return render(cache.load(window_hours * 3600), now, height, width, quota, cache.stats())
+		return render(load_stats(window_hours * 3600), now, height, width, quota, changed_ago=changed_ago)
+	return render(cache.load(window_hours * 3600), now, height, width, quota, cache.stats(), changed_ago)
 
 def draw(text):
 	print(_CLEAR_SCREEN, end="")
@@ -1802,11 +1873,15 @@ def watch(window_hours):
 		quota = sample_quota()
 		quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
 		cache = StatsCache()
-		draw(build_report(window_hours, time.time(), quota=quota, cache=cache))
+		now = time.time()
+		today_stats, window_stats = stats_view(cache.load(window_hours * 3600), now, cache.stats())
+		key = visible_key(today_stats, window_stats, quota)
+		changed_at = time.monotonic()
+		draw(render_view(today_stats, window_stats, now, None, None, quota, 0.0))
 		# The terminal's size is part of what is watched: a pane that was resized
-		# has to redraw, or the old layout stays and runs off the edge. The pace
-		# also changes with time, so the quota timer wakes the loop even when the
-		# database does not.
+		# has to redraw, or the old layout stays and runs off the edge. The age
+		# counter also ticks while nothing else changes, and the pace changes with
+		# time, so the quota timer wakes the loop even when the database does not.
 		size = terminal_size()
 		watcher = _db_watcher()
 		stamp = db_stamp()
@@ -1816,15 +1891,17 @@ def watch(window_hours):
 			while True:
 				stamp, changed = _db_changed(watcher, stamp)
 				dirty = dirty or changed
-				refresh_quota = time.monotonic() >= quota_due
+				monotonic = time.monotonic()
+				refresh_quota = monotonic >= quota_due
+				tick = monotonic - last_draw >= _COUNTER_TICK_SECONDS
 				current_size = terminal_size()
-				if not dirty and not refresh_quota and current_size == size:
+				if not dirty and not refresh_quota and not tick and current_size == size:
 					continue
 				# A write is a hint that another may follow; wait out the floor so
 				# a burst becomes one frame. A resize is drawn at once, and so is a
 				# quota refresh that is already due.
 				if current_size == size:
-					wait = _REDRAW_FLOOR_SECONDS - (time.monotonic() - last_draw)
+					wait = _REDRAW_FLOOR_SECONDS - (monotonic - last_draw)
 					if wait > 0:
 						time.sleep(wait)
 				if refresh_quota:
@@ -1834,7 +1911,16 @@ def watch(window_hours):
 				# The stamp is taken before the read, so a write during the draw
 				# wakes the next frame instead of being missed.
 				stamp = db_stamp()
-				draw(build_report(window_hours, time.time(), quota=quota, cache=cache))
+				now = time.time()
+				today_stats, window_stats = stats_view(cache.load(window_hours * 3600), now, cache.stats())
+				fresh_key = visible_key(today_stats, window_stats, quota)
+				if fresh_key != key:
+					# The counter is a reading of this moment: the frame that
+					# shows the change shows it at zero.
+					key = fresh_key
+					changed_at = time.monotonic()
+				draw(render_view(today_stats, window_stats, now, None, None, quota,
+					time.monotonic() - changed_at))
 				last_draw = time.monotonic()
 				dirty = False
 		finally:
