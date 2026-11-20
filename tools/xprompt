@@ -5,6 +5,10 @@ Usage:
   xprompt                       show this help
   xprompt --help                show this help
   xprompt models [--detail]     list models available in Ollama
+  xprompt image-gen [flags]     generate an image directly with a local diffusion model
+                               flags: --prompt TEXT, --prompt-file PATH, --out PATH,
+                               --model ID, --steps N, --seed N, --device cuda|cpu,
+                               --width N, --height N
   xprompt <model> [flags...] [prompt]
 
 Positional:
@@ -24,6 +28,7 @@ Flags (may repeat; order affects the assembled prompt):
   --ls                 enable the 'ls' tool (list a directory, incl. hidden)
   --bash               enable the 'bash' tool (run a shell command)
   --write              enable the 'write' tool (write content to a file)
+  --imagegen           enable the 'imagegen' tool (generate an image from a prompt)
   --system TEXT        system message (concatenated if repeated)
   --max-turns N        tool-call loop limit (default 1; 1 = single shot)
   --timeout S          idle timeout between streamed chunks, seconds (default 120)
@@ -117,6 +122,23 @@ TOOLS = {
 				"content": {"type": "string", "description": "content to write"},
 			},
 			"required": ["path", "content"],
+		},
+	},
+	"imagegen": {
+		"description": "Generate an image from a text prompt using a local diffusion model (sd-turbo by default) and save it to a file, returning the saved path.",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"prompt": {"type": "string", "description": "text prompt for the image"},
+				"path": {"type": "string", "description": "output file path (default: generated.png)"},
+				"steps": {"type": "integer", "description": "inference steps (default 1 for sd-turbo)"},
+				"model": {"type": "string", "description": "diffusers model id (default stabilityai/sd-turbo)"},
+				"seed": {"type": "integer", "description": "random seed (optional)"},
+				"device": {"type": "string", "description": "device: cuda or cpu (default: try cuda, fall back to cpu)"},
+				"width": {"type": "integer", "description": "image width in pixels (default model native, usually 512)"},
+				"height": {"type": "integer", "description": "image height in pixels (default model native, usually 512)"},
+			},
+			"required": ["prompt"],
 		},
 	},
 }
@@ -449,6 +471,136 @@ def tool_write(args):
 		return f"[error: {e}]"
 
 
+_IMAGE_PIPES = {}
+
+
+def _load_image_pipe(model_id, device):
+	key = (model_id, device)
+	if key in _IMAGE_PIPES:
+		return _IMAGE_PIPES[key]
+	try:
+		import warnings
+		warnings.filterwarnings("ignore", message=".*torch_dtype is deprecated.*")
+		warnings.filterwarnings("ignore", message=".*CLIPImageProcessor.*requires torchvision.*")
+		warnings.filterwarnings("ignore", message=".*SiglipImageProcessor.*requires torchvision.*")
+		warnings.filterwarnings("ignore", message=".*local_dir_use_symlinks.*")
+		warnings.filterwarnings("ignore", message=".*safety checker.*")
+		warnings.filterwarnings("ignore", message=".*safety filter.*")
+		import logging
+		try:
+			from diffusers.utils import logging as _dl
+			_dl.set_verbosity_error()
+		except Exception:
+			pass
+		logging.getLogger("diffusers").setLevel(logging.ERROR)
+		import torch
+		from diffusers import AutoPipelineForText2Image
+	except Exception as e:
+		raise RuntimeError(f"diffusers/torch not available: {e}")
+	dtype = torch.float16 if device == "cuda" else torch.float32
+	pipe = AutoPipelineForText2Image.from_pretrained(model_id, dtype=dtype)
+	pipe = pipe.to(device)
+	try:
+		pipe.enable_attention_slicing()
+	except Exception:
+		pass
+	_IMAGE_PIPES[key] = pipe
+	return pipe
+
+
+def _unique_output_path(path):
+	"""Return a non-existing variant of path by appending _N before the extension."""
+	full = os.path.abspath(path)
+	if not os.path.exists(full):
+		return path
+	root, ext = os.path.splitext(full)
+	n = 1
+	while True:
+		candidate = f"{root}_{n}{ext}"
+		if not os.path.exists(candidate):
+			return candidate if os.path.isabs(path) else os.path.relpath(candidate, os.getcwd())
+		n += 1
+
+
+def tool_imagegen(args):
+	if not isinstance(args, dict):
+		args = {}
+	prompt = args.get("prompt") or args.get("text") or ""
+	if not prompt:
+		return "[error: imagegen requires 'prompt']"
+	explicit = args.get("path") or args.get("output")
+	auto_name = explicit is None
+	out_path = explicit if explicit else "generated.png"
+	try:
+		steps = int(args.get("steps", 1))
+	except (TypeError, ValueError):
+		steps = 1
+	if steps < 1:
+		steps = 1
+	model_id = args.get("model") or "stabilityai/sd-turbo"
+	width = args.get("width")
+	height = args.get("height")
+	try:
+		width = int(width) if width is not None else None
+	except (TypeError, ValueError):
+		width = None
+	try:
+		height = int(height) if height is not None else None
+	except (TypeError, ValueError):
+		height = None
+	if not os.path.isabs(out_path):
+		out_path = os.path.abspath(out_path)
+
+	# device resolution: explicit --device wins; otherwise try cuda then fall back to cpu
+	import torch
+	if auto_name:
+		out_path = _unique_output_path(out_path)
+	requested = args.get("device")
+	if requested:
+		candidates = [requested]
+	elif torch.cuda.is_available():
+		candidates = ["cuda", "cpu"]
+	else:
+		candidates = ["cpu"]
+
+	last_err = None
+	for dev in candidates:
+		try:
+			pipe = _load_image_pipe(model_id, dev)
+			generator = None
+			seed = args.get("seed")
+			if seed is not None:
+				try:
+					generator = torch.Generator(device=dev).manual_seed(int(seed))
+				except Exception:
+					generator = None
+			gen_kwargs = {"prompt": prompt, "num_inference_steps": steps, "guidance_scale": 0.0, "generator": generator}
+			if width is not None:
+				gen_kwargs["width"] = width
+			if height is not None:
+				gen_kwargs["height"] = height
+			image = pipe(**gen_kwargs).images[0]
+			parent = os.path.dirname(out_path)
+			if parent and not os.path.isdir(parent):
+				os.makedirs(parent, exist_ok=True)
+			image.save(out_path)
+			note = "" if dev == candidates[0] and (len(candidates) == 1 or dev == "cuda") else f" (fell back to {dev})"
+			if dev != (requested or ("cuda" if torch.cuda.is_available() else "cpu")):
+				note = f" (fell back to {dev})"
+			return f"[generated image saved to {out_path}{note}]"
+		except Exception as e:
+			last_err = e
+			msg = str(e).lower()
+			if "out of memory" in msg or "cuda" in msg:
+				try:
+					torch.cuda.empty_cache()
+				except Exception:
+					pass
+				continue
+			return f"[error: imagegen failed: {e}]"
+	return f"[error: imagegen failed: {last_err}]"
+
+
 def execute_tool(name, args):
 	if not isinstance(args, dict):
 		args = {}
@@ -462,6 +614,8 @@ def execute_tool(name, args):
 		return tool_bash(args)
 	if name == "write":
 		return tool_write(args)
+	if name == "imagegen":
+		return tool_imagegen(args)
 	return f"[error: unknown tool '{name}']"
 
 
@@ -488,6 +642,15 @@ def _positional_args(tool, toks):
 		if len(toks) == 1:
 			return {"pattern": toks[0]}
 		return {"pattern": toks[0], "path": " ".join(toks[1:])}
+	if tool == "imagegen":
+		if not toks:
+			return {}
+		if len(toks) == 1:
+			return {"prompt": toks[0]}
+		last = toks[-1]
+		if last.endswith((".png", ".jpg", ".jpeg", ".webp")) or "/" in last or "\\" in last:
+			return {"prompt": " ".join(toks[:-1]), "path": last}
+		return {"prompt": " ".join(toks)}
 	return {}
 
 
@@ -824,6 +987,108 @@ def parse_args(argv):
 				fail("--host requires a value")
 			h = argv[idx + 1]
 		list_models(detail=detail, host=h)
+		sys.exit(0)
+
+	# subcommand: generate an image directly (no Ollama model needed)
+	if argv and argv[0] in ("image-gen", "imagegen", "gen-image"):
+		prompt = None
+		out = "generated.png"
+		out_explicit = False
+		model_id = "stabilityai/sd-turbo"
+		steps = 1
+		seed = None
+		device = None
+		width = None
+		height = None
+		i = 1
+		n = len(argv)
+		while i < n:
+			tok = argv[i]
+			if tok == "--prompt":
+				if i + 1 >= n:
+					fail("--prompt requires a value")
+				prompt = argv[i + 1]
+				i += 2
+				continue
+			if tok == "--prompt-file":
+				if i + 1 >= n:
+					fail("--prompt-file requires a value")
+				try:
+					prompt = read_prompt_file(argv[i + 1])
+				except Exception as e:
+					fail(f"cannot read prompt file: {e}")
+				i += 2
+				continue
+			if tok == "--out":
+				if i + 1 >= n:
+					fail("--out requires a value")
+				out = argv[i + 1]
+				out_explicit = True
+				i += 2
+				continue
+			if tok == "--model":
+				if i + 1 >= n:
+					fail("--model requires a value")
+				model_id = argv[i + 1]
+				i += 2
+				continue
+			if tok == "--steps":
+				if i + 1 >= n:
+					fail("--steps requires a value")
+				try:
+					steps = int(argv[i + 1])
+				except ValueError:
+					fail("--steps must be an integer")
+				i += 2
+				continue
+			if tok == "--seed":
+				if i + 1 >= n:
+					fail("--seed requires a value")
+				try:
+					seed = int(argv[i + 1])
+				except ValueError:
+					fail("--seed must be an integer")
+				i += 2
+				continue
+			if tok == "--device":
+				if i + 1 >= n:
+					fail("--device requires a value")
+				device = argv[i + 1]
+				i += 2
+				continue
+			if tok == "--width":
+				if i + 1 >= n:
+					fail("--width requires a value")
+				try:
+					width = int(argv[i + 1])
+				except ValueError:
+					fail("--width must be an integer")
+				i += 2
+				continue
+			if tok == "--height":
+				if i + 1 >= n:
+					fail("--height requires a value")
+				try:
+					height = int(argv[i + 1])
+				except ValueError:
+					fail("--height must be an integer")
+				i += 2
+				continue
+			if not tok.startswith("--") and prompt is None:
+				prompt = tok
+				i += 1
+				continue
+			fail(f"unknown flag: {tok}")
+		if not prompt:
+			fail("image-gen requires --prompt (or a trailing prompt)")
+		if not out_explicit:
+			out = _unique_output_path(out)
+		res = tool_imagegen({"prompt": prompt, "path": out, "steps": steps, "model": model_id, "seed": seed, "device": device, "width": width, "height": height})
+		sys.stderr.write(res + "\n")
+		if res.startswith("[error"):
+			sys.exit(1)
+		path = res.split("saved to ", 1)[-1].rstrip("]")
+		print(path)
 		sys.exit(0)
 
 	model = None
