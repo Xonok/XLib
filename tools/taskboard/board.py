@@ -162,6 +162,28 @@ def set_due(csv_path: Path, task_id: int, new_due_ts: int | None, expected_chg_t
 			row["category"], row["tags"], row["importance"], row["description"], row.get("queued_on", ""))
 	return read_board(csv_path, now)
 
+def set_category(csv_path: Path, task_id: int, new_category: str, expected_chg_ts: int, now: int) -> dict:
+	"""Move a task to another workstream (change its category): read-check-append.
+
+	Mirrors `set_due`: the row is re-read inside the lock, the version token is
+	checked, and every field is copied to the new row because the store is
+	last-row-wins. Only `category` changes. Returns the full board payload.
+	"""
+	new_category = new_category.strip() if isinstance(new_category, str) else ""
+	with _WRITE_LOCK:
+		row = _current_row(csv_path, task_id)
+		if row["status"] != "open":
+			raise TaskNotOpen(f"task #{task_id} is {row['status']}; only open tasks are editable")
+		stored_chg_ts = _row_chg_ts(row)
+		if stored_chg_ts is None or stored_chg_ts != expected_chg_ts:
+			raise TaskChanged(_row_payload(row, now))
+		if not csv_path.exists():
+			raise StoreMissing(f"the task store {csv_path} does not exist")
+		taskupdate.append_row(
+			csv_path, task_id, row["status"], row["title"], stored_due_ts(row), max(now, stored_chg_ts + 1),
+			new_category, row["tags"], row["importance"], row["description"], row.get("queued_on", ""))
+	return read_board(csv_path, now)
+
 def stored_due_ts(row: dict | None) -> int | None:
 	"""The due a raw taskupdate row carries; a malformed or empty column reads as undated."""
 	if row is None or not row["due_ts"]:

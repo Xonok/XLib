@@ -7,7 +7,6 @@
 body {
 	margin: 0 auto;
 	padding: 1.5rem;
-	max-width: 80rem;
 }
 
 h1 {
@@ -36,38 +35,67 @@ h1 {
 	background: #ffe6e6;
 	border: 1px solid #cc6666;
 	padding: 0.5rem;
+	margin-bottom: 1rem;
 }
 
-table {
-	border-collapse: collapse;
-	width: 100%;
+.board {
+	display: flex;
+	gap: 0.75rem;
+	overflow-x: auto;
+	align-items: flex-start;
 }
 
-th, td {
-	border-bottom: 1px solid #ddd;
-	padding: 0.35rem 0.5rem;
-	text-align: left;
-	vertical-align: top;
+.column {
+	background: #f0f0f0;
+	border-radius: 0.5rem;
+	padding: 0.5rem;
+	min-width: 9.5rem;
+	max-width: 13rem;
+	flex: 0 0 auto;
 }
 
-th {
-	font-size: 0.8rem;
+.column-title {
+	font-size: 0.9rem;
+	font-weight: 600;
+	margin: 0 0 0.5rem;
 	text-transform: uppercase;
+	color: #444;
+}
+
+.cards {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-height: 2rem;
+}
+
+.card {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 0.4rem;
+	padding: 0.5rem;
+	cursor: grab;
+	user-select: none;
+}
+
+.card.dragging {
+	opacity: 0.4;
+}
+
+.card-title {
+	font-size: 0.9rem;
+	margin: 0 0 0.25rem;
+}
+
+.card-meta {
+	display: flex;
+	justify-content: space-between;
+	font-size: 0.75rem;
 	color: #666;
 }
 
-td.id {
-	color: #666;
+.card-id {
 	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-
-td.due {
-	white-space: nowrap;
-}
-
-td.title {
-	min-width: 20rem;
 }
 
 .due-label {
@@ -82,10 +110,15 @@ td.title {
 
 .message {
 	color: #a33;
-	margin-left: 0.5rem;
+	font-size: 0.75rem;
+	margin-top: 0.25rem;
 }
 
 .empty {
 	color: #666;
 	font-style: italic;
+}
+
+.column.drag-over {
+	background: #e0ecff;
 }

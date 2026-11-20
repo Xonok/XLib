@@ -16,15 +16,17 @@
 ## Goal
 
 The tmux pane is built for focus: one project, one current task, a short queue.
-That is the wrong instrument for the question *what should I do next across
-everything?* — which needs every open task at once, ordered by when it is due,
-with the ability to move one task's due date and watch it resettle. Today that
-view exists only as a CSV and a `list` command; Decision 13 in
+That is the wrong instrument for managing work across categories — which needs
+every open task at once, grouped into workstreams (one column per category),
+with the ability to move a task from one workstream to another by dragging it.
+Today that view exists only as a CSV and a `list` command; Decision 13 in
 `tools/taskview/SPEC.md` rules that it deserves its own renderer over the same
 selection layer. This spec is that renderer: a local web page, not a terminal
-tool (human, 2026-10-27). The pane already owns the terminal, eighty-odd rows
-and five columns are a table, and editing a table is the one job a terminal is
-worst at.
+tool (human, 2026-10-27). The pane already owns the terminal, and a kanban is
+the shape a terminal cannot draw. Workstreams are categories in the CSV; a
+task with no category lands in a special "Uncategorised" workstream, so
+nothing is lost. Order within a workstream is not editable yet — due date,
+then id — because reordering raises design questions that are deferred.
 
 The store stays the single authority. The board reads the CSV through
 `taskview`'s selection functions and writes through `taskupdate`'s append path,
@@ -131,6 +133,14 @@ current time as a parameter so no test depends on the wall clock.
 	6. Return the same payload as R7, computed after the append.
 	If the store disappeared after startup, the write fails with **409** and no
 	file is created.
+
+- **R11a** `POST /api/category` moves a task between workstreams by changing
+	its category. Its body is `{id, value, expected_chg_ts}` with the same
+	validation and conflict rules as `POST /api/due` (R9–R12); `value` is the
+	new category (empty string clears it to the uncategorised workstream). The
+	write goes through `set_category`, which re-reads the row, checks the token
+	and appends a full row through `taskupdate.append_row`, copying every field
+	except `category`. The response is the full R7 payload.
 - **R12** A stale write is refused, never forced. The **409** body is
 	`{"error": "conflict", "message": str, "task": {...R6...}}`, carrying the
 	current row — normalised to the R6 shape — so the page can show what
@@ -154,6 +164,7 @@ current time as a parameter so no test depends on the wall clock.
 	| `/board.css` | GET | the page's stylesheet | `text/css; charset=utf-8` |
 	| `/api/tasks` | GET | R7 | `application/json; charset=utf-8` |
 	| `/api/due` | POST | R11 | `application/json; charset=utf-8` |
+	| `/api/category` | POST | R11a | `application/json; charset=utf-8` |
 
 	Every other path is **404**; every other method on a known path is **405**
 	with `Allow`. The tool never answers a write with a redirect, and a `GET`
@@ -161,12 +172,12 @@ current time as a parameter so no test depends on the wall clock.
 
 ### The page
 
-- **R15** The page is a semantic table with one row per task and columns
-	`#`, due, category, title and tags. The first column renders `#<id>`, the
-	same handle the pane prints and `taskupdate show` accepts. The title is
-	allowed to wrap; it is the wide column and truncating it is the pane's
-	compromise, not this tool's. The remaining columns are display only: none
-	of them affects order or eligibility.
+- **R15** The page is a kanban: one column per workstream (category), with a
+	column for the uncategorised tasks that have no workstream yet. Each card
+	shows `#<id>`, the title, the due label and the tags. The title wraps; it
+	is not truncated, because truncation is the pane's compromise, not this
+	tool's. Columns and cards are display only: nothing here affects order or
+	eligibility except a drag, which changes the task's category.
 - **R16** A summary line above the table shows `open`, `overdue`, `today`,
 	`this_week`, `later` and `undated` counts from R5, the store path, and the
 	age of the last successful refresh. With no open tasks the table is replaced

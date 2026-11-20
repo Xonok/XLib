@@ -21,7 +21,7 @@ _root = _here.parent.parent
 if str(_root) not in sys.path:
 	sys.path.insert(0, str(_root))
 
-from tools.taskboard.board import InvalidDue,StoreMissing,TaskChanged,TaskNotFound,TaskNotOpen,order_tasks,parse_due_edit,read_board,set_due,stored_due_ts,summarise,task_payload
+from tools.taskboard.board import InvalidDue,StoreMissing,TaskChanged,TaskNotFound,TaskNotOpen,order_tasks,parse_due_edit,read_board,set_category,set_due,stored_due_ts,summarise,task_payload
 from tools.taskview import taskupdate
 from tools.taskview.taskview import resolve_csv,resolve_data_dir
 
@@ -161,6 +161,7 @@ class _Handler(BaseHTTPRequestHandler):
 		"/board.css": ("GET", "text/css; charset=utf-8", "board.css", "no-cache"),
 		"/api/tasks": ("GET", "application/json; charset=utf-8", None, "no-store"),
 		"/api/due": ("POST", "application/json; charset=utf-8", None, "no-store"),
+		"/api/category": ("POST", "application/json; charset=utf-8", None, "no-store"),
 	}
 	edit_error_kinds = {400: "bad-request", 404: "not-found", 409: "conflict"}
 	def do_GET(self):
@@ -198,8 +199,12 @@ class _Handler(BaseHTTPRequestHandler):
 				self._send_asset(asset, content_type, cache)
 			elif route == "/api/tasks":
 				self._send_tasks()
-			else:
+			elif route == "/api/due":
 				self._receive_edit()
+			elif route == "/api/category":
+				self._receive_category_edit()
+			else:
+				self._error(404, "not-found", f"no such route: {route}")
 		except (BrokenPipeError, ConnectionResetError):
 			self.close_connection = True
 		except Exception:
@@ -287,6 +292,44 @@ class _Handler(BaseHTTPRequestHandler):
 			return
 		self._log(f"edit #{task_id}: due {taskupdate.fmt_due(current_due_ts)} -> {taskupdate.fmt_due(new_due_ts)} from {value!r}")
 		self._send_json(200, payload)
+	def _receive_category_edit(self):
+		"""Move a task to another workstream (change its category)."""
+		if not _is_json(self.headers.get("Content-Type")):
+			self._error(415, "unsupported-media-type", "POST /api/category needs application/json")
+			return
+		origin = self.headers.get("Origin")
+		if origin is not None and origin != f"http://{self.headers.get('Host', '')}":
+			self._error(403, "forbidden", "the request came from another origin")
+			return
+		body = self._read_body()
+		if body is None:
+			return
+		request = _parse_edit(body)
+		if isinstance(request, str):
+			self._error(400, "bad-request", request)
+			return
+		task_id, value, expected_chg_ts = request
+		now = int(time.time())
+		try:
+			row = taskupdate.read_task(self.server.csv_path, task_id)
+		except OSError as error:
+			self._reject(task_id, value, str(error), 409)
+			return
+		try:
+			payload = set_category(self.server.csv_path, task_id, value, expected_chg_ts, now)
+		except TaskNotFound as error:
+			self._reject(task_id, value, str(error), 404)
+			return
+		except TaskChanged as error:
+			self._log(f"rejected #{task_id} {value!r}: the task changed since the page read it")
+			self._error(409, "conflict", "the task changed since the page read it", extra={"task": error.current})
+			return
+		except (StoreMissing, TaskNotOpen) as error:
+			self._reject(task_id, value, str(error), 409)
+			return
+		self._log(f"move #{task_id}: category -> {value!r}")
+		self._send_json(200, payload)
+
 	def _read_body(self) -> bytes | None:
 		try:
 			length = int(self.headers.get("Content-Length") or "")

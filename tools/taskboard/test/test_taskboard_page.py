@@ -30,22 +30,21 @@ def _store():
 def _has_any(text, *needles):
 	return any(needle in text for needle in needles)
 
-def test_R15_the_page_has_a_semantic_table():
+def test_R15_the_page_has_a_board_container():
 	store = _store()
 	try:
 		html, _, _ = _assets(store)
-		xtest.contains("<table", html.lower())
-		xtest.contains("<thead", html.lower())
+		xtest.contains("id=\"board\"", html.lower())
 	finally:
 		store.close()
 
-def test_R15_the_table_names_its_five_columns():
+def test_R15_the_page_names_workstreams_and_cards():
 	store = _store()
 	try:
 		html, script, _ = _assets(store)
 		text = (html + script).lower()
-		for column in ("#", "due", "category", "title", "tags"):
-			xtest.contains(column, text)
+		for marker in ("column", "card", "drag", "drop", "uncategorised"):
+			xtest.contains(marker, text)
 	finally:
 		store.close()
 
