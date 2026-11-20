@@ -1320,8 +1320,11 @@ Three rules follow, and each is derived from the check's own text rather than
 from what it said about one output — `tools/xlint/xlint.py:907-920`:
 
 1. **An emitted import carries no `, `.** A statement joins its targets with `,`.
-2. **No emitted line carries an alias and a comma.** An emitted statement with
-	any alias is therefore **split, one target per line**. This is not a new form:
+2. **No emitted line carries an alias and a comma — on a plain `import` line.**
+	An emitted *plain* `import` statement with any alias is therefore **split, one
+	target per line**. `from … import …` lines are exempt: xlint never inspects
+	them for this check, and splitting them trips "same module imported on
+	separate lines" instead. This is not a new form:
 	the house rule already says *"aliased imports get their own line"* (ruled
 	2026-10-09), so the bundler was violating house style rather than inventing
 	something to satisfy a linter.

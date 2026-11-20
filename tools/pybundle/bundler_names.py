@@ -337,7 +337,12 @@ def _lines(statement: dict, head, indent: str, opener: str, names: list) -> list
 	the two rules are not both satisfiable, and it is a shape almost nobody
 	writes.
 	"""
-	if head is not None or not any(" as " in name for name in names):
+	# D32 rule 2 (aliased import on a shared line) is xlint's concern only on
+	# plain `import` lines; a `from X import a as A, b as B` line is never
+	# inspected for it, and xlint instead rejects the same module on separate
+	# lines. So from-imports keep their aliases comma-joined (RKNSCJQ).
+	from_import = opener.lstrip().startswith("from")
+	if head is not None or from_import or not any(" as " in name for name in names):
 		lead = f"{_header(statement)} " if head is not None else indent
 		return [f"{lead}{opener}{','.join(names)}"]
 	return [f"{indent}{opener}{name}" for name in names]
