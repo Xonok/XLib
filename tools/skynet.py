@@ -1747,8 +1747,8 @@ def stats_view(rows, now, by_model=None):
 	watch keeps them current); without one they are aggregated from `rows`.
 	"""
 	window_stats = by_model if by_model is not None else aggregate(rows, now)
-	local_midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	today_cutoff = local_midnight.timestamp()
+	utc_midnight = datetime.datetime.now(datetime.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+	today_cutoff = utc_midnight.timestamp()
 	today_rows = [(m, c, ti, to, tt, tr, cr, cw, s, en, f, sid)
 		for m, c, ti, to, tt, tr, cr, cw, s, en, f, sid in rows if c >= today_cutoff]
 	return aggregate(today_rows, now), window_stats
@@ -1932,6 +1932,12 @@ def watch(window_hours):
 	with _fullscreen():
 		quota = sample_quota()
 		quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
+		def _seconds_until_utc_midnight():
+			now = datetime.datetime.now(datetime.timezone.utc)
+			midnight = (now + datetime.timedelta(days=1)).replace(
+				hour=0, minute=0, second=0, microsecond=0)
+			return (midnight - now).total_seconds()
+		midnight_due = time.monotonic() + _seconds_until_utc_midnight()
 		cache = StatsCache()
 		model_times = {}
 		now = time.time()
@@ -1951,10 +1957,14 @@ def watch(window_hours):
 		dirty = False
 		try:
 			while True:
-				stamp, changed = _db_changed(watcher, stamp)
+				timeout = _POLL_SECONDS
+				remaining_to_midnight = midnight_due - time.monotonic()
+				if 0 < remaining_to_midnight < timeout:
+					timeout = remaining_to_midnight
+				stamp, changed = _db_changed(watcher, stamp, timeout=timeout)
 				dirty = dirty or changed
 				monotonic = time.monotonic()
-				refresh_quota = monotonic >= quota_due
+				refresh_quota = monotonic >= quota_due or monotonic >= midnight_due
 				tick = monotonic - last_draw >= _COUNTER_TICK_SECONDS
 				current_size = terminal_size()
 				if not dirty and not refresh_quota and not tick and current_size == size:
@@ -1969,6 +1979,7 @@ def watch(window_hours):
 				if refresh_quota:
 					quota = sample_quota()
 					quota_due = time.monotonic() + QUOTA_REFRESH_SECONDS
+					midnight_due = time.monotonic() + _seconds_until_utc_midnight()
 				size = terminal_size()
 				# The stamp is taken before the read, so a write during the draw
 				# wakes the next frame instead of being missed.
