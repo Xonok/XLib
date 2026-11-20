@@ -195,6 +195,60 @@ class WrapHandlerTest(unittest.TestCase):
 		finally:
 			b.close()
 
+	def test_handler_exception_after_client_close_does_not_escape(self):
+		"""
+		Stability: if the handler closes the client and then raises, wrap_handler
+		must not let an OSError escape the worker thread.
+
+		The generic handler tries to answer with a 500 on the now-dead socket.
+		send_response only swallows the three peer-disconnect errors, so a
+		locally closed socket (bad file descriptor) escapes and Python prints
+		"Exception ignored in thread". This is the spam reported against
+		xhttp. wrap_handler has to contain it.
+		"""
+		a,b = socket.socketpair()
+		try:
+			self._send_request(b)
+			xhttp.wrap_handler(
+				lambda req,*a: (req["client"].close(), (_ for _ in ()).throw(RuntimeError("boom")))[1],
+				(),None,a,("1.2.3.4",9),
+			)
+		except Exception as e:
+			self.fail("wrap_handler let an exception escape: %s: %s" % (type(e).__name__,e))
+		finally:
+			try:
+				b.close()
+			except OSError:
+				pass
+			try:
+				a.close()
+			except OSError:
+				pass
+
+	def test_handler_exception_with_bad_fd_client_does_not_escape(self):
+		"""
+		Stability: a client whose sendall raises OSError(EBADF) during the 500
+		attempt must not take the thread down with it. Same root cause as above,
+		exercised without closing the socket first.
+		"""
+		class BadFdSocket(harness.ScriptedSocket):
+			def sendall(self,data):
+				self.sendall_calls.append(len(data))
+				raise OSError(9,"Bad file descriptor")
+		s = BadFdSocket(b"GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+		try:
+			xhttp.wrap_handler(
+				lambda req,*a: (_ for _ in ()).throw(RuntimeError("boom")),
+				(),None,s,("1.2.3.4",9),
+			)
+		except Exception as e:
+			self.fail("wrap_handler let an exception escape: %s: %s" % (type(e).__name__,e))
+		finally:
+			try:
+				s.close()
+			except OSError:
+				pass
+
 	def test_connection_reset_is_swallowed(self):
 		"""
 		When peer closes connection before sending data, wrap_handler must not

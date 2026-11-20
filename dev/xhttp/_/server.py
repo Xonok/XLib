@@ -77,8 +77,11 @@ def wrap_handler(func,func_args,ssl_context,client,client_addr,max_requests):
 		print(traceback.format_exc(),flush=True)
 		try:
 			if client:
-				response.send_response(client,500)
-				client.close()
+				try:
+					response.send_response(client,500)
+					client.close()
+				except (BrokenPipeError,ConnectionResetError,ConnectionAbortedError,OSError):
+					return
 		except BrokenPipeError:
 			return
 	if client and client.fileno() != -1:
