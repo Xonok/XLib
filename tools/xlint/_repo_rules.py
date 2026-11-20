@@ -1,4 +1,6 @@
-import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
+import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,types,subprocess
+try: import tomllib
+except ImportError: import tomli as tomllib
 from pathlib import Path
 from ._io import _BUILTIN_DISABLES,_IgnoreRules,_RULE_MODULE_SERIAL,_compile_pattern,find_checkout_root,stamp
 class _RepoRuleError(Exception):

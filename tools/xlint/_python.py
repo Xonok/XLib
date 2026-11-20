@@ -1,4 +1,6 @@
-import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
+import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,types,subprocess
+try: import tomllib
+except ImportError: import tomli as tomllib
 from pathlib import Path
 from ._io import _ALIASED_NAME_RE,_DEF_PREFIX_RE
 def _python_exempt_spans(lines):

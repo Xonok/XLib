@@ -1,4 +1,6 @@
-import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,tomllib,types,subprocess
+import argparse,ast,contextlib,ctypes,errno,importlib.util,io,itertools,os,re,select,signal,struct,sys,tempfile,termios,time,tokenize,types,subprocess
+try: import tomllib
+except ImportError: import tomli as tomllib
 from pathlib import Path
 from ._io import NAME,_ALL_SUFFIXES,_CLEAR_SCREEN,_ENTER_WATCH,_EVENT_HEADER,_INOTIFY_ADVICE,_IN_CREATE,_IN_DELETE,_IN_DELETE_SELF,_IN_IGNORED,_IN_ISDIR,_IN_MOVED_FROM,_IN_MOVED_TO,_IN_MOVE_SELF,_LEAVE_WATCH,_POLL_SECONDS,_WATCH_MASK,_inotify_failure,_libc,is_ignored,lint_files,stamp
 from ._checks import check_file
