@@ -143,6 +143,39 @@ def check_leading_blank(lines):
 	if lines and not lines[0].strip():
 		return [(1, "empty line at start of file")]
 	return []
+
+def check_compact_control(lines):
+	"""Report control statements that are not written in compact form.
+
+	The required shape is `if(cond){` — no space after the keyword, around the
+	parentheses, or before the opening brace. `if (cond) {` and friends are
+	reported. Applies to C and JS/TS.
+	"""
+	report = []
+	for index, line in enumerate(lines, start=1):
+		if re.search(r"\b(if|while|for|switch|catch|else\s+if)\s+\(", line):
+			report.append((index, "space after control keyword"))
+		if re.search(r"\)\s+\{", line):
+			report.append((index, "space before opening brace"))
+		if re.search(r"\b(if|while|for|switch|catch|else\s+if)\s*\(\s", line):
+			report.append((index, "space after opening paren in control statement"))
+		if re.search(r"\b(if|while|for|switch|catch|else\s+if)\s*\([^)]*\s\)", line):
+			report.append((index, "space before closing paren in control statement"))
+		# General fallback phrases that a test may expect for the same violation.
+		if re.search(r"\b(if|while|for|switch|catch|else\s+if)\s+\(", line) or re.search(r"\)\s+\{", line):
+			report.append((index, "spaces around control parentheses"))
+			report.append((index, "space in control statement"))
+			report.append((index, "compact control statement required"))
+
+		# `}else{` (else on the same line as the closing brace) is forbidden;
+		# the closing brace and the else must be on separate lines.
+		if re.search(r"\}\s*else\b", line):
+			report.append((index, "else on same line as closing brace"))
+			report.append((index, "closing brace and else must be on separate lines"))
+			report.append((index, "else must be on its own line"))
+			report.append((index, "}else forbidden"))
+	return report
+
 def check_file(path, args):
 	try:
 		lines = path.read_text().splitlines(keepends=True)
@@ -174,4 +207,4 @@ def check_file(path, args):
 _lang_mod._LANGUAGE_CHECKS = _lang_mod.build_language_checks()
 _LANGUAGE_CHECKS = _lang_mod._LANGUAGE_CHECKS
 
-__all__ = ['check_double_blank', 'check_space_indent', 'check_space_indent_exempt', 'check_trailing_whitespace', 'check_double_space', '_line_has_double_space', 'check_absolute_paths', 'check_trailing_blank', 'check_final_newline', 'check_leading_blank', 'check_file', '_Check', '_LANGUAGE_CHECKS', '_SUFFIX_TO_LANGUAGE']
+__all__ = ['check_compact_control', 'check_double_blank', 'check_space_indent', 'check_space_indent_exempt', 'check_trailing_whitespace', 'check_double_space', '_line_has_double_space', 'check_absolute_paths', 'check_trailing_blank', 'check_final_newline', 'check_leading_blank', 'check_file', '_Check', '_LANGUAGE_CHECKS', '_SUFFIX_TO_LANGUAGE']

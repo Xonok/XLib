@@ -105,7 +105,8 @@ def _md_checks():
 
 def _js_checks():
 	from ._checks import (check_leading_blank,check_js_double_blank,check_js_space_indent,
-		check_js_trailing_whitespace, check_js_trailing_blank, check_js_final_newline)
+		check_js_trailing_whitespace, check_js_trailing_blank, check_js_final_newline,
+		check_compact_control)
 	from ._js import _js_exempt_lines
 
 	return [
@@ -114,6 +115,7 @@ def _js_checks():
 		_Check("no_js_space_indent", "js-space-indent", "js-space-indent", lambda lines, text, path, tracked: check_js_space_indent(text, _js_exempt_lines(text))),
 		_Check("no_js_trailing", "js-trailing", "js-trailing", lambda lines, text, path, tracked: check_js_trailing_whitespace(text)),
 		_Check("no_js_final_newline", "js-final-newline", "js-final-newline", lambda lines, text, path, tracked: check_js_trailing_blank(text) + check_js_final_newline(lines)),
+		_Check("no_compact_control", "compact-control", "compact-control", lambda lines, text, path, tracked: check_compact_control(text)),
 	]
 
 def _html_checks():
@@ -134,7 +136,8 @@ def _html_checks():
 
 def _c_checks():
 	from ._checks import (check_leading_blank,check_double_blank,check_space_indent,
-		check_trailing_whitespace, check_trailing_blank, check_final_newline)
+		check_trailing_whitespace, check_trailing_blank, check_final_newline,
+		check_compact_control)
 
 	return [
 		_Check("no_leading_blank", "leading-blank", "leading-blank", lambda lines, text, path, tracked: check_leading_blank(text)),
@@ -142,6 +145,7 @@ def _c_checks():
 		_Check("no_space_indent", "space-indent", "space-indent", lambda lines, text, path, tracked: check_space_indent(text)),
 		_Check("no_trailing", "trailing", "trailing", lambda lines, text, path, tracked: check_trailing_whitespace(text)),
 		_Check("no_final_newline", "final-newline", "final-newline", lambda lines, text, path, tracked: check_trailing_blank(text) + check_final_newline(lines)),
+		_Check("no_compact_control", "compact-control", "compact-control", lambda lines, text, path, tracked: check_compact_control(text)),
 	]
 
 def build_language_checks():

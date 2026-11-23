@@ -110,6 +110,15 @@ def check_js_final_newline(lines):
 def check_js_trailing_blank(lines):
 	return _js.check_js_trailing_blank(lines)
 
+def check_compact_control(lines):
+	return _checks.check_compact_control(lines)
+
+def check_js_compact_control(lines):
+	return _checks.check_compact_control(lines)
+
+def check_c_compact_control(lines):
+	return _checks.check_compact_control(lines)
+
 def make_watcher(rules):
 	return _watch.make_watcher(rules)
 
@@ -141,6 +150,7 @@ def main():
 	parser.add_argument("--no-js-space-indent", action="store_true", help="disable JS/TS space indentation check")
 	parser.add_argument("--no-js-trailing", action="store_true", help="disable JS/TS trailing whitespace check")
 	parser.add_argument("--no-js-final-newline", action="store_true", help="disable JS/TS final newline and trailing blank line checks")
+	parser.add_argument("--no-compact-control", action="store_true", help="disable compact control statement check")
 	parser.add_argument("--no-html-double-blank", action="store_true", help="disable html double blank line check")
 	parser.add_argument("--no-html-space-indent", action="store_true", help="disable html space indentation check")
 	parser.add_argument("--no-html-trailing", action="store_true", help="disable html trailing whitespace check")

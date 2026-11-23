@@ -472,6 +472,7 @@ _BUILTIN_DISABLES = [
 	("html-unclosed", "no_html_unclosed"),
 	("html-bad-closer", "no_html_bad_closer"),
 	("html-depth", "no_html_depth"),
+	("compact-control", "no_compact_control"),
 ]
 
 _DOUBLE_SPACE_RE = re.compile(r"[^ ](  +)[^ ]")
