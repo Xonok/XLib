@@ -1931,3 +1931,6 @@
 {"v":1,"id":["01M891W4P8CC4XN8M1JQFX0YWN","01M891W4P7W54EY4AF0M7BMSQA"],"edit.description":{"id":"01M891W4P63ACX7ZQV4JG68998","md":"`tools/taskboard/taskboard.py` had no shebang and was not executable, and `install.sh` did not link it into `~/.local/bin`, so the tool was neither runnable directly nor installed by the standard installer. Add the shebang, mark it executable, and add it to install.sh's chmod and symlink lists alongside the other tools."}}
 {"v":1,"id":["01M891W4P9JEN0XENJ5VDYQMTT","01M891W4P8CC4XN8M1JQFX0YWN"],"add.issue.tag":{"id":"01M891W4P63ACX7ZQV4JG68998","tag":"01M3H1M4ZES7JBEPEMYGG4ZNP1"}}
 {"v":1,"id":["01M891W4PAYD1MD6T0TB91R0DM","01M891W4P9JEN0XENJ5VDYQMTT"],"add.issue.tag":{"id":"01M891W4P63ACX7ZQV4JG68998","tag":"01M3H1MDK1F4EG4YECTPTXVX83"}}
+{"v":1,"id":["01M891X2DDCAFEX6YV8FMG0WM6","01M891W4PAYD1MD6T0TB91R0DM"],"close.issue":{"id":"01M891VT9CFZFXTB16HDWST0FC","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"fffffffffef8cd9f5b808398"}}
+{"v":1,"id":["01M891X2DEFMTG6Q98TFNPCZZT","01M891X2DDCAFEX6YV8FMG0WM6"],"close.issue":{"id":"01M891VZ1J8ZF3XD284QSJYHQA","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffff7c66cfadc041cb"}}
+{"v":1,"id":["01M891X2DFCSFD0PZK6FECZAZ1","01M891X2DEFMTG6Q98TFNPCZZT"],"close.issue":{"id":"01M891W4P63ACX7ZQV4JG68998","parent":"00KM6CZ900T7180RM46K0JAYNF","rank":"ffffffffffbe3367d6e020e5"}}
