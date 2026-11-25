@@ -1,9 +1,10 @@
 #!/bin/bash
 # ctx - report opencode context-window usage for the current session.
 #
-# Token accounting comes from opencode's SQLite store
-# (~/.local/share/opencode/opencode.db); the context limit comes from
-# opencode's model cache (~/.cache/opencode/models.json).
+# Token accounting comes from `opencode session export` (per-message usage is
+# no longer stored in SQLite in opencode 2.x); session discovery uses the
+# session_v2 table in ~/.local/share/opencode/opencode.db. The context limit
+# comes from opencode's model cache (~/.cache/opencode/models.json).
 #
 # Usage:
 #   ctx                  current session in $PWD (default)
@@ -55,39 +56,89 @@ done
 # substr/|| rather than LIKE, so a '_' in a path is not a single-char wildcard.
 sq() { printf '%s' "${1//\'/\'\'}"; }
 HERE=$(sq "$PWD")
-AGENT_CLAUSE=""
-[[ -n $AGENT ]] && AGENT_CLAUSE="AND s.agent = '$(sq "$AGENT")'"
 
-SQL="
-SELECT json_extract(m.data,'\$.modelID')           AS model,
-       m.time_created                              AS ts,
-       json_extract(m.data,'\$.tokens.total')      AS total,
-       COALESCE(json_extract(m.data,'\$.tokens.input'),0)     AS fresh_in,
-       COALESCE(json_extract(m.data,'\$.tokens.cache.read'),0)  AS cache_read,
-       COALESCE(json_extract(m.data,'\$.tokens.cache.write'),0) AS cache_write,
-       COALESCE(json_extract(m.data,'\$.tokens.output'),0)     AS out_tok,
-       COALESCE(json_extract(m.data,'\$.tokens.reasoning'),0)  AS reason
-FROM message m
-JOIN session s ON s.id = m.session_id
-WHERE (s.directory = '$HERE'
-       OR substr('$HERE', 1, length(s.directory) + 1) = s.directory || '/')
-  $AGENT_CLAUSE
-  AND json_extract(m.data,'\$.role') = 'assistant'
-  AND json_extract(m.data,'\$.tokens.total') IS NOT NULL
-ORDER BY m.time_created DESC
-LIMIT $NUM;"
+# opencode 2.0 stores sessions in session_v2 and per-message token usage is no
+# longer in SQLite (session_message has no token columns); it is only available
+# through `opencode session export`. Discover candidate sessions from session_v2,
+# then export each to read its assistant turns' token counts.
+RAW=$(python3 - "$HERE" "$AGENT" "$NUM" <<'PY'
+import json, os, sqlite3, subprocess, sys
 
-# opencode 2.0 removed the `db` subcommand, so read the store directly. The SQL
-# is unchanged: v2 keeps message/session and mirrors session into session_v2.
-RAW=$(printf '%s' "$SQL" | python3 -c '
-import os,sqlite3,sys
+here = sys.argv[1]
+agent = sys.argv[2]
+num = int(sys.argv[3])
 base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-conn = sqlite3.connect("file:" + base + "/opencode/opencode.db?mode=ro", uri=True)
-cur = conn.execute(sys.stdin.read())
-print("\t".join(col[0] for col in cur.description))
-for row in cur:
-	print("\t".join("" if v is None else str(v) for v in row))
-' 2>&1) || die "query failed:"$'\n'"$RAW"
+db = os.path.join(base, "opencode", "opencode.db")
+
+header = ["model", "ts", "total", "fresh_in", "cache_read", "cache_write", "out_tok", "reason"]
+print("\t".join(header))
+
+# Filter by directory (session dir is HERE or an ancestor of HERE).
+candidates = []
+if agent:
+    # re-query with directory info
+    conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
+    qrows = conn.execute(
+        "SELECT id, directory, time_updated FROM session_v2 WHERE agent = ? ORDER BY time_updated DESC",
+        (agent,),
+    ).fetchall()
+    conn.close()
+    for sid, d, _ in qrows:
+        if d == here or here.startswith(d + "/"):
+            candidates.append(sid)
+else:
+    conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
+    qrows = conn.execute(
+        "SELECT id, directory, time_updated FROM session_v2 ORDER BY time_updated DESC"
+    ).fetchall()
+    conn.close()
+    for sid, d, _ in qrows:
+        if d == here or here.startswith(d + "/"):
+            candidates.append(sid)
+
+# Limit exports to a handful of most-recent sessions.
+candidates = candidates[:8]
+
+collected = []
+for sid in candidates:
+    try:
+        res = subprocess.run(
+            ["opencode", "session", "export", sid],
+            capture_output=True, text=True, timeout=30,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            continue
+        data = json.loads(res.stdout)
+    except Exception:
+        continue
+    for m in data.get("messages", []):
+        if m.get("type") != "assistant":
+            continue
+        tokens = m.get("tokens")
+        if not tokens:
+            continue
+        cache = tokens.get("cache") or {}
+        inp = tokens.get("input") or 0
+        out = tokens.get("output") or 0
+        reason = tokens.get("reasoning") or 0
+        cr = cache.get("read") or 0
+        cw = cache.get("write") or 0
+        total = inp + cr + cw + out + reason
+        model = m.get("model")
+        if isinstance(model, dict):
+            model = model.get("id", "")
+        elif model is None:
+            model = m.get("modelID", "")
+        ts = (m.get("time") or {}).get("created")
+        if ts is None:
+            continue
+        collected.append((model, int(ts), int(total), int(inp), int(cr), int(cw), int(out), int(reason)))
+
+collected.sort(key=lambda r: r[1], reverse=True)
+for r in collected[:num]:
+    print("\t".join(str(x) for x in r))
+PY
+) || die "query failed:"$'\n'"$RAW"
 # Strip the tsv header line. If the query returned no rows, RAW is just the
 # header (no newline), so ROWS must be cleared — otherwise the header gets
 # parsed as a data row and the render crashes.
