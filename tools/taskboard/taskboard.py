@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """taskboard — the wide all-tasks view, served as one local page.
 
 The command starts a small HTTP server over the task store and serves one
