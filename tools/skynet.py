@@ -795,11 +795,12 @@ def compute_pace(go, day_start_used, now):
 
 	`overall` divides the used meter by the elapsed days since the period
 	start and is a percentage of the sustainable daily rate. `today` is the
-	day's increase as a percentage of the sustainable daily allowance, so it
-	starts at 0% each UTC day and only rises as usage grows; it does not
-	decay with idle time. Both are `None` when their denominator is missing
-	or non-positive, and a meter that fell below the baseline cannot give a
-	number.
+	day's increase as a percentage of the adaptive daily allowance: the
+	remaining quota spread over the days left in the period from today, so
+	that spending exactly 100% each remaining day exhausts the quota at the
+	reset. It does not move with the time of day. Both are `None` when their
+	denominator is missing or non-positive, and a meter that fell below the
+	baseline cannot give a number.
 	"""
 	pace = {"used_percent": None, "overall": None, "today": None, "days_left": None}
 	if go["state"] != "ok":
@@ -817,7 +818,24 @@ def compute_pace(go, day_start_used, now):
 	if elapsed > 0:
 		pace["overall"] = (used / elapsed) / sustainable * 100
 	if day_start_used is not None and used >= day_start_used:
-		pace["today"] = (used - day_start_used) / sustainable * 100
+		# `today` is adaptive: the daily allowance is the remaining quota
+		# spread over the days left in the period from today, so that spending
+		# exactly 100% each remaining day exhausts the quota at the reset. The
+		# baseline is treated as the midnight reading, so the number does not
+		# move with the time of day. Exhausting the quota can never leave
+		# `today` below 100%.
+		remaining = limit - day_start_used
+		if remaining > 0:
+			utc_midnight = now.astimezone(datetime.timezone.utc).replace(
+				hour=0, minute=0, second=0, microsecond=0)
+			days_remaining = (go["end"] - utc_midnight).total_seconds() / 86400
+			if days_remaining <= 0:
+				days_remaining = 1.0
+			else:
+				days_remaining = max(days_remaining, 1.0)
+			daily_budget = remaining / days_remaining
+			if daily_budget > 0:
+				pace["today"] = (used - day_start_used) / daily_budget * 100
 	pace["days_left"] = go.get("days_left", _days_left(go.get("end"), now))
 	return pace
 

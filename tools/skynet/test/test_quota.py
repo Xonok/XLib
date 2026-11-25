@@ -303,7 +303,7 @@ def test_cursor_today_is_the_days_spend_even_on_a_late_start():
 		])
 	xtest.equal(quota["used"], 700_000_000, "the period meter is every message in the period")
 	xtest.equal(quota["day_start_used"], 500_000_000, "the baseline is the spend before today")
-	xtest.equal(round(pace["today"]), 24, "today's $2 is 24% of the $8.33 daily allowance")
+	xtest.equal(round(pace["today"]), 4, "today's $2 is 4% of the daily allowance")
 
 def test_cursor_today_overrides_a_baseline_written_at_the_first_read():
 	# A file written before the fix carries day_start_used == last_used; the
@@ -321,7 +321,7 @@ def test_cursor_today_overrides_a_baseline_written_at_the_first_read():
 		], state=state)
 		saved = _load(path)["cursor"]["day_start_used"]
 	xtest.equal(quota["day_start_used"], 0, "the day's spend sets the baseline, not the first reading")
-	xtest.equal(round(pace["today"]), 24, "the day is counted after the repair")
+	xtest.equal(round(pace["today"]), 4, "the day is counted after the repair")
 	xtest.equal(saved, 0, "the repaired baseline is persisted")
 
 def test_cursor_pools_split_grok_and_composer_from_the_rest():
@@ -336,8 +336,8 @@ def test_cursor_pools_split_grok_and_composer_from_the_rest():
 		pool_today = skynet.compute_pace(pool, quota["cursor_day_start_used"], NOW)["today"]
 		other_today = skynet.compute_pace(other, quota["other_day_start_used"], NOW)["today"]
 	xtest.equal((quota["cursor_used"], quota["other_used"]), (200_000_000, 200_000_000), "grok is the pool and the rest is other")
-	xtest.equal(round(pool_today), 14, "yesterday's pool spend is not today's")
-	xtest.equal(round(other_today), 150, "today's $2 of other is 150% of the $1.33 daily allowance")
+	xtest.equal(round(pool_today), 2, "yesterday's pool spend is not today's")
+	xtest.equal(round(other_today), 25, "today's $2 of other adapts to the remaining budget")
 
 def test_cursor_without_a_state_path_still_computes_the_day():
 	with tempfile.TemporaryDirectory() as folder:
@@ -345,7 +345,7 @@ def test_cursor_without_a_state_path_still_computes_the_day():
 		quota = skynet.cursor_quota(now=NOW, db_path=db, config=CURSOR_CONFIG)
 		pace = skynet.compute_pace(quota, quota["day_start_used"], NOW)
 	xtest.equal(quota["state"], "ok", "a sample without a state file is still a sample")
-	xtest.equal(round(pace["today"]), 24, "the day share comes from the messages alone")
+	xtest.equal(round(pace["today"]), 4, "the day share comes from the messages alone")
 
 def test_cursor_usage_before_the_period_is_not_counted():
 	with tempfile.TemporaryDirectory() as folder:
@@ -441,7 +441,7 @@ def test_cursor_today_carries_pre_reset_spend_across_a_period_reset():
 		pace = skynet.compute_pace(quota, quota["day_start_used"], _utc(2026, 10, 16, 14))
 	xtest.equal(quota["used"], 200_000_000, "only the new period counts toward used")
 	xtest.true(quota["day_start_used"] < 0, "the pre-reset day spend is carried as a negative baseline")
-	xtest.equal(round(pace["today"]), 87, "today keeps both sides of the reset")
+	xtest.equal(round(pace["today"]), 86, "today keeps both sides of the reset")
 
 # --- pace ------------------------------------------------------------------
 
@@ -463,7 +463,7 @@ def test_the_used_percentage_is_reported():
 def test_today_is_the_share_of_the_daily_allowance():
 	go = _ok_go(used=3_000_000_000)
 	pace = skynet.compute_pace(go, 2_900_000_000, _utc(2026, 10, 26, 12))
-	xtest.equal(round(pace["today"]), 50, "half of the day's allowance is 50%")
+	xtest.equal(round(pace["today"]), 16, "today adapts to the remaining budget")
 
 def test_today_does_not_depend_on_the_time_of_day():
 	go = _ok_go(used=3_000_000_000)

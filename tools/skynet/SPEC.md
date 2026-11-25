@@ -21,10 +21,13 @@ The two figures are different kinds:
 	percentage of the **sustainable daily rate**, `limit / period_days`. At
 	100% the current rate exhausts the quota exactly at the reset; at 200% it
 	exhausts it halfway through.
-- `today` is **today's spend as a percentage of the sustainable daily
-	allowance**. For Go it starts at 0% at the first reading of a UTC day and
-	only rises as usage grows; Cursor's is counted from its message log. It is
-	the day's runway used — not a rate. Idle time does not dilute it.
+- `today` is **today's spend as a percentage of the adaptive daily allowance**:
+	the remaining quota spread over the days left in the period from today, so
+	that spending exactly 100% each remaining day exhausts the quota at the
+	reset. It is therefore 100% or more whenever the quota is exhausted during
+	the day. For Go it starts at 0% at the first reading of a UTC day and only
+	rises as usage grows; Cursor's is counted from its message log. It is the
+	day's runway used — not a rate. It does not move with the time of day.
 
 The rate/share split is the human's 2026-10-26 ruling: pacing is done by
 stopping for the day or switching to OpenRouter, so the useful number is how
@@ -181,17 +184,20 @@ All times are timezone-aware; `Z` is parsed as `+00:00`. `now` is the current
 time.
 
 ```
-period_days  = (end - start) / 86400
-sustainable  = limit / period_days
-used_percent = used / limit * 100
-overall_pace = (used / (now - start in days)) / sustainable * 100
-today_share  = (used - day_start_used) / sustainable * 100
+period_days    = (end - start) / 86400
+sustainable    = limit / period_days
+used_percent   = used / limit * 100
+overall_pace   = (used / (now - start in days)) / sustainable * 100
+remaining      = limit - day_start_used
+days_remaining = (end - utc_midnight(now)) / 86400   (at least 1)
+daily_budget   = remaining / days_remaining
+today_share    = (used - day_start_used) / daily_budget * 100
 ```
 
 - `overall_pace` is `None` when `now <= start`, `period_days <= 0` or
 	`limit <= 0`.
 - `today_share` is `None` when `day_start_used` is `None`,
-	`used < day_start_used` or `sustainable <= 0`.
+	`used < day_start_used`, `remaining <= 0` or `days_remaining <= 0`.
 - `used_percent` is `None` when `limit <= 0`.
 - Render round to the nearest integer. The full `pace` says `72%/d` and the
 	full `today` says `42%`; the abbreviated form says `p 72` and `t 42`.
@@ -419,9 +425,12 @@ independently.
 - **R4.2** `sustainable = limit / period_days`.
 - **R4.3** `used_percent = used / limit * 100`.
 - **R4.4** `overall_pace = (used / (now - start in days)) / sustainable * 100`.
-- **R4.5** `today_share = (used - day_start_used) / sustainable * 100`.
-- **R4.6** Return `None` when `sustainable <= 0`, when `used < day_start_used`,
-	or when the needed baseline is missing.
+- **R4.5** `today_share = (used - day_start_used) / daily_budget * 100`, where
+	`daily_budget = (limit - day_start_used) / max(days_remaining, 1)` and
+	`days_remaining = (end - utc_midnight(now)) / 86400`.
+- **R4.6** Return `None` when the baseline is missing, when
+	`used < day_start_used`, when `limit - day_start_used <= 0`, or when
+	`days_remaining <= 0`.
 - **R4.7** Round to the nearest integer at render time.
 - **R4.8** At `used = limit * (now - start) / (end - start)`, the pace is 100%;
 	at twice that, 200%.
